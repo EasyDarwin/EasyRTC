@@ -20,8 +20,15 @@ using namespace std;
 #define MAX_WEBRTC_PEERS_COUNT 1	//8 //不能大于128,因为sdk里面做了这个限制
 #endif
 
+typedef enum __EASYRTC_DATA_TYPE_ENUM_E
+{
+	EASYRTC_DATA_TYPE_VIDEO	=	0x01,				// 回调对端的视频数据
+	EASYRTC_DATA_TYPE_AUDIO,						// 回调对端的音频数据
+	EASYRTC_DATA_TYPE_METADATA,						// 回调对端的DataChannel数据
+}EASYRTC_DATA_TYPE_ENUM_E;
+
 // DataChannel 数据回调
-typedef int (*EasyRTC_DataChannel_Callback)(void* userptr, void* webrtcPeer, BOOL isBinary, PBYTE msgData, UINT32 msgLen);
+typedef int (*EasyRTC_Data_Callback)(void* userptr, void* webrtcPeer, EASYRTC_DATA_TYPE_ENUM_E dataType, int codecID, BOOL isBinary, PBYTE msgData, UINT32 msgLen);
 
 // 状态信息回调
 typedef int (*EasyRTC_Device_Callback)(void* userptr, const char *pbuf, const int bufsize);
@@ -53,7 +60,7 @@ public:
 		bool enableLocalService;
 		WEBRTC_PEER_MAP	webrtcPeerMap;
 		OSTHREAD_OBJ_T* checkThread;		// 检查连接线程
-		EasyRTC_DataChannel_Callback	dataChannelCallback;
+		EasyRTC_Data_Callback	dataCallback;
 		void* dataChannelUserptr;
 
 		EasyRTC_Device_Callback deviceCallback;
@@ -71,7 +78,7 @@ public:
 
 			checkThread = NULL;
 
-			dataChannelCallback = NULL;
+			dataCallback = NULL;
 			dataChannelUserptr = NULL;
 			deviceCallback = NULL;
 			deviceUserptr = NULL;
@@ -84,7 +91,7 @@ public:
     ~EasyRtcDevice();
 
 	// 开始
-	int		Start(int videoCodecID, int audioCodecID, const char* uuid, bool enableLocalService, EasyRTC_DataChannel_Callback callback, void* userptr);
+	int		Start(int videoCodecID, int audioCodecID, const char* uuid, bool enableLocalService, EasyRTC_Data_Callback callback, void* userptr);
 	// 停止
 	int		Stop();
 

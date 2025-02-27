@@ -259,6 +259,30 @@ void* __ReadAudioFileThread(void* lpParam)
 
 
 
+
+int __EasyRTC_Data_Callback(void* userptr, void* webrtcPeer, EASYRTC_DATA_TYPE_ENUM_E dataType, int codecID, BOOL isBinary, PBYTE pbuf, UINT32 bufsize)
+{
+	if (EASYRTC_DATA_TYPE_VIDEO == dataType)								// 对端的视频帧
+	{
+		printf("Receive video frame from peer: %u\n", bufsize);
+	}
+	else if (EASYRTC_DATA_TYPE_AUDIO == dataType)							// 对端的音频帧
+	{
+		printf("Receive audio frame from peer: %u\n", bufsize);
+	}
+	else if (EASYRTC_DATA_TYPE_METADATA == dataType)						// 对端DataChannel传输的数据
+	{
+		if (!isBinary) // 文本消息
+		{
+			printf("Receive message from peer: %u   %s\n", bufsize, pbuf);
+		}
+		else			// 非文本
+		{
+			printf("Receive binary data from peer: %u\n", bufsize);
+		}
+	}
+	return 0;
+}
 int main(int argc, char* argv[])
 {
 	char uuid[128] = { 0 };
@@ -302,7 +326,7 @@ int main(int argc, char* argv[])
 
 	if (videoCodecID > 0 && audioCodecID > 0)
 	{
-		mEasyRtcDevice.Start(videoCodecID, audioCodecID, uuid, false, NULL, NULL);
+		mEasyRtcDevice.Start(videoCodecID, audioCodecID, uuid, false, __EasyRTC_Data_Callback, NULL);
 
 		while (getchar() != 'Q');
 	}

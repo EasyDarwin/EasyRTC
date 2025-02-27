@@ -168,10 +168,9 @@ void func_RtcOnMessage(UINT64 customData, PRtcDataChannel dc, BOOL isBinary, PBY
 	if (NULL == pDevice)			return;
 
 
-	if (NULL != pDevice->dataChannelCallback)
+	if (NULL != pDevice->dataCallback)
 	{
-		EasyRTC_DataChannel_Callback pCB = (EasyRTC_DataChannel_Callback)pDevice->dataChannelCallback;
-		pCB(pDevice->dataChannelUserptr, webrtcpeer, isBinary, msgData, msgLen);
+		pDevice->dataCallback(pDevice->dataChannelUserptr, webrtcpeer, EASYRTC_DATA_TYPE_METADATA, 0, isBinary, msgData, msgLen);
 	}
 	else
 	{
@@ -369,6 +368,43 @@ int		EasyRtcDevice::SendData(WEBRTC_PEER_T* webrtcPeer, BOOL isBinary, PBYTE msg
 	return 0;
 }
 
+
+void func_videoRtcOnFrame(UINT64 customData, PFrame frame)
+{
+	// 特别注意:flags 和 trackId 是无效的,我在rtcsdk内部直接填充为了0
+	// 对于是否是视频关键帧,需要用户自己通过 frame->data 去进行分析
+	//printf("video frame size:%d\n", frame->size);
+	//printf("framesize:%d, %02x:%02x:%02x:%02x:%02x\n", frame->size, frame->frameData[0], frame->frameData[1], frame->frameData[2], frame->frameData[3], frame->frameData[4]);
+	//WEBRTC_PEER* webrtcpeer = (WEBRTC_PEER*)customData;
+
+	EasyRtcDevice::WEBRTC_PEER_T* webrtcpeer = (EasyRtcDevice::WEBRTC_PEER_T*)customData;
+	if (NULL == webrtcpeer)			return;
+	EasyRtcDevice::WEBRTC_DEVICE_T* pDevice = (EasyRtcDevice::WEBRTC_DEVICE_T*)webrtcpeer->userptr;
+	if (NULL == pDevice)			return;
+
+
+	if (NULL != pDevice->dataCallback)
+	{
+		pDevice->dataCallback(pDevice->dataChannelUserptr, webrtcpeer, EASYRTC_DATA_TYPE_VIDEO, pDevice->videoCodecID, true, frame->frameData, frame->size);
+	}
+}
+
+void func_audioRtcOnFrame(UINT64 customData, PFrame frame)
+{
+	//printf("%s line[%d] audio frame size:%d\n", __FUNCTION__, __LINE__, frame->size);
+
+	EasyRtcDevice::WEBRTC_PEER_T* webrtcpeer = (EasyRtcDevice::WEBRTC_PEER_T*)customData;
+	if (NULL == webrtcpeer)			return;
+	EasyRtcDevice::WEBRTC_DEVICE_T* pDevice = (EasyRtcDevice::WEBRTC_DEVICE_T*)webrtcpeer->userptr;
+	if (NULL == pDevice)			return;
+
+	if (NULL != pDevice->dataCallback)
+	{
+		// 因webrtc交互时会协商一个双方都支持的格式,所以此处对方也是回调相同的编码格式数据, 故此处直接填写pDevice->audioCodecID
+		pDevice->dataCallback(pDevice->dataChannelUserptr, webrtcpeer, EASYRTC_DATA_TYPE_AUDIO, pDevice->audioCodecID, true, frame->frameData, frame->size);
+	}
+}
+
 void	EasyRtcDevice::CheckWebRtcPeerQueue()		// 检查webrtcPeerMap是否超过最大值
 {
 	LockDevice(__FUNCTION__, __LINE__);
@@ -536,12 +572,17 @@ int SignalingClientMessageReceivedCallback(unsigned char* message, int length, u
 		strcpy(video_track_.streamId, "0");
 		strcpy(video_track_.trackId, "0");
 		RtcRtpTransceiverInit rtcRtpTransceiverInit_v_;
-		//如果对端也要传输视频过来,那么下面使用 RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV,并使用 RTC_transceiverOnFrame 设置的回调接收
-		rtcRtpTransceiverInit_v_.direction = RTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY;
+		//如果对端也要传输视频过来,那么下面使用 RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV,并使用 EasyRTC_transceiverOnFrame 设置的回调接收
+		rtcRtpTransceiverInit_v_.direction = RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;// RTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY;
 		ret = EasyRTC_addTransceiver(webrtcpeer->peer_, &video_track_, &rtcRtpTransceiverInit_v_, &webrtcpeer->videoTransceiver_);
 		EasyRtcDevice::__Print__(pRtcDevice, __FUNCTION__, __LINE__, true, "video addTransceiver: %u\n", ret);
 		ret = EasyRTC_transceiverOnPictureLoss(webrtcpeer->videoTransceiver_, (UINT64)webrtcpeer, func_RtcOnPictureLoss);
 		EasyRtcDevice::__Print__(pRtcDevice, __FUNCTION__, __LINE__, true, "transceiverOnPictureLoss: %u\n", ret);
+
+		if (rtcRtpTransceiverInit_v_.direction == RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
+		{
+			ret = EasyRTC_transceiverOnFrame(webrtcpeer->videoTransceiver_, (UINT64)webrtcpeer, func_videoRtcOnFrame);
+		}
 
 		int audioCodecID = pRtcDevice->GetDevice()->audioCodecID;
 
@@ -561,10 +602,15 @@ int SignalingClientMessageReceivedCallback(unsigned char* message, int length, u
 			strcpy(audio_track_.trackId, "1");
 
 			RtcRtpTransceiverInit rtcRtpTransceiverInit_a_;
-			//如果对端也要传输音频过来,那么下面使用 RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV,并使用 RTC_transceiverOnFrame 设置的回调接收
+			//如果对端也要传输音频过来,那么下面使用 RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV,并使用 EasyRTC_transceiverOnFrame 设置的回调接收
 			rtcRtpTransceiverInit_a_.direction = RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
 			ret = EasyRTC_addTransceiver(webrtcpeer->peer_, &audio_track_, &rtcRtpTransceiverInit_a_, &webrtcpeer->audioTransceiver_);
 			EasyRtcDevice::__Print__(pRtcDevice, __FUNCTION__, __LINE__, true, "audio addTransceiver: %u\n", ret);
+
+			if (rtcRtpTransceiverInit_a_.direction == RTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
+			{
+				ret = EasyRTC_transceiverOnFrame(webrtcpeer->audioTransceiver_, (UINT64)webrtcpeer, func_audioRtcOnFrame);
+			}
 		}
 
 		//一路音视频就是 streamId 相同,但 trackId 不同
@@ -646,7 +692,7 @@ int SignalingClientStateChangedCallback(SIGNALING_CLIENT_STATE2 state, uint64_t 
 	return 0;
 }
 
-int		EasyRtcDevice::Start(int videoCodecID, int audioCodecID, const char* uuid, bool enableLocalService, EasyRTC_DataChannel_Callback dataChannelCallback, void* dataChannelUserptr)
+int		EasyRtcDevice::Start(int videoCodecID, int audioCodecID, const char* uuid, bool enableLocalService, EasyRTC_Data_Callback dataCallback, void* dataChannelUserptr)
 {
 	if (NULL == uuid)					return -1;
 	if (0 == strcmp(uuid, "\0"))		return -1;
@@ -658,7 +704,7 @@ int		EasyRtcDevice::Start(int videoCodecID, int audioCodecID, const char* uuid, 
 		memset(webrtcDevice.strUUID, 0x00, sizeof(webrtcDevice.strUUID));
 		strcpy(webrtcDevice.strUUID, uuid);
 		webrtcDevice.enableLocalService = enableLocalService;
-		webrtcDevice.dataChannelCallback = dataChannelCallback;
+		webrtcDevice.dataCallback = dataCallback;
 		webrtcDevice.dataChannelUserptr = dataChannelUserptr;
 
 		webrtcDevice.pThis = this;
