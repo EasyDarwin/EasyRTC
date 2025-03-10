@@ -265,6 +265,15 @@ int __EasyRTC_Data_Callback(void* userptr, void* webrtcPeer, EASYRTC_DATA_TYPE_E
 	if (EASYRTC_DATA_TYPE_VIDEO == dataType)								// 对端的视频帧
 	{
 		printf("Receive video frame from peer: %u\n", bufsize);
+
+#ifdef _DEBUG
+		static FILE* fV = fopen("1.h264", "wb");
+		if (fV)
+		{
+			fwrite(pbuf, 1, bufsize, fV);
+		}
+#endif
+
 	}
 	else if (EASYRTC_DATA_TYPE_AUDIO == dataType)							// 对端的音频帧
 	{

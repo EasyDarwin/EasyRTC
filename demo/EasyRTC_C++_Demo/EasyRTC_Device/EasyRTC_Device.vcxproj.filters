@@ -48,6 +48,9 @@
     <ClInclude Include="..\EasyRTC_FILE\EasyRtcDevice.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="g711.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="EasyRTC_Device.cpp">
@@ -72,6 +75,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="..\EasyRTC_FILE\EasyRtcDevice.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="g711.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

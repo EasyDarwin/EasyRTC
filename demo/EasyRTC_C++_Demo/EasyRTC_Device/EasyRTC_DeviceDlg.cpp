@@ -8,12 +8,16 @@
 #include "EasyRTC_DeviceDlg.h"
 #include "afxdialogex.h"
 #include "CharacterTranscoding.h"
+#include "AudioPlayer/libAudioPlayerAPI.h"
+#include "g711.h"
+#pragma comment(lib, "AudioPlayer/AudioPlayer.lib")
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
 #define WM_EASY_RTC_CALLBACK		WM_USER+2001
+#define WM_EASY_RTC_VIDEO		WM_USER+2002
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -76,6 +80,7 @@ BEGIN_MESSAGE_MAP(CEasyRTCDeviceDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_STOP, &CEasyRTCDeviceDlg::OnBnClickedButtonStop)
 	ON_BN_CLICKED(IDC_BUTTON_SEND, &CEasyRTCDeviceDlg::OnBnClickedButtonSend)
 	ON_MESSAGE(WM_EASY_RTC_CALLBACK, OnLog)
+	ON_MESSAGE(WM_EASY_RTC_VIDEO, OnPeerVideoFrame)
 END_MESSAGE_MAP()
 
 
@@ -169,6 +174,8 @@ HCURSOR CEasyRTCDeviceDlg::OnQueryDragIcon()
 
 void	CEasyRTCDeviceDlg::InitialComponents()
 {
+	pDlgVideoRender = NULL;
+
 	pStaticLogAndMsg = NULL;
 	pRichEditCtrlLog = NULL;
 	pStaticDataChannel = NULL;
@@ -179,12 +186,27 @@ void	CEasyRTCDeviceDlg::InitialComponents()
 	pBtnStart = NULL;
 	pBtnStop = NULL;
 
-
+	transCodeHandle = NULL;
+	d3dHandle = NULL;
+	renderHwnd = NULL;
 
 	InitMutex(&mutexLog);
+	InitMutex(&mutexFrame);
 }
 void	CEasyRTCDeviceDlg::CreateComponents()
 {
+	if (NULL == pDlgVideoRender)
+	{
+		pDlgVideoRender = new CDlgVideoRender();
+		if (NULL != pDlgVideoRender)
+		{
+			pDlgVideoRender->Create(IDD_DIALOG_VIDEO_RENDER, this);
+			//pDlgVideoRender->ShowWindow(SW_SHOW);
+
+			renderHwnd = pDlgVideoRender->GetSafeHwnd();
+		}
+	}
+
 	__CREATE_WINDOW(pStaticLogAndMsg, CStatic, IDC_STATIC_LOG);
 	__CREATE_WINDOW(pRichEditCtrlLog, CRichEditCtrl, IDC_RICHEDIT2_LOG);
 	__CREATE_WINDOW(pStaticDataChannel, CStatic, IDC_STATIC_DATA_CHANNEL);
@@ -233,7 +255,7 @@ void	CEasyRTCDeviceDlg::UpdateComponents()
 
 	
 	int logListHeight = (int)((float)rcClient.Height() * 0.8f);			// 日志列表高度
-	int msgBoxHeight = (int)((float)rcClient.Height() * 0.12f);			// 发送消息框高度
+	int msgBoxHeight = (int)((float)rcClient.Height() * 0.1f);			// 发送消息框高度
 
 	CRect	rcLog;
 	rcLog.SetRect(rcClient.left, rcClient.top, rcClient.right, rcClient.top + 20);
@@ -281,9 +303,17 @@ void	CEasyRTCDeviceDlg::DeleteComponents()
 {
 	OnBnClickedButtonStop();
 
+	if (NULL != pDlgVideoRender)
+	{
+		pDlgVideoRender->DestroyWindow();
+		delete pDlgVideoRender;
+		pDlgVideoRender = NULL;
+	}
+
 	libAudioCapturer_Deinit();
 
 	DeinitMutex(&mutexLog);
+	DeinitMutex(&mutexFrame);
 }
 void	CEasyRTCDeviceDlg::UpdateVideoPosition(LPRECT lpRect)
 {
@@ -375,14 +405,70 @@ int CALLBACK __AudioDataCallBack(void* userptr, char* pbuf, const int bufsize)
 	return 0;
 }
 
-// DataChannel 数据回调
-int __EasyRTC_DataChannel_Callback(void* userptr, void* webrtcPeer, BOOL isBinary, PBYTE msgData, UINT32 msgLen)
+// 对端音视频及DataChannel 数据回调
+bool bInitAudioPlayer = false;
+
+int __EasyRTC_Data_Callback(void* userptr, void* webrtcPeer, EASYRTC_DATA_TYPE_ENUM_E dataType, int codecID, BOOL isBinary, PBYTE msgData, UINT32 msgLen)
 {
 	CEasyRTCDeviceDlg* pThis = (CEasyRTCDeviceDlg*)userptr;
 
-	pThis->AddDataChannel_Data((const char*)msgData, msgLen);
-	pThis->PostMessageW(WM_EASY_RTC_CALLBACK, 1);
+	if (EASYRTC_DATA_TYPE_VIDEO == dataType)
+	{
+		pThis->OnRecvVideoData(codecID, (char*)msgData, (int)msgLen);
+	}
+	else if (EASYRTC_DATA_TYPE_AUDIO == dataType)
+	{
+		int idx = 0;
+		char pcmBuf[1024] = { 0 };
 
+		int samplerate = 8000;
+		int bitPerSamples = 16;
+		int channels = 1;
+
+		if (codecID == 0x10007)
+		{
+			for (int i = 0; i < msgLen; i++)
+			{
+				short s = alaw2linear(msgData[i]);
+
+				pcmBuf[idx++] = s & 0xFF;
+				pcmBuf[idx++] = (s >> 8) & 0xFF;
+				//short s = ((uc2 << 8) & 0xFF00) | (uc1 & 0xFF);
+			}
+
+			samplerate = 8000;
+			bitPerSamples = 16;
+			channels = 1;
+		}
+
+		if (!bInitAudioPlayer)
+		{
+			int ret = libAudioPlayer_Open(samplerate, bitPerSamples, channels);
+			if (ret == 0)	bInitAudioPlayer = true;
+
+			libAudioPlayer_Play();
+		}
+
+		if (idx > 0)
+		{
+#ifdef _DEBUG
+			static FILE* f = fopen("1.pcm", "wb");
+			if (f)
+			{
+				fwrite(pcmBuf, 1, idx, f);
+			}
+
+#endif
+
+
+			libAudioPlayer_Write(pcmBuf, idx);
+		}
+	}
+	if (EASYRTC_DATA_TYPE_METADATA == dataType)
+	{
+		pThis->AddDataChannel_Data((const char*)msgData, msgLen);
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK, 1);
+	}
 	return 0;
 }
 
@@ -532,7 +618,7 @@ void CEasyRTCDeviceDlg::OnBnClickedButtonStart()
 				Sleep(1000);
 			}
 
-			mLocalRTCDevice.easyRtcDevice.Start(videoCodecID, audioCodecID, uuid, false, __EasyRTC_DataChannel_Callback, this);
+			mLocalRTCDevice.easyRtcDevice.Start(videoCodecID, audioCodecID, uuid, false, __EasyRTC_Data_Callback, this);
 			mLocalRTCDevice.easyRtcDevice.SetCallback(__EasyRTC_Device_Callback, this);
 		}
 		else
@@ -552,6 +638,18 @@ void CEasyRTCDeviceDlg::OnBnClickedButtonStop()
 
 	mLocalRTCDevice.easyRtcDevice.Stop();
 
+	libAudioPlayer_Stop();
+	libAudioPlayer_Close();
+	bInitAudioPlayer = false;
+	TransCode_Release(&transCodeHandle);
+	D3D_Release(&d3dHandle);
+
+	OnPeerVideoFrame(0, 1);
+
+	if (NULL != pDlgVideoRender)
+	{
+		pDlgVideoRender->ShowWindow(SW_HIDE);
+	}
 
 	libAudioCapturer_StopAudioCapture();
 	libAudioCapturer_CloseAudioCaptureDevice();
@@ -570,4 +668,101 @@ void CEasyRTCDeviceDlg::OnBnClickedButtonSend()
 	int msgLen = libCharacterTranscoding_GB2312ToUTF8(utf8Str, sizeof(utf8Str), szMsg, (int)strlen(szMsg));
 	
 	mLocalRTCDevice.easyRtcDevice.SendData(NULL, FALSE, (PBYTE)utf8Str, msgLen);
+}
+
+
+LRESULT CEasyRTCDeviceDlg::OnPeerVideoFrame(WPARAM, LPARAM lParam)
+{
+	LockFrameVector();
+
+	FRAME_INFO_VECTOR::iterator it = frameInfoVector.begin();
+	while (it != frameInfoVector.end())
+	{
+		if ((int)lParam == 0)
+		{
+			OnProcVideoData(0, it->pbuf, it->bufsize);
+		}
+
+		it++;
+	}
+	frameInfoVector.clear();
+
+	UnlockFrameVector();
+
+	return 0;
+}
+
+void	CEasyRTCDeviceDlg::OnRecvVideoData(int codecID, char* framedata, int framesize)
+{
+	if (framesize < 4)		return;
+
+	LockFrameVector();
+	FRAME_INFO_T	frameInfo;
+	frameInfo.bufsize = framesize;
+	frameInfo.pbuf = new char[frameInfo.bufsize];
+	memcpy(frameInfo.pbuf, framedata, framesize);
+
+	frameInfoVector.push_back(frameInfo);
+
+	UnlockFrameVector();
+
+	PostMessage(WM_EASY_RTC_VIDEO);
+}
+
+void	CEasyRTCDeviceDlg::OnProcVideoData(int codecID, char* framedata, int framesize)
+{
+	if (NULL == transCodeHandle)
+	{
+		TransCode_Create(&transCodeHandle);
+
+		int pixelFormat = 0;		//YUV420
+		int transcodeCodecId = 0;// TRANSCODE_VIDEO_CODEC_ID_H264;	//TRANSCODE_VIDEO_CODEC_ID_MJPEG
+
+		int HWDecoderId = -1;// 7;
+		TransCode_Init(transCodeHandle, 0, HWDecoderId, 0, 0, pixelFormat, transcodeCodecId, -1, 25, 25, 1024 * 1024);
+	}
+
+	TRANSCODE_DECODE_CALLBACK decodeCB = NULL;
+	TRANSCODE_ENCODE_CALLBACK encodeCB = NULL;
+	int width = 0, height = 0;
+	char* cbFrameData = NULL;
+	int outFrameSize = 0;
+	int keyFrame = 0;
+	int ret = TransCode_TransCodeVideo(transCodeHandle, framedata, framesize, &width, &height, &cbFrameData, &outFrameSize, &keyFrame,
+										decodeCB, NULL,
+										encodeCB, NULL, 0, true);
+
+	if (ret != 0)							return;
+	if (width < 1 || height < 1)			return;
+	if (outFrameSize < width * height)		return;
+
+	if (NULL == d3dHandle)
+	{
+		if (NULL != pDlgVideoRender)
+		{
+			pDlgVideoRender->ShowWindow(SW_SHOW);
+			pDlgVideoRender->MoveWindow(0, 0, width, height);
+			pDlgVideoRender->SetForegroundWindow();
+		}
+
+		if (NULL == renderHwnd)	
+			renderHwnd = m_hWnd;		// 如果没有创建子窗口,则使用当前窗口句柄
+
+		D3D_Initial(&d3dHandle, renderHwnd, width, height, 0, 1, D3D_FORMAT_YV12);
+	}
+
+	RECT rcDst;
+	GetClientRect(&rcDst);
+	if (NULL != pDlgVideoRender)
+	{
+		pDlgVideoRender->GetClientRect(&rcDst);
+	}
+
+	RECT rcSrc;
+	SetRect(&rcSrc, 0, 0, width, height);
+
+	D3D_UpdateData(d3dHandle, 0, (unsigned char*)cbFrameData,
+		width, height, &rcSrc, NULL);
+
+	ret = D3D_Render(d3dHandle, renderHwnd, 0, &rcDst);
 }
