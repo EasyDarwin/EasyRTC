@@ -1,3 +1,0 @@
-编译主机:  ubuntu22.04
-安装uuid-dev:		sudo apt-get install uuid-dev
-执行build.sh, 编译生成可执行文件: signalserver
