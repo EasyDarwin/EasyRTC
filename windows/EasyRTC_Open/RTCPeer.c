@@ -67,21 +67,6 @@ EASYRTC_PEER_T* findPeerByUUID(EASYRTC_PEER_T* head, const char* uuid) {
     return NULL;
 }
 
-// 根据UUID && channelId && operateType查找节点
-//EASYRTC_PEER_T* findPeerByUUIDAndChannelId(EASYRTC_PEER_T* head, const char* uuid, const int channelId)
-//{
-//    EASYRTC_PEER_T* current = head;
-//    while (current != NULL) {
-//        if ((strcmp(current->uuid, uuid) == 0) &&
-//        (current->channelId == channelId)){
-//            return current;
-//        }
-//        current = current->next;
-//    }
-//    return NULL;
-//}
-
-
 // 根据UUID删除节点
 void deletePeerByUUID(EASYRTC_PEER_T** head, const char* uuid) {
     if (*head == NULL) {

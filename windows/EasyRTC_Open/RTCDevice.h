@@ -127,12 +127,8 @@ typedef struct __EASYRTC_DEVICE_T
 	char peer_id[128];							// 当前仅为caller时使用
 	unsigned int	peer_uuid[4];
 	CHANNEL_INFO_T	channelInfo;
-	//PASSIVE_CALL_T	passiveCallList[MAX_CHANNEL_NUM];
 
 	int		registerStatus;
-
-	//EasyRTC_Device_Callback deviceCallback;
-	//void* deviceUserptr;
 
 	time_t	lastCheckTime;
 
@@ -142,8 +138,6 @@ typedef struct __EASYRTC_DEVICE_T
 	int		ppsLen;
 	char	sps[1024];
 	char	pps[128];
-	//BUFF_T  bufFullFrame;
-	//BUFF_T	bufAudioFrame;
 }EASYRTC_DEVICE_T;
 
 // ===============================================

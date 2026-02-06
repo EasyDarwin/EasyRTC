@@ -198,25 +198,8 @@ int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char
 
 	int ret = 0;
 
-
-	//char sdp[2048] = { 0 };
 	if (isOffer == 1)
 	{
-#ifdef _DEBUG__
-		
-		FILE* f = fopen("offer.sdp", "rb");
-		if (f)
-		{
-			fseek(f, 0, SEEK_END);
-			long lSize = ftell(f);
-			fseek(f, 0, SEEK_SET);
-
-			fread(sdp, 1, lSize, f);
-			fclose(f);
-		}
-
-#endif
-
 		int offersdplen = (int)strlen(sdp);
 		if (offersdplen == 0) return 0;
 		int iLength = sizeof(NTI_WEBRTCOFFER_INFO) + offersdplen + 1;
@@ -236,23 +219,7 @@ int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char
 		pInfo->hisid[2] = peer->caller_id[2];
 		pInfo->hisid[3] = peer->caller_id[3];
 
-
-
-
 		strcpy(pInfo->offersdp, sdp);
-		//printf("pInfo->msgtype:%d\n", pInfo->msgtype);
-		//printf("pInfo->offersdp:%s\n", pInfo->offersdp);
-
-
-#ifdef _DEBUG
-		FILE *f = fopen("offer.txt", "wb");
-		if (f)
-		{
-			fwrite(pInfo, 1, iLength, f);
-			fclose(f);
-		}
-#endif
-
 		ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)pInfo, iLength);
 
 		free(pInfo);
@@ -270,8 +237,6 @@ int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char
 		pInfo->msgtype = HP_NTIWEBRTCANSWER_INFO;
 		pInfo->sdplen = offersdplen;
 		strcpy(pInfo->answersdp, sdp);
-		//printf("pInfo->msgtype:%d\n", pInfo->msgtype);
-		//printf("pInfo->answersdp:%s\n", pInfo->answersdp);
 
 		pInfo->hisid[0] = peer->hisid[0];
 		pInfo->hisid[1] = peer->hisid[1];
@@ -309,12 +274,6 @@ int RTC_Device_PassiveCallResponse(EASYRTC_DEVICE_T* pDevice, const char* peer_i
 
 		if (decline)		// 如果拒绝
 		{
-			//char pbuf[1024] = { 0 };
-			//int outSize = 0;
-			//JsonBuilder_HangUp(pbuf, &outSize, sizeof(pbuf), peer->transactionID, pDevice->local_type, pDevice->local_id,
-			//	peer->peerConnection[EASYRTC_PEER_PUBLISHER].callReq.from.type, peer->peerConnection[EASYRTC_PEER_PUBLISHER].callReq.from.id, peer->peerConnection[EASYRTC_PEER_PUBLISHER].callReq.channelId, "device_hangup");
-			//ret = websocketSendData(pDevice->websocket, WS_OPCODE_TEXT, pbuf, outSize);
-
 			break;
 		}
 
@@ -755,104 +714,11 @@ int __EasyRTC_ConnectionStateChange_Callback(void* userPtr, EASYRTC_PEER_CONNECT
 	return 0;
 }
 
-
-//
-//VOID onIceCandidate(UINT64 customData, PCHAR candidate) {
-//
-//	EASY_PEER_CONNECTION_T* peerConnection = (EASY_PEER_CONNECTION_T*)customData;
-//	EASYRTC_PEER_T* peer = (EASYRTC_PEER_T*)peerConnection->peerPtr;
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)peer->devicePtr;
-//
-//	if ((candidate != NULL) && (candidate[0] != 0) && (strstr(candidate, " relay ") != NULL)) peerConnection->icecount++;
-//
-//#ifdef _DEBUG
-//	//if (iceStr != NULL)	
-//	printf("=======[%llu]====ice:%s\n", time(NULL), candidate);
-//#endif
-//
-//	if (((candidate == NULL) || ((peerConnection->turncount > 0) && (peerConnection->icecount >= peerConnection->turncount))) && (peerConnection->icesended == 0))
-//	{
-//		//__Print__(NULL, __FUNCTION__, __LINE__, false, "New ICE candidate: %s\n", candidate ? candidate : "<null>");
-//
-//
-//		RtcSessionDescriptionInit localDesc;
-//		memset(&localDesc, 0, sizeof(localDesc));
-//		if (peerConnectionGetLocalDescription(peerConnection->peer_, &localDesc) == STATUS_SUCCESS) {
-//			SendOffer(pDevice, peer->transactionID, &peerConnection->callReq, localDesc.sdp);
-//		}
-//
-//		peerConnection->icesended = 0x01;
-//
-//		//sendIceCandidateToLiveKit(pDevice->sockfd, candidate, peerConnection->type);
-//
-//		//if (peerConnection->type == EASYRTC_PEER_PUBLISHER)				// 发布者
-//		//{
-//		//	sendIceCandidateToLiveKit(pDevice->sockfd, candidate, peerConnection->type);// LIVEKIT__SIGNAL_TARGET__PUBLISHER);
-//		//}
-//		//else if (peerConnection->type == EASYRTC_PEER_SUBSCRIBER)		// 订阅者
-//		//{
-//		//	if (strstr(candidate, "srflx"))
-//		//	{
-//		//		sendIceCandidateToLiveKit(pDevice->sockfd, candidate, peerConnection->type);//LIVEKIT__SIGNAL_TARGET__SUBSCRIBER);
-//		//	}
-//		//	else
-//		//	{
-//		//		sendIceCandidateToLiveKit(pDevice->sockfd, candidate, peerConnection->type);//LIVEKIT__SIGNAL_TARGET__SUBSCRIBER);
-//		//	}
-//		//}
-//	}
-//	else
-//	{
-//		EASY_PEER_CONNECTION_T* peerConnection = (EASY_PEER_CONNECTION_T*)customData;
-//		EASYRTC_PEER_T* peer = (EASYRTC_PEER_T*)peerConnection->peerPtr;
-//		EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)peer->devicePtr;
-//
-//
-//	}
-//}
-
-
-//void func_RtcOnMessage(UINT64 customData, PRtcDataChannel dc, BOOL isBinary, PBYTE msgData, UINT32 msgLen)
-//{
-//	__Print__(NULL, __FUNCTION__, __LINE__, false, "%s line[%d]\n", __FUNCTION__, __LINE__);
-//
-//	EASY_PEER_CONNECTION_T* peerConnection = (EASY_PEER_CONNECTION_T*)customData;
-//	EASYRTC_PEER_T* peer = (EASYRTC_PEER_T*)peerConnection->peerPtr;
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)peer->devicePtr;
-//
-//	__Print__(NULL, __FUNCTION__, __LINE__, false, "func_RtcOnMessage dc_label=%s isBinary=%d msgLen=%d\n", dc->name, isBinary, msgLen);
-//	if (!isBinary) __Print__(NULL, __FUNCTION__, __LINE__, false, "datachannel receive string is: %s\n", msgData);
-//
-//	CallbackData(pDevice, peer->uuid, EASYRTC_CALLBACK_TYPE_PEER_CUSTOM_DATA, 0, isBinary, (char*)msgData, msgLen, 0, 0);
-//}
-//
-//void func_RtcOnDataChannel(UINT64 customData, PRtcDataChannel dc)
-//{
-//	EASY_PEER_CONNECTION_T* peerConnection = (EASY_PEER_CONNECTION_T*)customData;
-//	EASYRTC_PEER_T* peer = (EASYRTC_PEER_T*)peerConnection->peerPtr;
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)peer->devicePtr;
-//
-//	UINT32 ret = dataChannelOnMessage(dc, customData, func_RtcOnMessage);
-//
-//	__Print__(NULL, __FUNCTION__, __LINE__, false, "dataChannelOnMessage: %u\n", ret);
-//}
-
-
-
-
 void func_audioRtcOnFrame(void* customData, EasyRTC_CODEC codecID, EasyRTC_Frame* frame)
 {
-	//__Print__(NULL, __FUNCTION__, __LINE__, false, "%s line[%d] AUDIO\n", __FUNCTION__, __LINE__);
-
-	//__Print__(NULL, __FUNCTION__, __LINE__, false, "############## AUDIO ptr3:%llu\n", customData);
-
-
 	EASY_PEER_CONNECTION_T* peerConnection = (EASY_PEER_CONNECTION_T*)customData;
 	EASYRTC_PEER_T* peer = (EASYRTC_PEER_T*)peerConnection->peerPtr;
 	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)peer->devicePtr;
-
-	// 对方发过来的音频
-	//__Print__(NULL, __FUNCTION__, __LINE__, false, "%s line[%d] peer Audio codecId[%u]\n", __FUNCTION__, __LINE__, peerConnection->audio_track_.codec);
 
 	CHANNEL_INFO_T* pChannel = (CHANNEL_INFO_T*)&pDevice->channelInfo;
 
@@ -866,15 +732,6 @@ void func_audioRtcOnFrame(void* customData, EasyRTC_CODEC codecID, EasyRTC_Frame
 			BUFF_MALLOC(&pChannel->bufAudioFrame, frame->size * 2 + 1024);
 		}
 		BUFF_ENQUEUE(&pChannel->bufAudioFrame, (char*)frame->frameData, frame->size);
-
-//#ifdef _DEBUG
-//		static FILE* f = NULL;
-//		if (NULL==f)	f = fopen("1recv.pcm", "wb");
-//		if (f)
-//		{
-//			fwrite(frame->frameData, 1, frame->size, f);
-//		}
-//#endif
 
 		int procBytes = 0;
 #define G711_DATA_SIZE		160
@@ -926,26 +783,17 @@ void func_audioRtcOnFrame(void* customData, EasyRTC_CODEC codecID, EasyRTC_Frame
 	{
 		CallbackData(pDevice, peer->uuid, EASYRTC_CALLBACK_TYPE_PEER_AUDIO, pChannel->audioCodecID, 1, (char*)frame->frameData, frame->size, 0, frame->presentationTs / 1000);
 	}
-	//CallbackData(pDevice, peer->uuid, EASYRTC_CALLBACK_TYPE_PEER_AUDIO, peerConnection->audio_track_.codec, 1, (char*)frame->frameData, frame->size, frame->flags, frame->presentationTs / 1000);
 }
 
 
 int __EasyRTC_Device_Transceiver_Callback(void* userPtr, EASYRTC_TRANSCEIVER_CALLBACK_TYPE_E type, EasyRTC_CODEC codecID, EasyRTC_Frame* frame, double bandwidthEstimation)
 {
-	//__Print__(NULL, __FUNCTION__, __LINE__, false, "############## ptr2:%llu\n", userPtr);
-
 	EASY_PEER_CONNECTION_T* peerConnection = (EASY_PEER_CONNECTION_T*)userPtr;
 	EASYRTC_PEER_T* peer = (EASYRTC_PEER_T*)peerConnection->peerPtr;
 	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)peer->devicePtr;
 
 	if (EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME == type)
 	{
-		//__Print__(NULL, __FUNCTION__, __LINE__, false, "############## ptr2222:%p\n", userPtr);
-
-		// 对方发过来的视频
-		//__device_Print__(NULL, __FUNCTION__, __LINE__, false, "%s line[%d] [%s] peer Video codecId[%u] videoCodecID[%u]\n", __FUNCTION__, __LINE__, 
-		//	peerConnection->type == EASYRTC_PEER_PUBLISHER ? "PUBLISHER" : "SUBSCRIBER", peerConnection->video_track_.codec, peerConnection->videoCodecID);
-
 		CallbackData(pDevice, peer->uuid, EASYRTC_CALLBACK_TYPE_PEER_VIDEO, codecID, 1, (char*)frame->frameData, frame->size, frame->flags, frame->presentationTs);
 	}
 	else if (EASYRTC_TRANSCEIVER_CALLBACK_AUDIO_FRAME == type)
@@ -973,12 +821,6 @@ int __EasyRTC_Caller_Transceiver_Callback(void* userPtr, EASYRTC_TRANSCEIVER_CAL
 
 	if (EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME == type)
 	{
-		//__Print__(NULL, __FUNCTION__, __LINE__, false, "############## ptr2222:%p\n", userPtr);
-
-		// 对方发过来的视频
-		//__device_Print__(NULL, __FUNCTION__, __LINE__, false, "%s line[%d] [%s] peer Video codecId[%u] videoCodecID[%u]\n", __FUNCTION__, __LINE__, 
-		//	peerConnection->type == EASYRTC_PEER_PUBLISHER ? "PUBLISHER" : "SUBSCRIBER", peerConnection->video_track_.codec, peerConnection->videoCodecID);
-
 		CallbackData(pDevice, peer->uuid, EASYRTC_CALLBACK_TYPE_PEER_VIDEO, codecID, 1, (char*)frame->frameData, frame->size, frame->flags, frame->presentationTs);
 
 		if (frame->flags == 0x01)
@@ -988,7 +830,6 @@ int __EasyRTC_Caller_Transceiver_Callback(void* userPtr, EASYRTC_TRANSCEIVER_CAL
 	}
 	else if (EASYRTC_TRANSCEIVER_CALLBACK_AUDIO_FRAME == type)
 	{
-		//caller_func_audioRtcOnFrame((UINT64)userPtr, codecID, frame);
 		func_audioRtcOnFrame(userPtr, codecID, frame);
 	}
 	//else if (EASYRTC_TRANSCEIVER_CALLBACK_BANDWIDTH == type)
@@ -1027,24 +868,6 @@ int __EasyRTC_DataChannel_Callback(void* userPtr, EASYRTC_DATACHANNEL_CALLBACK_T
 
 	return 0;
 }
-
-//int __EasyRTC_Caller_DataChannel_Callback(void* userPtr, EASYRTC_DATACHANNEL_CALLBACK_TYPE_E type, BOOL isBinary, const char* msgData, int msgLen)
-//{
-//
-//
-//	return 0;
-//}
-
-
-//void func_RtcOnOpen(UINT64 customData, PRtcDataChannel dc)
-//{
-//	EASY_PEER_CONNECTION_T* peerConnection = (EASY_PEER_CONNECTION_T*)customData;
-//	EASYRTC_PEER_T* peer = (EASYRTC_PEER_T*)peerConnection->peerPtr;
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)peer->devicePtr;
-//
-//	__Print__(NULL, __FUNCTION__, __LINE__, false, "%s line[%d]\n", __FUNCTION__, __LINE__);
-//}
-
 
 
 int	EasyRTC_CreatePeer(EASYRTC_DEVICE_T* pDevice, EASYRTC_PEER_T* peer, EASYRTC_PEER_TYPE_E type, const char* offerSDP)

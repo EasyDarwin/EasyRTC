@@ -58,9 +58,6 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_GetVersion(char* version)
 
 	if (NULL == version)	return -1;
 
-	//libEasyRTSPClient v3.0.19.0415
-	// EasyRTC          v1.0.25.1114
-
 	sprintf(version, "EasyRTCDevice v1.0.%d.%02d%02d", year - 2000, month, day);
 
 	return 0;
@@ -223,72 +220,6 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 }
 
 
-//// 获取在线设备列表
-//int	EASYRTC_DEVICE_API	EasyRTC_GetOnlineDeviceList(EASYRTC_HANDLE handle)
-//{
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
-//	if (NULL == pDevice)		return -1;
-//
-//	int ret = 0;// pDevice->GetOnlineDevices(NULL, NULL);
-//
-//	return ret;
-//}
-//
-//// 主动连接对方
-//int	EASYRTC_DEVICE_API	EasyRTC_OpenPeerConnection(EASYRTC_HANDLE handle, const char* peerUUID)
-//{
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
-//	if (NULL == pDevice)		return -1;
-//
-//	int ret = 0;// pDevice->OpenPeerConnection(peerUUID);
-//
-//	return ret;
-//}
-//// 关闭对方连接
-//int	EASYRTC_DEVICE_API	EasyRTC_ClosePeerConnection(EASYRTC_HANDLE handle, const char* peerUUID)
-//{
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
-//	if (NULL == pDevice)		return -1;
-//
-//	//pDevice->ClosePeerConnection(peerUUID);
-//
-//	return 0;
-//}
-//
-//// 处理呼叫响应
-//int	EASYRTC_DEVICE_API	EasyRTC_HandleCall(EASYRTC_HANDLE handle, const char* peerUUID, bool isAccepted)
-//{
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
-//	if (NULL == pDevice)		return -1;
-//
-//	int ret = 0;// isAccepted ? pDevice->AcceptConnection(peerUUID) : pDevice->RefuseConnection(peerUUID);
-//
-//	return ret;
-//}
-
-//// 接受连接
-//int	EASYRTC_DEVICE_API	EasyRTC_AcceptConnection(EASYRTC_HANDLE handle, const char* peerUUID)
-//{
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
-//	if (NULL == pDevice)		return -1;
-//
-//	int ret = pDevice->AcceptConnection(peerUUID);
-//
-//	return ret;
-//}
-//// 拒绝连接
-//int	EASYRTC_DEVICE_API	EasyRTC_RefuseConnection(EASYRTC_HANDLE handle, const char* peerUUID)
-//{
-//	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
-//	if (NULL == pDevice)		return -1;
-//
-//	int ret = pDevice->RefuseConnection(peerUUID);
-//
-//	return ret;
-//}
-
-
-
 	// 获取在线设备列表
 int	EASYRTC_DEVICE_API	EasyRTC_GetOnlineDevices(EASYRTC_HANDLE handle, EasyRTC_Data_Callback callback, void* userptr)
 {
@@ -300,7 +231,6 @@ int	EASYRTC_DEVICE_API	EasyRTC_GetOnlineDevices(EASYRTC_HANDLE handle, EasyRTC_D
 	int ret = GetOnlineDevices(pDevice, callback, userptr);
 
 	return ret;
-
 }
 
 
@@ -315,7 +245,6 @@ int	EASYRTC_DEVICE_API	EasyRTC_Caller_Connect(EASYRTC_HANDLE handle, const char*
 	int ret = RTC_Caller_Connect(pDevice, peerUUID);
 
 	return ret;
-
 }
 
 

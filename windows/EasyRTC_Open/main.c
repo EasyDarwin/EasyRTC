@@ -132,9 +132,7 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 
 int main()
 {
-
     EasyRTC_Device_Init();
-
 
     const char* local_uuid = "92092eea-be8d-4ec4-8ac5-123456789012";
 

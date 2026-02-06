@@ -245,17 +245,6 @@ int SendRegister(EASYRTC_DEVICE_T* pDevice)
         reqInfo->mysn[2] = mysns[2];
         reqInfo->mysn[3] = mysns[3];
 
-
-#ifdef _DEBUG__
-        FILE* f = fopen("login.txt", "wb");
-        if (f)
-        {
-            fwrite(reqInfo, 1, reqInfo->length, f);
-            fclose(f);
-        }
-
-#endif
-
         ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)reqInfo, reqInfo->length);
         free(reqInfo);
     }
@@ -401,8 +390,6 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
             peer->hisid[2] = pRecvInfo->hisid[2];
             peer->hisid[3] = pRecvInfo->hisid[3];
 
-            //memcpy(&peer->peerConnection[EASYRTC_PEER_SUBSCRIBER].callResp, &callResp, sizeof(CALL_RESPONSE_T));
-
             int ret = CallbackData(pDevice, peer_id, EASYRTC_CALLBACK_TYPE_CALL_SUCCESS, 0, 0, NULL, 0, 0, 0);
 
             unsigned int mediaType = EASYRTC_MDIA_TYPE_VIDEO | EASYRTC_MDIA_TYPE_AUDIO;
@@ -539,8 +526,6 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
             GetStringFromUUID(uuid, (unsigned int*)&pRecvInfo->hisids[i][0]);
 
             int ret = CallbackData(pDevice, uuid, EASYRTC_CALLBACK_TYPE_ONLINE_DEVICE, 0, 0, NULL, 0, 0, 0);
-
-            //__Print__(NULL, __FUNCTION__, __LINE__, false, "Device uuid:%s\n", uuid);
         }
     }
     break;
