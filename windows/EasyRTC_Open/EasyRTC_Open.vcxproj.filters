@@ -1,0 +1,90 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="common">
+      <UniqueIdentifier>{f4bd7ba5-0263-40be-a5d1-60d831a9b3af}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="EasyRTCDeviceAPI.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="g711.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="WsHandle.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RTCDevice.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RTCPeer.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="websocketClient.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="main.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RTCCaller.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\buff.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\osmutex.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\osthread.c">
+      <Filter>common</Filter>
+    </ClCompile>
+    <ClCompile Include="EasyRTC_websocket.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="EasyRTCDeviceAPI.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="g711.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RTCPeer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="websocketClient.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="wsProtocol.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RTCDevice.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\buff.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\osmutex.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\osthread.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="EasyRTC_websocket.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

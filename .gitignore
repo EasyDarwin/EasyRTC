@@ -1,0 +1,5 @@
+windows/.vs/
+windows/EasyRTC_Open/x64/
+*.dll
+windows/EasyRTC-P2P/x64/
+windows/x64/
