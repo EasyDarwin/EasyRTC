@@ -42,12 +42,14 @@ EasyRTC新一代WebP2P视频物联技术，是一种基于ICE技术实现的点�
 
 
 ## 开发示例
+
 为了方便用户快速将EasyRTC接入到自己的硬件产品中，我们分别提供了Web、Windows、Android等多端示例，各种终端可相互通话通信：
 
 - Windows版采集本地Camera和Mic的视音频，接入到EasyRTC信令系统与客户端进行双向通话；
 
 - Android版采集手机前后端摄像头画面以及麦克风音频，实现移动终端与其他类型终端的互信互通；
 
+<img src="./include/EasyRTCAPI.png" alt="EasyRTCAPI" width="800"/>
 
 ## EasyRTC官网及更多流媒体音视频技术资源
 
