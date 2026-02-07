@@ -1,7 +1,46 @@
-## Signal Serverʹ�÷���
+## Signal Server使用方法
 
-- ��������:  ubuntu 22.04
-- ���뷽����
-1. ��װuuid-dev: sudo apt-get install uuid-dev
-2. ִ��build.sh
-3. �������ɿ�ִ���ļ�: signalserver
+
+
+### 一、编译方法
+
+* 编译主机：ubuntu 22.04
+* 编译方法：
+
+1. 安装uuid-dev: sudo apt-get install uuid-dev
+2. 执行build.sh
+
+### 二、配置文件
+
+配置文件: signalserver.ini，如下：
+
+```c
+[base]
+localport = 19000
+stuncount = 1
+turncount = 1
+supportssl = 0
+
+[stun0]
+url = "stun.qq.com:3478"
+
+[turn0]
+url = "turn.openrelayproject.org:443?transport=tcp"
+username = "user1"
+credential = "pass1"
+
+[ssl]
+localport = 6689
+pemcertfile = "example.crt"
+pemkeyfile = "example.key"
+keypassword = ""
+```
+
+### 三、运行方法
+
+将signalserver.ini和signalserver可执行文件放在同一目录下，终端运行：
+
+```shell
+./signalserver
+```
+
