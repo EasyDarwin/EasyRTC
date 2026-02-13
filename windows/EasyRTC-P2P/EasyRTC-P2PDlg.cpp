@@ -22,6 +22,8 @@
 #define WM_EASY_RTC_CALLBACK_ONLINE_DEVICE	WM_USER+2004
 #define WM_EASY_RTC_UPDATE_WINDOW	WM_USER+2005
 #define WM_EASY_RTC_REFRESH_DEVICE_LIST	WM_USER+2006
+#define WM_EASY_RTC_SDP		WM_USER+2007
+#define WM_EASY_RTC_CALL_END	WM_USER+2008
 
 #define REFRESH_DEVICE_TIMER_ID	10000
 
@@ -137,6 +139,7 @@ BEGIN_MESSAGE_MAP(CEasyRTCDeviceWinDlg, CDialogEx)
 	ON_MESSAGE(WM_CLICK_BUTTON, OnClickCallButton)
 	ON_MESSAGE(WM_EASY_RTC_UPDATE_WINDOW, OnUpdateVideoWindow)
 	ON_MESSAGE(WM_EASY_RTC_REFRESH_DEVICE_LIST, OnRefreshDeviceList)
+	ON_MESSAGE(WM_EASY_RTC_CALL_END, OnCallEnd)
 	
 	ON_BN_CLICKED(IDC_BUTTON_PREVIEW, &CEasyRTCDeviceWinDlg::OnBnClickedButtonPreview)
 	ON_BN_CLICKED(IDC_BUTTON_REFRESH_DEVICELIST, &CEasyRTCDeviceWinDlg::OnBnClickedButtonRefreshDevicelist)
@@ -1490,7 +1493,7 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 		char szLog[128] = { 0 };
 
 		LOCAL_RTC_DEVICE_T* pRTCDevice = pThis->GetRTCDevicePtr();
-		if (NULL != pRTCDevice->easyRTCCallerHandle)		// 如果当前已经呼叫其他设备, 则不能被别人呼叫
+		if (NULL != pRTCDevice->easyRTCCallerHandle && pRTCDevice->pRemoteRenderThread)		// 如果当前已经呼叫其他设备, 则不能被别人呼叫
 		{
 			sprintf(szLog, "对端[%s]呼叫, 当前已呼叫其他设备, 此处不允许被呼叫.\n", peerUUID);
 			pThis->SendMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)szLog);
@@ -1574,6 +1577,10 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 
 		char msg[128] = { 0 };
 		sprintf(msg, "对端[%s]连接成功[%s]...\n", peerUUID, codecID == 1 ? "P2P" : "Relay");
+
+		// 此时有用户请求发送视频
+		pThis->SetPeerUUID(peerUUID);
+
 		pThis->SendMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)msg);
 
 		pThis->EnableCallEnd(TRUE);
@@ -1596,6 +1603,9 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 		pThis->EnableTextMessage(FALSE);
 		pThis->SetPeerUUID(NULL);
 		pThis->UpdateCallState(true);
+
+		//pThis->PostMessage(WM_CLICK_BUTTON, 9999, 0);
+		pThis->PostMessage(WM_EASY_RTC_CALL_END);
 
 		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端已关闭.\n");
 		pThis->PostMessageW(WM_EASY_RTC_UPDATE_WINDOW, 0, 0);
@@ -1630,6 +1640,9 @@ void	CEasyRTCDeviceWinDlg::SetPeerUUID(const char* peerUUID)
 	if (NULL != peerUUID)
 	{
 		strcpy(mPeerUUID, peerUUID);
+
+		memset(mLastDeviceID, 0x0, sizeof(mLastDeviceID));
+		strcpy(mLastDeviceID, peerUUID);
 	}
 }
 
@@ -2177,6 +2190,12 @@ void CEasyRTCDeviceWinDlg::OnBnClickedButtonSendMessage()
 	pEdtSendText->SetWindowTextW(_T(""));
 }
 
+
+LRESULT CEasyRTCDeviceWinDlg::OnCallEnd(WPARAM, LPARAM)
+{
+	OnBnClickedButtonCallEnd();
+	return 0;
+}
 
 void CEasyRTCDeviceWinDlg::OnBnClickedButtonCallEnd()
 {

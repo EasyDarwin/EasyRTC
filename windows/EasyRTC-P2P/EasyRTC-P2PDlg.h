@@ -278,6 +278,7 @@ protected:
 	afx_msg LRESULT OnClickCallButton(WPARAM, LPARAM);
 	afx_msg LRESULT OnUpdateVideoWindow(WPARAM, LPARAM);
 	afx_msg LRESULT OnRefreshDeviceList(WPARAM, LPARAM);
+	afx_msg LRESULT OnCallEnd(WPARAM, LPARAM);
 public:
 	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 	afx_msg void OnDestroy();
