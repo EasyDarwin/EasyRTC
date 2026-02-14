@@ -50,7 +50,7 @@ EasyRTC新一代WebP2P视频物联技术，是一种基于ICE技术实现的点�
 
 - Windows版采集本地Camera和Mic的视音频，接入到EasyRTC信令系统与客户端进行双向通话；
   
-  > Windows版exe可执行文件可直接在[https://www.easydarwin.com]([https://www.easydarwin.com](https://www.easydarwin.com))下载（搜索‘EasyRTC’）
+  > Windows版exe可执行文件可直接在<a href="https://www.easydarwin.com" target="_blank" title="EasyDarwin开源社区">[www.EasyDarwin.com](https://www.easydarwin.com)</a>下载（搜索‘EasyRTC’）
 
 - Android版采集手机前后端摄像头画面以及麦克风音频，实现移动终端与其他类型终端的互信互通；
   
