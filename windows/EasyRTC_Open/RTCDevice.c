@@ -220,6 +220,9 @@ int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char
 		pInfo->hisid[3] = peer->caller_id[3];
 
 		strcpy(pInfo->offersdp, sdp);
+		char uuid[64] = { 0 };
+		GetStringFromUUID(uuid, (unsigned int*)&peer->caller_id[0]);
+		CallbackData(pDevice, uuid, EASYRTC_CALLBACK_TYPE_OFFER, 0, 0, (char*)sdp, (int)strlen(sdp), 0, 0);
 		ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)pInfo, iLength);
 
 		free(pInfo);
@@ -242,6 +245,11 @@ int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char
 		pInfo->hisid[1] = peer->hisid[1];
 		pInfo->hisid[2] = peer->hisid[2];
 		pInfo->hisid[3] = peer->hisid[3];
+
+
+		char uuid[64] = { 0 };
+		GetStringFromUUID(uuid, (unsigned int*)&peer->hisid[0]);
+		CallbackData(pDevice, uuid, EASYRTC_CALLBACK_TYPE_ANSWER, 0, 0, (char*)sdp, (int)strlen(sdp), 0, 0);
 
 		ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)pInfo, iLength);
 
@@ -662,16 +670,39 @@ int __EasyRTC_ConnectionStateChange_Callback(void* userPtr, EASYRTC_PEER_CONNECT
 		//printf("remote ice address: %s\n", RtcIceCandidatePairStats.remote_ipAddress.strAddress);
 
 		int iceCandidateType = 0;
-		if ((rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED) || (rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED))
+		if ((rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED) ||
+			(rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED))
 		{
 			//这是中转的方式建立起来的连接
-			iceCandidateType = 2;
+			//printf("This is use turn server exchange data\n");
+
+			// 本地relay, 对端p2p
+			if ((rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED) &&
+				((rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_PEER_REFLEXIVE) ||
+					(rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_SERVER_REFLEXIVE)))
+			{
+				iceCandidateType = 1;
+			}
+			// 对端relay, 本地p2p
+			else if ((rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED) &&
+				((rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_PEER_REFLEXIVE) ||
+					(rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_SERVER_REFLEXIVE)))
+			{
+				iceCandidateType = 2;
+			}
+			else
+			{
+				iceCandidateType = 3;
+			}
 		}
 		else
 		{
 			//这是直连的方式建立起来的连接
-			iceCandidateType = 1;
+			//printf("This is use p2p exchange data\n");
+			iceCandidateType = 0;
 		}
+
+
 
 		peerConnection->connected = 1;
 		peer->operateType = OPERATE_TYPE_WORKING;
@@ -940,7 +971,7 @@ int	EasyRTC_CreatePeer(EASYRTC_DEVICE_T* pDevice, EASYRTC_PEER_T* peer, EASYRTC_
 			memset(&transceiverInit, 0x00, sizeof(EasyRTC_RtpTransceiverInit));
 			transceiverInit.direction = pChannel->direction;
 
-			__Print__(NULL, __FUNCTION__, __LINE__, false, "############## ptr:%llu\n", &peer->peerConnection[type]);
+			//__Print__(NULL, __FUNCTION__, __LINE__, false, "############## ptr:%llu\n", &peer->peerConnection[type]);
 
 			retStatus = EasyRTC_AddTransceiver(&peer->peerConnection[type].videoTransceiver_, 
 				peer->peerConnection[type].peer_, 

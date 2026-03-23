@@ -392,6 +392,10 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
 
             int ret = CallbackData(pDevice, peer_id, EASYRTC_CALLBACK_TYPE_CALL_SUCCESS, 0, 0, NULL, 0, 0, 0);
 
+
+            // 2026.02.09
+            CallbackData(pDevice, peer_id, EASYRTC_CALLBACK_TYPE_OFFER, 0, 0, (char*)offersdp, (int)strlen(offersdp), 0, 0);
+
             unsigned int mediaType = EASYRTC_MDIA_TYPE_VIDEO | EASYRTC_MDIA_TYPE_AUDIO;
             EasyRTC_RTP_TRANSCEIVER_DIRECTION direction = EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
 
@@ -505,6 +509,9 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         EASYRTC_PEER_T* peer = findPeerByUUID(pDevice->peerList, peer_uuid);
         if (NULL != peer)
         {
+            // 2026.02.09
+            CallbackData(pDevice, peer_uuid, EASYRTC_CALLBACK_TYPE_ANSWER, 0, 0, (char*)pRecvInfo->answersdp, (int)strlen(pRecvInfo->answersdp), 0, 0);
+
             int retStatus = EasyRTC_SetRemoteDescription(peer->peerConnection[EASYRTC_PEER_PUBLISHER].peer_, pRecvInfo->answersdp);
             if (retStatus != 0)
             {

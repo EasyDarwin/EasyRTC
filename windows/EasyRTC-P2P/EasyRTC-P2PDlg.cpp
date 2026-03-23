@@ -1576,7 +1576,15 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 		pThis->InitPlayResource();			// 连接已成功建立, 初始化播放资源
 
 		char msg[128] = { 0 };
-		sprintf(msg, "对端[%s]连接成功[%s]...\n", peerUUID, codecID == 1 ? "P2P" : "Relay");
+		char iceCandidateType[64] = { 0 };
+		/*
+			两端都是p2p应该是00（0），两端都是relay应该是11（3），本地p2p对端relay应该是10（2），本地relay对端p2p应该是01（1）
+		*/
+		if (codecID == 0)	strcpy(iceCandidateType, "本地->对端[P2P直连]、对端->本地[P2P直连]");
+		else if (codecID == 1)	strcpy(iceCandidateType, "本地->对端[relay中转]、对端->本地[P2P直连]");
+		else if (codecID == 2)	strcpy(iceCandidateType, "本地->对端[P2P直连]、对端->本地[relay中转]");
+		else if (codecID == 3)	strcpy(iceCandidateType, "本地->对端[relay中转]、对端->本地[relay中转]");
+		sprintf(msg, "对端[%s]连接成功 (%s)...\n", peerUUID, iceCandidateType);
 
 		// 此时有用户请求发送视频
 		pThis->SetPeerUUID(peerUUID);
@@ -1831,6 +1839,7 @@ bool	CEasyRTCDeviceWinDlg::OpenLocalSource()
 	char szURL[1024] = { 0 };
 	if (mLocalRTCDevice.sourceType == 0)
 	{
+#ifndef _DEBUG
 		if (pComboxLocalCameraList->GetCount() < 1 || pComboxLocalAudioList->GetCount() < 1)
 		{
 			MessageBox(TEXT("没有找到视频或音频采集设备"));
@@ -1844,7 +1853,7 @@ bool	CEasyRTCDeviceWinDlg::OpenLocalSource()
 			mLocalRTCDevice.sourceType = -1;
 			return false;
 		}
-
+#endif
 
 		// video=
 		wchar_t wszURL[1024] = { 0 };
@@ -1862,28 +1871,31 @@ bool	CEasyRTCDeviceWinDlg::OpenLocalSource()
 		if (0 != strcmp(szURL, "\0"))
 		{
 			int audioDeviceIndex = pComboxLocalAudioList->GetCurSel();
-			int openDeviceRet = libAudioCapturer_OpenAudioCaptureDevice(audioDeviceIndex);
-			if (openDeviceRet == 0)
+			if (audioDeviceIndex >= 0)
 			{
-				mLocalRTCDevice.audioCodecID = EASYRTC_CODEC_MULAW;// EASYRTC_CODEC_ALAW;		// alaw
+				int openDeviceRet = libAudioCapturer_OpenAudioCaptureDevice(audioDeviceIndex);
+				if (openDeviceRet == 0)
+				{
+					mLocalRTCDevice.audioCodecID = EASYRTC_CODEC_MULAW;// EASYRTC_CODEC_ALAW;		// alaw
 
-				int samplerate = 8000;			// 采样率
-				int bitPerSamples = 16;			// 采样精度
-				int channels = 1;				// 通道数
-				int pcm_buf_size_per_sec = samplerate * bitPerSamples * channels / 8;			// 每秒数据量		比如8000*16*1/8=16000
-				int pcm_buf_size_per_ms = pcm_buf_size_per_sec / 1000;							// 每毫秒数据量		16000/1000=16
-				int interval_ms = 20;															// 间隔20毫秒
-				int bytes_per_20ms = pcm_buf_size_per_ms * interval_ms;							// 每20毫秒数据量
+					int samplerate = 8000;			// 采样率
+					int bitPerSamples = 16;			// 采样精度
+					int channels = 1;				// 通道数
+					int pcm_buf_size_per_sec = samplerate * bitPerSamples * channels / 8;			// 每秒数据量		比如8000*16*1/8=16000
+					int pcm_buf_size_per_ms = pcm_buf_size_per_sec / 1000;							// 每毫秒数据量		16000/1000=16
+					int interval_ms = 20;															// 间隔20毫秒
+					int bytes_per_20ms = pcm_buf_size_per_ms * interval_ms;							// 每20毫秒数据量
 
-				unsigned int audioCodec = AUDIO_CODEC_ID_ALAW;
-				if (mLocalRTCDevice.audioCodecID == EASYRTC_CODEC_MULAW)	audioCodec = AUDIO_CODEC_ID_MULAW;
+					unsigned int audioCodec = AUDIO_CODEC_ID_ALAW;
+					if (mLocalRTCDevice.audioCodecID == EASYRTC_CODEC_MULAW)	audioCodec = AUDIO_CODEC_ID_MULAW;
 
-				mLocalRTCDevice.audioDTSstep = interval_ms;
+					mLocalRTCDevice.audioDTSstep = interval_ms;
 
-				libAudioCapturer_StartAudioCapture(audioCodec, bytes_per_20ms,
-					samplerate, bitPerSamples, channels, __AudioDataCallBack, (void*)&mLocalRTCDevice);
+					libAudioCapturer_StartAudioCapture(audioCodec, bytes_per_20ms,
+						samplerate, bitPerSamples, channels, __AudioDataCallBack, (void*)&mLocalRTCDevice);
 
-				streamNum++;
+					streamNum++;
+				}
 			}
 		}
 	}
@@ -2216,6 +2228,7 @@ void CEasyRTCDeviceWinDlg::OnBnClickedButtonCallEnd()
 		EnableCallEnd(FALSE);
 		EnableTextMessage(FALSE);
 		OnUpdateVideoWindow(0, 0);
+		OnClickCallButton(0, 0);
 		
 		PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已挂断.\n");
 	}

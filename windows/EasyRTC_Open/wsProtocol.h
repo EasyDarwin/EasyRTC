@@ -90,8 +90,6 @@ typedef struct
 #endif
 
 
-
-
 //webrtc
 typedef struct
 {
@@ -267,6 +265,7 @@ typedef struct
 	uint32_t idscount;
 	uint32_t hisids[][4];
 }__attribute__((packed)) ACK_GETONLINEDEVICES_INFO;
+
 
 #if defined(_MSC_VER)
 #pragma pack()

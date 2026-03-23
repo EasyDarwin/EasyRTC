@@ -231,8 +231,9 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 	pThread->flag = THREAD_STATUS_RUNNING;
 
 	// Éú³É Sec-WebSocket-Key
-	static unsigned char shakeKey[32] = { 0 };
-	if (memcmp(shakeKey, "\0\0\0\0", 4) == 0) {
+	unsigned char shakeKey[32] = { 0 };
+	//		if (memcmp(shakeKey, "\0\0\0\0", 4) == 0) 
+	{
 		size_t len = 0;
 		unsigned char tempKey[16] = { 0 };
 
@@ -247,6 +248,10 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		}
 #endif
 		mbedtls_base64_encode(shakeKey, 32, &len, tempKey, 16);
+		if (0 == strcmp((char*)shakeKey, "\0"))
+		{
+			strcpy((char*)shakeKey, "uip7XrAOPE634xuUNvv0vg==");
+		}
 	}
 
 	int maxrecvlen = 400 * 1024;
@@ -293,6 +298,8 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		else {
 			snprintf(hostWithPort, sizeof(hostWithPort), "%s:%d", pWssClient->serverAddr, pWssClient->serverPort);
 		}
+
+
 
 		const char httpRequest[] =
 			"GET / HTTP/1.1\r\n"

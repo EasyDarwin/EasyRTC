@@ -61,6 +61,9 @@ typedef enum __EASYRTC_DATA_TYPE_ENUM_E
     EASYRTC_CALLBACK_TYPE_PEER_DISCONNECT,          // 与对端连接断开
     EASYRTC_CALLBACK_TYPE_PEER_CLOSED,              // 与对端连接已关闭
 
+    EASYRTC_CALLBACK_TYPE_OFFER,               // Offer SDP
+    EASYRTC_CALLBACK_TYPE_ANSWER,              // Answer SDP
+
     EASYRTC_CALLBACK_TYPE_CALL_SUCCESS = 0x50,      // 被叫端响应成功
 
     EASYRTC_CALLBACK_TYPE_ONLINE_DEVICE = 0x80,   // 在线设备列表
