@@ -58,8 +58,6 @@ enum ws_opcode
 //#pragma pack(1)
 //#endif
 
-//#pragma pack(push, 1)
-
 //websocket
 typedef struct
 {
@@ -151,7 +149,6 @@ typedef struct
 	unsigned char payloaddata[0];
 }ws_2m_header;
 
-//#pragma pack(pop)
 
 int socket_set_keepalive(int sockfd);
 int rtc_websocket_write(int sockfd, int opcode, char* data, int iLength);

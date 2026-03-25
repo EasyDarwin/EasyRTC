@@ -675,31 +675,13 @@ int __EasyRTC_ConnectionStateChange_Callback(void* userPtr, EASYRTC_PEER_CONNECT
 		{
 			//这是中转的方式建立起来的连接
 			//printf("This is use turn server exchange data\n");
-
-			// 本地relay, 对端p2p
-			if ((rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED) &&
-				((rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_PEER_REFLEXIVE) ||
-					(rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_SERVER_REFLEXIVE)))
-			{
-				iceCandidateType = 1;
-			}
-			// 对端relay, 本地p2p
-			else if ((rtcIceCandidatePairStats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED) &&
-				((rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_PEER_REFLEXIVE) ||
-					(rtcIceCandidatePairStats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_SERVER_REFLEXIVE)))
-			{
-				iceCandidateType = 2;
-			}
-			else
-			{
-				iceCandidateType = 3;
-			}
+			iceCandidateType = 2;
 		}
 		else
 		{
 			//这是直连的方式建立起来的连接
 			//printf("This is use p2p exchange data\n");
-			iceCandidateType = 0;
+			iceCandidateType = 1;
 		}
 
 

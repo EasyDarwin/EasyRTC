@@ -1577,14 +1577,8 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 
 		char msg[128] = { 0 };
 		char iceCandidateType[64] = { 0 };
-		/*
-			两端都是p2p应该是00（0），两端都是relay应该是11（3），本地p2p对端relay应该是10（2），本地relay对端p2p应该是01（1）
-		*/
-		if (codecID == 0)	strcpy(iceCandidateType, "本地->对端[P2P直连]、对端->本地[P2P直连]");
-		else if (codecID == 1)	strcpy(iceCandidateType, "本地->对端[relay中转]、对端->本地[P2P直连]");
-		else if (codecID == 2)	strcpy(iceCandidateType, "本地->对端[P2P直连]、对端->本地[relay中转]");
-		else if (codecID == 3)	strcpy(iceCandidateType, "本地->对端[relay中转]、对端->本地[relay中转]");
-		sprintf(msg, "对端[%s]连接成功 (%s)...\n", peerUUID, iceCandidateType);
+
+		sprintf(msg, "对端[%s]连接成功 (%s)...\n", peerUUID, codecID == 1 ? "P2P直连" : "Relay中转");
 
 		// 此时有用户请求发送视频
 		pThis->SetPeerUUID(peerUUID);
