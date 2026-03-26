@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configurationDescriptor version="100">
+  <logicalFolder name="root" displayName="root" projectFiles="true" kind="ROOT">
+    <logicalFolder name="f1"
+                   displayName="FileParser"
+                   projectFiles="true"
+                   kind="ROOT">
+      <itemPath>FileParser/ESFileParser.cpp</itemPath>
+      <itemPath>FileParser/ESFileParser.h</itemPath>
+      <itemPath>FileParser/ESParser.cpp</itemPath>
+      <itemPath>FileParser/ESParser.h</itemPath>
+      <itemPath>FileParser/bs.h</itemPath>
+      <itemPath>FileParser/buff.cpp</itemPath>
+      <itemPath>FileParser/buff.h</itemPath>
+      <itemPath>FileParser/g711.cpp</itemPath>
+      <itemPath>FileParser/g711.h</itemPath>
+      <itemPath>FileParser/getsps.cpp</itemPath>
+      <itemPath>FileParser/getsps.h</itemPath>
+      <itemPath>FileParser/h265_sei.cpp</itemPath>
+      <itemPath>FileParser/h265_sei.h</itemPath>
+      <itemPath>FileParser/h265_stream.cpp</itemPath>
+      <itemPath>FileParser/h265_stream.h</itemPath>
+    </logicalFolder>
+    <logicalFolder name="HeaderFiles"
+                   displayName="Header Files"
+                   projectFiles="true">
+    </logicalFolder>
+    <logicalFolder name="ResourceFiles"
+                   displayName="Resource Files"
+                   projectFiles="true">
+    </logicalFolder>
+    <logicalFolder name="SourceFiles"
+                   displayName="Source Files"
+                   projectFiles="true">
+      <itemPath>main.cpp</itemPath>
+    </logicalFolder>
+    <logicalFolder name="TestFiles"
+                   displayName="Test Files"
+                   projectFiles="false"
+                   kind="TEST_LOGICAL_FOLDER">
+    </logicalFolder>
+    <logicalFolder name="ExternalFiles"
+                   displayName="Important Files"
+                   projectFiles="false"
+                   kind="IMPORTANT_FILES_FOLDER">
+      <itemPath>Makefile</itemPath>
+    </logicalFolder>
+    <itemPath>gettimeofdayEx.cpp</itemPath>
+    <itemPath>gettimeofdayEx.h</itemPath>
+  </logicalFolder>
+  <projectmakefile>Makefile</projectmakefile>
+  <confs>
+    <conf name="Debug" type="1">
+      <toolsSet>
+        <compilerSet>default</compilerSet>
+        <dependencyChecking>true</dependencyChecking>
+        <rebuildPropChanged>false</rebuildPropChanged>
+      </toolsSet>
+      <compileType>
+        <ccTool>
+          <incDir>
+            <pElem>../EasyRTC_Open</pElem>
+          </incDir>
+        </ccTool>
+        <linkerTool>
+          <linkerAddLib>
+            <pElem>../EasyRTC_Open/dist/Debug/GNU-Linux</pElem>
+            <pElem>../../linux/x86-64</pElem>
+          </linkerAddLib>
+          <linkerDynSerch>
+            <pElem>.</pElem>
+          </linkerDynSerch>
+          <linkerLibItems>
+            <linkerLibLibItem>EasyRTC_Open</linkerLibLibItem>
+            <linkerLibLibItem>EasyRTC</linkerLibLibItem>
+          </linkerLibItems>
+        </linkerTool>
+      </compileType>
+      <item path="FileParser/ESFileParser.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/ESFileParser.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/ESParser.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/ESParser.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/bs.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/buff.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/buff.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/g711.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/g711.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/getsps.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/getsps.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/h265_sei.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/h265_sei.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/h265_stream.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/h265_stream.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="gettimeofdayEx.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="gettimeofdayEx.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="main.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+    </conf>
+    <conf name="Release" type="1">
+      <toolsSet>
+        <compilerSet>default</compilerSet>
+        <dependencyChecking>true</dependencyChecking>
+        <rebuildPropChanged>false</rebuildPropChanged>
+      </toolsSet>
+      <compileType>
+        <cTool>
+          <developmentMode>5</developmentMode>
+        </cTool>
+        <ccTool>
+          <developmentMode>5</developmentMode>
+        </ccTool>
+        <fortranCompilerTool>
+          <developmentMode>5</developmentMode>
+        </fortranCompilerTool>
+        <asmTool>
+          <developmentMode>5</developmentMode>
+        </asmTool>
+      </compileType>
+      <item path="FileParser/ESFileParser.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/ESFileParser.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/ESParser.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/ESParser.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/bs.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/buff.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/buff.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/g711.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/g711.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/getsps.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/getsps.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/h265_sei.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/h265_sei.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="FileParser/h265_stream.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="FileParser/h265_stream.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="gettimeofdayEx.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+      <item path="gettimeofdayEx.h" ex="false" tool="3" flavor2="0">
+      </item>
+      <item path="main.cpp" ex="false" tool="1" flavor2="0">
+      </item>
+    </conf>
+  </confs>
+</configurationDescriptor>
