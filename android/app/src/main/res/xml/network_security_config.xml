@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">36.34.0.68</domain>
+        <domain includeSubdomains="true">rts.easyrtc.cn</domain>
+    </domain-config>
+</network-security-config>

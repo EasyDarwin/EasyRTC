@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="transparent">#00000000</color>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="black_35">#59000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="color_f5f5f5">#FFF5F5F5</color>
+
+    <color name="b_n_active">#6C96FF</color>
+    <color name="primary_color">#6C96FF</color>
+    <color name="b_n_normal">#C7C7C7</color>
+
+    <color name="setting_label">#1A1A1A</color>
+    <color name="color_666666">#FF666666</color>
+    <color name="color_e0e0e0">#FFE0E0E0</color>
+    <color name="color_e6e6e6">#FFE6E6E6</color>
+    <color name="color_4d4d4d">#FF4D4D4D</color>
+    <color name="color_01c9a7">#587fff</color>
+    <color name="color_1a1a1a">#FF1A1A1A</color>
+    <color name="color_d9f4eb">#d9f4eb</color>
+    <color name="color_D1E4FF">#D1E4FF</color>
+    <color name="color_ccc">#CCCCCC</color>
+    <color name="black_60_percent">#80000000</color>
+
+    <!-- 下拉选颜色 -->
+    <color name="selected_item_background">#5880fa</color>
+    <color name="selected_item_text">#FFFFFF</color>
+    <color name="normal_item_text">#333333</color>
+
+</resources>

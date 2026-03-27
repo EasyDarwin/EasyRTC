@@ -1,0 +1,11 @@
+{
+  "name": "EasyRTC",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build:debug": "./gradlew aD",
+    "build:release": "./gradlew aR"
+  },
+  "author": "MagicXL",
+  "license": "ISC"
+}

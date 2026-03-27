@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="4dp"
+    app:cardUseCompatPadding="true">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="10dp">
+
+        <!-- 设备名称 -->
+        <TextView
+            android:id="@+id/tvDeviceName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text="设备名称"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"/>
+
+        <!-- 设备状态 -->
+        <TextView
+            android:id="@+id/tvDeviceStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="在线"
+            android:textSize="12sp"
+            app:layout_constraintEnd_toEndOf="@id/tvDeviceName"
+            app:layout_constraintStart_toStartOf="@id/tvDeviceName"
+            app:layout_constraintTop_toBottomOf="@id/tvDeviceName" />
+
+        <!-- 最后在线时间 -->
+        <TextView
+            android:id="@+id/tvLastOnline"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="10分钟前"
+            android:textSize="10sp"
+            android:textColor="@android:color/darker_gray"
+            app:layout_constraintEnd_toEndOf="@id/tvDeviceName"
+            app:layout_constraintStart_toStartOf="@id/tvDeviceName"
+            app:layout_constraintTop_toBottomOf="@id/tvDeviceStatus" />
+
+        <!-- 水平排列的设备信息 -->
+        <LinearLayout
+            android:id="@+id/llDeviceInfo"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:gravity="start"
+            android:paddingVertical="4dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvLastOnline">
+
+            <TextView
+                android:id="@+id/tvChannelCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="通道数 2"
+                android:textSize="11sp"
+                android:textColor="@android:color/darker_gray"
+                android:paddingEnd="12dp"/>
+
+            <TextView
+                android:id="@+id/tvModel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="型号EasyRTC"
+                android:textSize="11sp"
+                android:textColor="@android:color/darker_gray"
+                android:paddingEnd="12dp"/>
+
+            <TextView
+                android:id="@+id/tvManufacturer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="厂商 TSINGSEE"
+                android:textSize="11sp"
+                android:textColor="@android:color/darker_gray"/>
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.cardview.widget.CardView>

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@mipmap/about_bg"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/about_gradient_background"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/logo_navbar_title"
+            android:textColor="#1A1A1A"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <RelativeLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center">
+
+            <ImageView
+                android:layout_width="250dp"
+                android:layout_height="290dp"
+                android:src="@mipmap/logo" />
+
+            <LinearLayout
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="@dimen/dp_224"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:text="@string/logo_name"
+                    android:textColor="#527FFF"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/tv_app_version"
+                    android:layout_width="@dimen/dp_130"
+                    android:textAlignment="center"
+                    android:layout_height="15dp"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/logo_version"
+                    android:textColor="#636877"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </RelativeLayout>
+
+
+    </LinearLayout>
+
+</LinearLayout>

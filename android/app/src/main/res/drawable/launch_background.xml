@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/primary_color" />
+    <!-- 可选：添加logo -->
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@mipmap/logo"/>
+    </item>
+
+</layer-list>

@@ -1,0 +1,6 @@
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 选中状态 -->
+    <item android:state_selected="true" android:drawable="@mipmap/about" />
+    <!-- 默认未选中状态 -->
+    <item android:drawable="@mipmap/about_unselected" />
+</selector>

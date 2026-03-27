@@ -1,0 +1,19 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/navigation_home"
+        android:icon="@drawable/ic_home_selector"
+        android:title="登录"
+        android:tooltipText="" />
+
+    <item
+        android:id="@+id/navigation_setting"
+        android:icon="@drawable/ic_setting_selector"
+        android:title="设置"
+        android:tooltipText="" />
+
+    <item
+        android:id="@+id/navigation_about"
+        android:icon="@drawable/ic_about_selector"
+        android:title="关于"
+        android:tooltipText="" />
+</menu>

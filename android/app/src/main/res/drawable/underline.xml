@@ -1,0 +1,14 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 默认背景 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" /> <!-- 背景透明 -->
+        </shape>
+    </item>
+    <item android:top="34dp"> <!-- 根据需要调整下划线位置 -->
+        <shape android:shape="rectangle">
+            <size android:height="1dp" /> <!-- 下划线粗细 -->
+            <solid android:color="#E0E0E0" /> <!-- 下划线颜色 -->
+        </shape>
+    </item>
+</layer-list>

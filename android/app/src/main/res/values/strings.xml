@@ -1,0 +1,73 @@
+<resources>
+
+
+    <string name="logo_version">Version V2.0.25 1111</string>
+
+    <string name="enlarge">放大</string>
+    <string name="downscale">缩小</string>
+    <string name="hangUp">挂断</string>
+    <string name="record">Start Recording</string>
+
+    <string name="app_name">EasyRTC</string>
+    <string name="logo_name">EasyRTC</string>
+    <string name="logo_navbar_title">关于EasyRTC</string>
+    <string name="setting_navbar_title">流媒体设置</string>
+    <string name="change_camera">切换摄像头</string>
+    <string name="rtc_user_label">在线用户</string>
+    <string name="rtc_user_online_empty">暂无在线用户</string>
+    <string name="open_rtc_user_label">打开用户列表</string>
+    <string name="close_rtc_label">关闭通话</string>
+
+
+    <string name="rtc_device_id_label">设备ID</string>
+    <string name="rtc_device_id_placeholder">请输入设备ID</string>
+
+
+    <string-array name="videocodearr">
+        <item>H264</item>
+        <item>H265</item>
+    </string-array>
+
+    <string-array name="resolutionarr">
+        <item>1920*1080</item>
+        <item>1280*720</item>
+        <item>960*540</item>
+    </string-array>
+
+    <string-array name="frameratearr">
+        <item>30</item>
+        <item>25</item>
+        <item>20</item>
+        <item>15</item>
+    </string-array>
+
+    <string-array name="videocoderatearr">
+<!--        <item>8192</item>-->
+<!--        <item>6144</item>-->
+        <item>4096</item>
+        <item>2024</item>
+        <item>1024</item>
+        <item>512</item>
+    </string-array>
+
+    <string-array name="audiocodearr">
+        <item>G711A</item>
+        <!--        <item>G711U</item>-->
+        <!--        <item>AAC</item>-->
+    </string-array>
+
+    <string-array name="samplingratearr">
+        <item>8000</item>
+        <!--        <item>11025</item>-->
+    </string-array>
+    <string-array name="audiochannelarr">
+        <item>单声道</item>
+        <!--        <item>立体声道</item>-->
+    </string-array>
+
+    <string-array name="audiocoderatearr">
+        <!--        <item>64</item>-->
+        <!--        <item>32</item>-->
+        <item>16</item>
+    </string-array>
+</resources>

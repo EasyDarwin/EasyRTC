@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center"
+    android:background="?android:attr/selectableItemBackground">
+
+    <!-- 使用系统图标作为头像 -->
+<!--    <ImageView-->
+<!--        android:id="@+id/userAvatar"-->
+<!--        android:layout_width="20dp"-->
+<!--        android:layout_height="20dp"-->
+<!--        android:src="@android:drawable/ic_menu_view"-->
+<!--        android:background="@android:color/darker_gray"-->
+<!--        android:padding="4dp"-->
+<!--        android:contentDescription="用户头像" />-->
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="8dp">
+
+        <TextView
+            android:id="@+id/userName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="用户名"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/userUuid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="在线"
+            android:textSize="10sp"
+            android:paddingBottom="4dp"
+            android:textColor="@android:color/darker_gray" />
+
+    </LinearLayout>
+
+    <!-- 使用系统电话图标 -->
+    <ImageButton
+        android:id="@+id/callButton"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="呼叫用户"
+        android:src="@android:drawable/ic_menu_call" />
+</LinearLayout>

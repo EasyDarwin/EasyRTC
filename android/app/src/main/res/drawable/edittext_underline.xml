@@ -1,0 +1,7 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@android:color/transparent" /> <!-- 透明背景 -->
+    <stroke
+        android:width="0.5dp"
+        android:color="#E0E0E0" /> <!-- 下划线颜色 -->
+    <size android:height="0.5dp" /> <!-- 下划线的高度（粗细） -->
+</shape>
