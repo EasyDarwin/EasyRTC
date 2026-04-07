@@ -3,7 +3,6 @@ windows/EasyRTC_Open/x64/
 windows/EasyRTC-P2P/x64/
 windows/x64/
 android/.gradle/
-android/gradle/
 android/build/
 android/app/build/
 android/release/
