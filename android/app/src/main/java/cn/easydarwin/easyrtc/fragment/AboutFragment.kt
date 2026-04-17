@@ -1,5 +1,6 @@
 package cn.easydarwin.easyrtc.fragment
 
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -11,7 +12,7 @@ import androidx.fragment.app.Fragment
 import cn.easydarwin.easyrtc.R
 
 class AboutFragment : Fragment() {
-    private lateinit var tvAppVersion: TextView
+    private var tvAppVersion: TextView? = null
 
     companion object {
         private const val TAG = "AboutFragment"
@@ -24,13 +25,27 @@ class AboutFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // 可以在这里进行其他初始化操作
         tvAppVersion = view.findViewById(R.id.tv_app_version)
+        val versionName = getAppVersionNameOrUnknown()
+        tvAppVersion?.text = getString(R.string.about_version_value, versionName)
+    }
 
-        val packageInfo = requireContext().packageManager.getPackageInfo(requireContext().packageName, 0)
-
-        packageInfo!!.versionName?.let {
-            tvAppVersion.text = it
+    private fun getAppVersionNameOrUnknown(): String {
+        return try {
+            val context = requireContext()
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.PackageInfoFlags.of(0),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            packageInfo.versionName?.takeIf { it.isNotBlank() }
+                ?: getString(R.string.about_version_unknown)
+        } catch (_: PackageManager.NameNotFoundException) {
+            getString(R.string.about_version_unknown)
         }
     }
 
@@ -59,6 +74,7 @@ class AboutFragment : Fragment() {
      */
     override fun onDestroyView() {
         super.onDestroyView()
+        tvAppVersion = null
         Log.d(TAG, "onDestroyView")
     }
 }

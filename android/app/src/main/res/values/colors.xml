@@ -1,6 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="transparent">#00000000</color>
+
+    <color name="enterprise_primary">#0B57D0</color>
+    <color name="enterprise_primary_dark">#0842A0</color>
+    <color name="enterprise_primary_variant">#06357F</color>
+    <color name="enterprise_on_primary">#FFFFFFFF</color>
+    <color name="enterprise_secondary">#0F766E</color>
+    <color name="enterprise_secondary_variant">#115E59</color>
+    <color name="enterprise_on_secondary">#FFFFFFFF</color>
+    <color name="enterprise_surface">#FFFFFFFF</color>
+    <color name="enterprise_on_surface">#FF1F2937</color>
+    <color name="enterprise_error">#FFB3261E</color>
+    <color name="enterprise_on_error">#FFFFFFFF</color>
+    <color name="enterprise_nav_background">#FFFFFFFF</color>
+    <color name="enterprise_nav_active">#0B57D0</color>
+    <color name="enterprise_nav_inactive">#FF6B7280</color>
+
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>
@@ -11,9 +27,10 @@
     <color name="white">#FFFFFFFF</color>
     <color name="color_f5f5f5">#FFF5F5F5</color>
 
-    <color name="b_n_active">#6C96FF</color>
-    <color name="primary_color">#6C96FF</color>
-    <color name="b_n_normal">#C7C7C7</color>
+    <!-- legacy aliases: avoid new usage -->
+    <color name="b_n_active">@color/enterprise_nav_active</color>
+    <color name="primary_color">@color/enterprise_primary</color>
+    <color name="b_n_normal">@color/enterprise_nav_inactive</color>
 
     <color name="setting_label">#1A1A1A</color>
     <color name="color_666666">#FF666666</color>
@@ -22,6 +39,9 @@
     <color name="color_4d4d4d">#FF4D4D4D</color>
     <color name="color_01c9a7">#587fff</color>
     <color name="color_1a1a1a">#FF1A1A1A</color>
+    <color name="color_f5f7fb">#FFF5F7FB</color>
+    <color name="color_eef2f8">#FFEEF2F8</color>
+    <color name="color_9aa0ac">#FF9AA0AC</color>
     <color name="color_d9f4eb">#d9f4eb</color>
     <color name="color_D1E4FF">#D1E4FF</color>
     <color name="color_ccc">#CCCCCC</color>

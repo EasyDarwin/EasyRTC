@@ -10,6 +10,7 @@ import android.graphics.SurfaceTexture
 import android.hardware.Camera
 import android.media.MediaFormat
 import android.os.Bundle
+import android.os.Looper
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.LayoutInflater
@@ -30,6 +31,8 @@ import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCStreamTrack
 import cn.easyrtc.EasyRTCUser
 import cn.easydarwin.easyrtc.modal.DrawerManager
+import cn.easydarwin.easyrtc.ui.live.LiveSessionController
+import cn.easydarwin.easyrtc.ui.live.LiveUiState
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
 import cn.easyrtc.helper.AudioHelper
@@ -91,7 +94,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
     private var isRelease: Boolean = false
 
 
-    private var hasPermissionInit = false
+    private val liveSessionController = LiveSessionController()
+    private var activeSessionUser: String? = null
 
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -109,6 +113,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
 
         //通话触发
         drawerManager = DrawerManager(requireContext(), view) { user ->
+            activeSessionUser = user.username
             Toast.makeText(requireContext(), "正在连接 ${user.username}", Toast.LENGTH_LONG).show()
             mWebSocketManager?.call(user.uuid)
         }
@@ -118,7 +123,52 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
         EasyRTCSdk.setEventListener(this)
 
         initViews(view)
+        observeLiveSessionState()
 
+    }
+
+    private fun observeLiveSessionState() {
+        liveSessionController.state.observe(viewLifecycleOwner) { state ->
+            when (state) {
+                is LiveUiState.Idle -> {
+                    requireActivity().runOnUiThread {
+                        tvFragmentUUID.text = SPUtil.getInstance().rtcUserUUID
+                        endCallButton.visibility = View.GONE
+                    }
+                }
+
+                is LiveUiState.Connected -> {
+                    appendLog2("------------------------------")
+                    appendLog2("------------------------------")
+                    appendLog("连接成功")
+                    appendLog(getIceCandidateTypeDesc())
+
+                    requireActivity().runOnUiThread {
+                        endCallButton.visibility = View.VISIBLE
+                        tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已连接]"
+                    }
+                }
+
+                is LiveUiState.Disconnected -> {
+                    appendLog("连接断开")
+                    stopEasyRTC()
+                    requireActivity().runOnUiThread {
+                        tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已断开]"
+                        endCallButton.visibility = View.INVISIBLE
+                    }
+                }
+
+                is LiveUiState.Failed -> {
+                    appendLog("连接失败")
+                    state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("失败原因: $it") }
+                    stopEasyRTC()
+                    requireActivity().runOnUiThread {
+                        tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [连接失败]"
+                        endCallButton.visibility = View.INVISIBLE
+                    }
+                }
+            }
+        }
     }
 
     private fun initViews(view: View) {
@@ -172,7 +222,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
             stopEasyRTC()
 
             EasyRTCSdk.release()
-            appendLog("连接断开")
+            liveSessionController.onClosed()
         }
 
         switchCameraButton.setOnClickListener {
@@ -223,7 +273,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
                 smallSurfaceTexture = surface
 
                 // 初始化 RemoteRTCHelper
-                remoteRTCHelper = RemoteRTCHelper(Surface(surface), MediaFormat.MIMETYPE_VIDEO_AVC, 720, 1280)
+                smallSurfaceTexture?.let {
+                    remoteRTCHelper = RemoteRTCHelper(Surface(it), MediaFormat.MIMETYPE_VIDEO_AVC, 720, 1280)
+                }
                 Log.d(TAG, "小窗口 SurfaceTexture 已创建")
                 // 设置远程视频渲染表面
             }
@@ -348,11 +400,44 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
      */
     override fun onPause() {
         super.onPause()
+        handleHiddenResources()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.d(TAG, "onResume $tag")
+        handleVisibleResources()
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        Log.d(TAG, "onDestroyView")
+        stopCameraPreviews()
+        // 彻底停止音频录制
+
+        stopEasyRTC()
+
+        mWebSocketManager?.shutdown()
+        mWebSocketManager = null
+
+        EasyRTCSdk.release()
+    }
+
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (hidden) {
+            Log.d(TAG, "Fragment 被隐藏")
+            handleHiddenResources()
+        } else {
+            Log.d(TAG, "Fragment 被显示")
+            handleVisibleResources()
+        }
+    }
+
+    private fun handleHiddenResources() {
         val tag = (activity as? MainActivity)?.cFragmentTag
-        if (tag !== "home") {
+        if (tag != "live") {
             stopCameraPreviews()
-            remoteRTCHelper?.release()
-            remoteRTCHelper = null
 
             // 停止音频录制
             stopEasyRTC()
@@ -364,36 +449,12 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        Log.d(TAG, "onResume $tag")
+    private fun handleVisibleResources() {
         if (isRelease) {
             if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
                 setupCameraPreviews()
-                remoteRTCHelper = RemoteRTCHelper(Surface(if (isMainViewShowingLocal) smallSurfaceTexture else mainSurfaceTexture))
+                ensureRemoteRTCHelper()
             }
-        }
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        Log.d(TAG, "onDestroyView")
-        stopCameraPreviews()
-        // 彻底停止音频录制
-
-        stopEasyRTC()
-
-        EasyRTCSdk.release()
-    }
-
-    override fun onHiddenChanged(hidden: Boolean) {
-        super.onHiddenChanged(hidden)
-        if (hidden) {
-            Log.d(TAG, "Fragment 被隐藏")
-            onPause()
-        } else {
-            Log.d(TAG, "Fragment 被显示")
-            onResume()
         }
     }
 
@@ -463,33 +524,14 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
                 mRemoteRTCAudioHelper = RemoteRTCAudioHelper(requireContext())
             }
 
-            if (remoteRTCHelper == null) {
-                remoteRTCHelper = RemoteRTCHelper(Surface(if (isMainViewShowingLocal) smallSurfaceTexture else mainSurfaceTexture))
-            }
+            ensureRemoteRTCHelper()
 
-            appendLog2("------------------------------")
-            appendLog2("------------------------------")
-            appendLog("连接成功")
-            appendLog(getIceCandidateTypeDesc())
-
-            requireActivity().runOnUiThread {
-                endCallButton.visibility = View.VISIBLE
-                tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已连接]"
-            }
+            liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
 
         } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED) {
-            appendLog("连接失败")
-            requireActivity().runOnUiThread {
-                tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [连接失败]"
-                endCallButton.visibility = View.INVISIBLE
-            }
+            liveSessionController.onFailed()
         } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED) {
-            appendLog("连接断开")
-            stopEasyRTC()
-            requireActivity().runOnUiThread {
-                tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已断开]"
-                endCallButton.visibility = View.INVISIBLE
-            }
+            liveSessionController.onClosed()
         }
     }
 
@@ -527,43 +569,47 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
 
 
     private fun appendLog2(message: String) {
-        if (tvLogs == null) return
-        if (logs == null) logs = StringBuilder()
+        runOnMainThread {
+            if (tvLogs == null) return@runOnMainThread
+            if (logs == null) logs = StringBuilder()
 
-        logs!!.append("$message \n")
+            logs!!.append("$message \n")
 
-        if (logs!!.length > MAX_LOG_LENGTH) {
-            logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
-        }
+            if (logs!!.length > MAX_LOG_LENGTH) {
+                logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
+            }
 
-        // 更新 TextView
-        tvLogs!!.text = logs.toString()
-        tvLogs!!.post {
-            val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
-            if (scrollAmount > 0) {
-                tvLogs!!.scrollTo(0, scrollAmount)
+            // 更新 TextView
+            tvLogs!!.text = logs.toString()
+            tvLogs!!.post {
+                val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
+                if (scrollAmount > 0) {
+                    tvLogs!!.scrollTo(0, scrollAmount)
+                }
             }
         }
     }
 
     private fun appendLog(message: String) {
-        if (tvLogs == null) return
-        if (logs == null) logs = StringBuilder()
-        val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        val line = "${formatter.format(Date())}: $message\n"
+        runOnMainThread {
+            if (tvLogs == null) return@runOnMainThread
+            if (logs == null) logs = StringBuilder()
+            val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            val line = "${formatter.format(Date())}: $message\n"
 
-        logs!!.append(line)
+            logs!!.append(line)
 
-        if (logs!!.length > MAX_LOG_LENGTH) {
-            logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
-        }
+            if (logs!!.length > MAX_LOG_LENGTH) {
+                logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
+            }
 
-        // 更新 TextView
-        tvLogs!!.text = logs.toString()
-        tvLogs!!.post {
-            val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
-            if (scrollAmount > 0) {
-                tvLogs!!.scrollTo(0, scrollAmount)
+            // 更新 TextView
+            tvLogs!!.text = logs.toString()
+            tvLogs!!.post {
+                val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
+                if (scrollAmount > 0) {
+                    tvLogs!!.scrollTo(0, scrollAmount)
+                }
             }
         }
     }
@@ -580,8 +626,25 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
         Log.d(TAG, "权限已授予，重新初始化Camera")
 
         if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-            hasPermissionInit = true
             setupCameraPreviews()
+        }
+    }
+
+    private fun ensureRemoteRTCHelper() {
+        if (remoteRTCHelper != null) return
+        val renderSurfaceTexture = if (isMainViewShowingLocal) smallSurfaceTexture else mainSurfaceTexture
+        if (renderSurfaceTexture == null) {
+            Log.w(TAG, "远端渲染 SurfaceTexture 未就绪，跳过 RemoteRTCHelper 初始化")
+            return
+        }
+        remoteRTCHelper = RemoteRTCHelper(Surface(renderSurfaceTexture))
+    }
+
+    private fun runOnMainThread(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action()
+        } else {
+            activity?.runOnUiThread(action) ?: view?.post(action)
         }
     }
 

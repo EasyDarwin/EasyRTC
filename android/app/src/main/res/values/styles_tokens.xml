@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Widget.EasyRTC.BottomNavigation" parent="Widget.MaterialComponents.BottomNavigationView">
+        <item name="android:background">@color/enterprise_nav_background</item>
+        <item name="itemIconTint">@color/menu_text_color_selector</item>
+        <item name="itemTextColor">@color/menu_text_color_selector</item>
+    </style>
+</resources>

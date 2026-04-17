@@ -1,36 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?><!-- res/values/themes.xml -->
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
 
     <!-- 基于 Material Components Light 主题进行自定义 -->
     <style name="Theme.EasyRTCDevice" parent="Theme.MaterialComponents.Light">
 
         <!-- ========== 颜色系统 ========== -->
         <!-- 主色调 -->
-        <item name="colorPrimary">#2196F3</item>  <!-- 蓝色 -->
-        <item name="colorPrimaryDark">#1976D2</item>
-        <item name="colorPrimaryVariant">#0D47A1</item>
-        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorPrimary">@color/enterprise_primary</item>
+        <item name="colorPrimaryDark">@color/enterprise_primary_dark</item>
+        <item name="colorPrimaryVariant">@color/enterprise_primary_variant</item>
+        <item name="colorOnPrimary">@color/enterprise_on_primary</item>
 
         <!-- 次要色调 -->
-        <item name="colorSecondary">#FF4081</item>  <!-- 粉色 -->
-        <item name="colorSecondaryVariant">#C2185B</item>
-        <item name="colorOnSecondary">@android:color/white</item>
+        <item name="colorSecondary">@color/enterprise_secondary</item>
+        <item name="colorSecondaryVariant">@color/enterprise_secondary_variant</item>
+        <item name="colorOnSecondary">@color/enterprise_on_secondary</item>
 
         <!-- 背景和表面颜色 -->
-        <item name="colorSurface">@android:color/white</item>
-        <item name="colorOnSurface">#212121</item>
+        <item name="colorSurface">@color/enterprise_surface</item>
+        <item name="colorOnSurface">@color/enterprise_on_surface</item>
 
         <!-- 错误颜色 -->
-        <item name="colorError">#F44336</item>
-        <item name="colorOnError">@android:color/white</item>
+        <item name="colorError">@color/enterprise_error</item>
+        <item name="colorOnError">@color/enterprise_on_error</item>
 
         <!-- ========== 状态栏和导航栏 ========== -->
         <item name="android:statusBarColor">?attr/colorPrimaryDark</item>
-        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:navigationBarColor">@color/enterprise_nav_background</item>
 
         <!-- ========== ActionBar/Toolbar 样式 ========== -->
         <item name="actionBarSize">56dp</item>
-        <item name="actionBarStyle">@style/MyActionBar</item>
         <item name="toolbarStyle">@style/MyToolbar</item>
 
         <!-- ========== 按钮样式 ========== -->
@@ -69,23 +68,6 @@
         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
     </style>
 
-    <!-- 登录页面专用主题 -->
-    <style name="Theme.EasyRTCDevice.Login" parent="Theme.EasyRTCDevice">
-        <!-- 移除 ActionBar -->
-        <item name="windowActionBar">false</item>
-        <item name="windowNoTitle">true</item>
-
-        <!-- 全屏或沉浸式 -->
-        <item name="android:windowFullscreen">false</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-
-        <!-- 按钮样式 -->
-        <item name="materialButtonStyle">@style/LoginButton</item>
-
-        <!-- 输入框样式 -->
-        <item name="textInputStyle">@style/LoginTextInput</item>
-    </style>
-
     <style name="Theme.EasyRTCDevice.Device" parent="Theme.EasyRTCDevice">
         <!-- 移除 ActionBar -->
         <item name="windowActionBar">false</item>
@@ -96,14 +78,14 @@
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
 
         <!-- 按钮样式 -->
-        <item name="materialButtonStyle">@style/LoginButton</item>
+        <item name="materialButtonStyle">@style/Widget.EasyRTC.Button.Primary</item>
 
         <!-- 输入框样式 -->
-        <item name="textInputStyle">@style/LoginTextInput</item>
+        <item name="textInputStyle">@style/Widget.EasyRTC.TextInput.Outlined</item>
     </style>
 
-    <!-- 登录按钮样式 -->
-    <style name="LoginButton" parent="Widget.MaterialComponents.Button">
+    <!-- 主按钮样式 -->
+    <style name="Widget.EasyRTC.Button.Primary" parent="Widget.MaterialComponents.Button">
         <item name="backgroundTint">?attr/colorPrimary</item>
         <item name="cornerRadius">12dp</item>
         <item name="android:textColor">@android:color/white</item>
@@ -113,8 +95,8 @@
         <item name="android:elevation">4dp</item>
     </style>
 
-    <!-- 登录输入框样式 -->
-    <style name="LoginTextInput" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+    <!-- 输入框样式 -->
+    <style name="Widget.EasyRTC.TextInput.Outlined" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
         <item name="boxStrokeColor">?attr/colorPrimary</item>
         <item name="boxStrokeWidth">2dp</item>
         <item name="boxCornerRadiusTopStart">8dp</item>

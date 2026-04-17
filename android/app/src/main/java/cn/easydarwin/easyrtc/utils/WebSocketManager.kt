@@ -36,6 +36,7 @@ public class WebSocketManager(private val url: String, private val token: String
 
     private var reconnectTask: Runnable? = null
     private var isReconnecting = false
+    private var allowReconnect = true
     private var reconnectDelay = 3000L // 初始重连延迟 3 秒
     private val maxReconnectDelay = 60000L // 最大重连延迟 60 秒
 
@@ -56,6 +57,15 @@ public class WebSocketManager(private val url: String, private val token: String
 
     fun close() {
         webSocket?.close(1000, "normal close")
+    }
+
+    fun shutdown() {
+        allowReconnect = false
+        stopReconnectTask()
+        stopOnlineClientsTask()
+        webSocket?.cancel()
+        webSocket?.close(1000, "shutdown")
+        webSocket = null
     }
 
     interface WebSocketCallback {
@@ -435,6 +445,7 @@ public class WebSocketManager(private val url: String, private val token: String
 
     // ==================== 重连逻辑 ====================
     private fun attemptReconnect() {
+        if (!allowReconnect) return
         if (isReconnecting) return
         isReconnecting = true
         reconnectTask?.let { handler.removeCallbacks(it) }

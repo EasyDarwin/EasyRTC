@@ -119,6 +119,22 @@ class SPUtil private constructor(context: Context) {
         get() = preferences.getInt(KEY_BITRATE_ADDED_KBPS, 3)
         set(value) = preferences.edit { putInt(KEY_BITRATE_ADDED_KBPS, value) }
 
+    var aacCodec: Int
+        get() = preferences.getInt(KEY_AAC_CODEC, 0)
+        set(value) = preferences.edit { putInt(KEY_AAC_CODEC, value) }
+
+    var samplingRate: Int
+        get() = preferences.getInt(SAMPLINGRATE, 0)
+        set(value) = preferences.edit { putInt(SAMPLINGRATE, value) }
+
+    var audioChannel: Int
+        get() = preferences.getInt(AUDIOCHANNEL, 0)
+        set(value) = preferences.edit { putInt(AUDIOCHANNEL, value) }
+
+    var audioCodeRate: Int
+        get() = preferences.getInt(AUDIOCODERATE, 0)
+        set(value) = preferences.edit { putInt(AUDIOCODERATE, value) }
+
     var cameraId: Int
         get() = preferences.getInt(CAMERAID, Camera.CameraInfo.CAMERA_FACING_BACK)
         set(value) = preferences.edit { putInt(CAMERAID, value) }
@@ -131,7 +147,7 @@ class SPUtil private constructor(context: Context) {
         return when (getInstance().videoResolution) {
             0 -> Size(1920, 1080)
             1 -> Size(1280, 720)
-            3 -> Size(960, 540)
+            2 -> Size(960, 540)
             else -> Size(1280, 720)
         }
     }
@@ -139,7 +155,7 @@ class SPUtil private constructor(context: Context) {
     fun getVideoBitRateKbps(): Int {
         return when (getInstance().bitRateKbps) {
             0 -> 4096
-            1 -> 2024
+            1 -> 2048
             2 -> 1024
             3 -> 512
             else -> 1024 // 默认值

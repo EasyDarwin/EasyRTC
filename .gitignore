@@ -6,4 +6,9 @@ android/.gradle/
 android/build/
 android/app/build/
 android/release/
+.worktrees/
 
+.DS_Store
+.idea/
+superpowers/
+android/local.properties

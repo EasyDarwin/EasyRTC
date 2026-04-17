@@ -48,34 +48,64 @@
 
             </FrameLayout>
 
-            <TextView
-                android:id="@+id/tvFragmentUUID"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/liveStatusPanel"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:padding="@dimen/dp_4"
-                android:textColor="@color/white"
-                tools:ignore="RelativeOverlap" />
+                android:layout_alignParentTop="true"
+                android:layout_marginStart="@dimen/dp_12"
+                android:layout_marginTop="@dimen/dp_12"
+                android:layout_marginEnd="@dimen/dp_12"
+                android:background="@drawable/logs"
+                android:orientation="vertical"
+                android:padding="@dimen/dp_8">
+
+                <TextView
+                    android:id="@+id/tvFragmentUUID"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:padding="@dimen/dp_4"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/sp_13"
+                    tools:ignore="RelativeOverlap" />
+
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/ll_logs"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_above="@id/bottomButtonContainer"
+                android:layout_alignParentStart="true"
                 android:layout_marginLeft="@dimen/dp_15"
                 android:layout_marginRight="@dimen/dp_15"
                 android:layout_marginBottom="@dimen/dp_15"
+                android:background="@drawable/logs"
                 android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="@dimen/dp_8"
+                    android:paddingTop="@dimen/dp_8"
+                    android:paddingEnd="@dimen/dp_8"
+                    android:text="会话日志"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/sp_13"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tv_logs"
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/dp_200"
+                    android:layout_marginStart="@dimen/dp_8"
+                    android:layout_marginTop="@dimen/dp_4"
+                    android:layout_marginEnd="@dimen/dp_8"
                     android:alpha="0.45"
-                    android:background="@drawable/logs"
+                    android:background="@android:color/transparent"
                     android:padding="@dimen/dp_4"
                     android:textColor="@color/white"
-                    android:textSize="@dimen/sp_13"
-                    />
+                    android:textSize="@dimen/sp_13" />
 
                 <View
                     android:layout_width="match_parent"
@@ -83,7 +113,10 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="@dimen/dp_45">
+                    android:layout_height="@dimen/dp_45"
+                    android:layout_marginStart="@dimen/dp_8"
+                    android:layout_marginEnd="@dimen/dp_8"
+                    android:layout_marginBottom="@dimen/dp_8">
 
                     <EditText
                         android:id="@+id/et_msg"
