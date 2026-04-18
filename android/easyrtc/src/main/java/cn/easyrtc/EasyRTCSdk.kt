@@ -3,6 +3,8 @@ package cn.easyrtc
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import cn.easyrtc.media.MediaPipeline
+import cn.easyrtc.model.VideoEncodeConfig
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -146,6 +148,12 @@ object EasyRTCSdk {
         peerConnection?.SendAudioFrame(this.audio_transceiver, data, data.size, pts)
     }
 
+
+    fun getVideoTransceiver(): Long = video_transceiver
+
+    fun createMediaPipeline(config: VideoEncodeConfig): MediaPipeline {
+        return MediaPipeline(video_transceiver, config)
+    }
 
     fun release() {
         if (this.video_transceiver != 0L) peerConnection?.FreeTransceiver(this.video_transceiver)

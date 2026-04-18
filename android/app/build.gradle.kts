@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         applicationId = "cn.easydarwin.easyrtc"
-        minSdk = 27
+        minSdk = 28
         targetSdk = 36
         //noinspection HighAppVersionCode
         versionCode =  2026032603

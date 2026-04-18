@@ -1,9 +1,4 @@
 package cn.easyrtc.helper
 
+class CameraHelperV2
 
-
-class CameraHelperV2 {
-
-
-
-}
