@@ -1,4 +1,4 @@
-#ifndef __EASYRTC_DEVICE_H__
+ï»¿#ifndef __EASYRTC_DEVICE_H__
 #define __EASYRTC_DEVICE_H__
 
 
@@ -24,15 +24,15 @@
 #define Sleep(x)	usleep(x*1000)
 #endif
 
-// WebRTC ·şÎñÆ÷ÅäÖÃ
+// WebRTC æœåŠ¡å™¨é…ç½®
 typedef struct {
-	char stun_servers[10][256];  // STUN ·şÎñÆ÷ÁĞ±í
+	char stun_servers[10][256];  // STUN æœåŠ¡å™¨åˆ—è¡¨
 	int stun_server_count;
-	char turn_servers[10][256];  // TURN ·şÎñÆ÷ÁĞ±í
+	char turn_servers[10][256];  // TURN æœåŠ¡å™¨åˆ—è¡¨
 	int turn_server_count;
-	char turn_username[256];     // TURN ·şÎñÆ÷ÓÃ»§Ãû
-	char turn_password[256];     // TURN ·şÎñÆ÷ÃÜÂë
-	char ice_server_urls[10][256]; // ICE ·şÎñÆ÷ URL ÁĞ±í
+	char turn_username[256];     // TURN æœåŠ¡å™¨ç”¨æˆ·å
+	char turn_password[256];     // TURN æœåŠ¡å™¨å¯†ç 
+	char ice_server_urls[10][256]; // ICE æœåŠ¡å™¨ URL åˆ—è¡¨
 	int ice_server_count;
 }EasyRTCServerConfig;
 
@@ -45,7 +45,7 @@ typedef struct {
 #define EASYRTC_MDIA_TYPE_AUDIO	0x02
 
 
-// H.265 NALµ¥ÔªÀàĞÍÃ¶¾Ù
+// H.265 NALå•å…ƒç±»å‹æšä¸¾
 typedef enum {
 	NAL_UNIT_TRAIL_N = 0,
 	NAL_UNIT_TRAIL_R = 1,
@@ -105,12 +105,12 @@ typedef struct __EASYRTC_DEVICE_T
 	//===================================================
 	int		sockfd;
 
-	// ¹«¹²²¿·Ö
+	// å…¬å…±éƒ¨åˆ†
 	EASYRTC_PEER_T* peerList;
 	OSMutex* peerMutex;
 
 	void* websocket;
-	//OSTHREAD_OBJ_T* workerThread;		// ¼ì²éÁ¬½ÓÏß³Ì
+	//OSTHREAD_OBJ_T* workerThread;		// æ£€æŸ¥è¿æ¥çº¿ç¨‹
 	EasyRTC_Data_Callback	dataCallback;
 	void* dataUserptr;
 	void* dataChannelUserptr;
@@ -120,11 +120,11 @@ typedef struct __EASYRTC_DEVICE_T
 	bool	enablePingPong;
 	//===================================================
 
-	unsigned int	transactionID;				// ÊÂÎñid
+	unsigned int	transactionID;				// äº‹åŠ¡id
 
 	char local_id[128];
 	unsigned int	local_uuid[4];
-	char peer_id[128];							// µ±Ç°½öÎªcallerÊ±Ê¹ÓÃ
+	char peer_id[128];							// å½“å‰ä»…ä¸ºcalleræ—¶ä½¿ç”¨
 	unsigned int	peer_uuid[4];
 	CHANNEL_INFO_T	channelInfo;
 	//PASSIVE_CALL_T	passiveCallList[MAX_CHANNEL_NUM];
@@ -136,7 +136,7 @@ typedef struct __EASYRTC_DEVICE_T
 
 	time_t	lastCheckTime;
 
-	void* pThis;				// Ö¸ÏòEasyRTCDevice
+	void* pThis;				// æŒ‡å‘EasyRTCDevice
 
 	int		spsLen;
 	int		ppsLen;
@@ -148,7 +148,7 @@ typedef struct __EASYRTC_DEVICE_T
 
 // ===============================================
 // ===============================================
-// =================Éè±¸¶Ë½Ó¿Ú====================
+// =================è®¾å¤‡ç«¯æ¥å£====================
 // ===============================================
 // ===============================================
 
@@ -156,11 +156,11 @@ typedef struct __EASYRTC_DEVICE_T
 int RTC_Device_Start(EASYRTC_DEVICE_T *pDevice, const char* local_id, EasyRTC_Data_Callback callback, void* userptr);
 int RTC_Device_SetChannelInfo(EASYRTC_DEVICE_T* pDevice, EASYRTC_CODEC videoCodecID, EASYRTC_CODEC audioCodecID);
 
-// ±»¶¯ºô½ĞÏìÓ¦(decline: 1Îª¾Ü¾øºô½Ğ   0Îª½ÓÊÜºô½Ğ)
+// è¢«åŠ¨å‘¼å«å“åº”(decline: 1ä¸ºæ‹’ç»å‘¼å«   0ä¸ºæ¥å—å‘¼å«)
 int RTC_Device_PassiveCallResponse(EASYRTC_DEVICE_T* pDevice, const char *peer_id, const int decline);
 
-int RTC_Device_SendVideoFrame(EASYRTC_DEVICE_T* pDevice, char* framedata, const int framesize, bool keyframe, unsigned long long pts/*Ê±¼ä´Áµ¥Î»ÊÇ:ºÁÃë*/);
-int RTC_Device_SendAudioFrame(EASYRTC_DEVICE_T* pDevice, char* framedata, const int framesize, unsigned long long pts/*Ê±¼ä´Áµ¥Î»ÊÇ:ºÁÃë*/);
+int RTC_Device_SendVideoFrame(EASYRTC_DEVICE_T* pDevice, char* framedata, const int framesize, bool keyframe, unsigned long long pts/*æ—¶é—´æˆ³å•ä½æ˜¯:æ¯«ç§’*/);
+int RTC_Device_SendAudioFrame(EASYRTC_DEVICE_T* pDevice, char* framedata, const int framesize, unsigned long long pts/*æ—¶é—´æˆ³å•ä½æ˜¯:æ¯«ç§’*/);
 int RTC_Device_SendCustomData(EASYRTC_DEVICE_T* pDevice, const char *peerUUID, const int isBinary, const char* data, const int size);
 int RTC_Device_Hangup(EASYRTC_DEVICE_T* pDevice, const char* peerUUID);
 
@@ -174,16 +174,16 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
 
 // ===============================================
 // ===============================================
-// =================²¥·Å¶Ë½Ó¿Ú====================
+// =================æ’­æ”¾ç«¯æ¥å£====================
 // ===============================================
 // ===============================================
-// Á¬½ÓÉè±¸
+// è¿æ¥è®¾å¤‡
 int RTC_Caller_Connect(EASYRTC_DEVICE_T* pDevice, const char * peer_id);
 
 
 // ===============================================
 // ===============================================
-// ==================¹«¹²½Ó¿Ú=====================
+// ==================å…¬å…±æ¥å£=====================
 // ===============================================
 // ===============================================
 
@@ -200,7 +200,7 @@ int	__Print__(void* userptr, const char* functionName, const int lineNum, bool d
 int LockPeerList(EASYRTC_DEVICE_T* pDevice, const char* functionName, const int lineNum);
 int UnlockPeerList(EASYRTC_DEVICE_T* pDevice, const char* functionName, const int lineNum);
 
-int ReleasePeerList(EASYRTC_DEVICE_T* pDevice);		// ÊÍ·ÅpDeviceÖĞµÄËùÓĞÁĞ±í
+int ReleasePeerList(EASYRTC_DEVICE_T* pDevice);		// é‡Šæ”¾pDeviceä¸­çš„æ‰€æœ‰åˆ—è¡¨
 
 //int CheckTypeAndId(EASYRTC_DEVICE_T* pDevice, const char* type, const char* id, const char *channelId);
 int EasyRTC_Build_TransactionID(EASYRTC_DEVICE_T* pDevice, char *outTransactionID);
@@ -214,9 +214,9 @@ int EasyRTC_ReleasePeer(EASYRTC_PEER_T* peer);
 void trim(char* strIn, char* strOut);
 int GetUUIDSFromString(char* struuid, uint32_t* myids);
 
-// ICE canidate »Øµ÷º¯Êı
+// ICE canidate å›è°ƒå‡½æ•°
 int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char* sdp);
 
 int GetOnlineDevices(EASYRTC_DEVICE_T* pDevice, EasyRTC_Data_Callback callback, void *userptr);
 
-#endif
+#endif

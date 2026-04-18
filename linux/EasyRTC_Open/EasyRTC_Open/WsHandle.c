@@ -1,4 +1,4 @@
-#include "RTCDevice.h"
+ï»¿#include "RTCDevice.h"
 #include <stdio.h>
 #include "EasyRTC_websocket.h"
 #include "websocketClient.h"
@@ -45,7 +45,7 @@ void trim(char* strIn, char* strOut)
 
 int GetUUIDSFromString(char* struuid, uint32_t* myids)
 {
-    int isR = 1; //Ä¬ÈÏ¸ñÊ½ÕıÈ·,ÏÂÃæÎª0Ôò´ú±í¸ñÊ½²»ÕıÈ·
+    int isR = 1; //é»˜è®¤æ ¼å¼æ­£ç¡®,ä¸‹é¢ä¸º0åˆ™ä»£è¡¨æ ¼å¼ä¸æ­£ç¡®
     do
     {
         if (strlen(struuid) != 36) { isR = 0; break; }
@@ -85,7 +85,7 @@ int GetUUIDSFromString(char* struuid, uint32_t* myids)
     if (isR == 0) return -1;
 
     {
-        //ÏÂÃæÊÇ°ÑÀàËÆ AE01A752-AD94-4107-B137-643ACC93756E ÕâÑùµÄ×Ö·û´®×ªÎª4¸öDWORD
+        //ä¸‹é¢æ˜¯æŠŠç±»ä¼¼ AE01A752-AD94-4107-B137-643ACC93756E è¿™æ ·çš„å­—ç¬¦ä¸²è½¬ä¸º4ä¸ªDWORD
         int i;
         unsigned char dataSZ[8] = { 0 };
         uint32_t data1_0 = 0;
@@ -204,9 +204,9 @@ int EasyRTC_Build_TransactionID(EASYRTC_DEVICE_T* pDevice, char* outTransactionI
 int SendRegister(EASYRTC_DEVICE_T* pDevice)
 {
     int ret = 0;
-    if (0 == strcmp(pDevice->local_id, "\0"))       // local_idÎª¿Õ, ËµÃ÷×ÔÉí½öÎªcaller
+    if (0 == strcmp(pDevice->local_id, "\0"))       // local_idä¸ºç©º, è¯´æ˜è‡ªèº«ä»…ä¸ºcaller
     {
-        pDevice->registerStatus = 0x01;             // Ö±½ÓÖÃÎª³É¹¦
+        pDevice->registerStatus = 0x01;             // ç›´æ¥ç½®ä¸ºæˆåŠŸ
         websocketSetRegisterStatus(pDevice->websocket, pDevice->registerStatus);
 
         RTC_Caller_Connect(pDevice, NULL);
@@ -216,7 +216,7 @@ int SendRegister(EASYRTC_DEVICE_T* pDevice)
         char myidOut[64] = { 0 };
         char mysnOut[64] = { 0 };
         trim(pDevice->local_id, myidOut);
-        //trim("92E22DB5-E74F-4EE2-BAB3-BD8999D15911", mysnOut); //ÓÃÓÚĞ£Ñég_strUUIDÔÚĞÅÁî·şÎñÆ÷¶ËµÄºÏ·¨ĞÔ,Ä¿Ç°Õâ¸öÃ»×öĞ£Ñé,ËæÒâÅªÒ»¸öuuid×Ö·û´®¾Í¿ÉÒÔ
+        //trim("92E22DB5-E74F-4EE2-BAB3-BD8999D15911", mysnOut); //ç”¨äºæ ¡éªŒg_strUUIDåœ¨ä¿¡ä»¤æœåŠ¡å™¨ç«¯çš„åˆæ³•æ€§,ç›®å‰è¿™ä¸ªæ²¡åšæ ¡éªŒ,éšæ„å¼„ä¸€ä¸ªuuidå­—ç¬¦ä¸²å°±å¯ä»¥
 
         uint32_t myids[4] = { 0 };
         uint32_t mysns[4] = { 0 };
@@ -256,16 +256,16 @@ int SendRegister(EASYRTC_DEVICE_T* pDevice)
 void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, size_t len, int* errCode)
 {
     BASE_MSG_INFO* pBaseInfo = (BASE_MSG_INFO*)data;
-    if ((len < sizeof(BASE_MSG_INFO)) || (len != pBaseInfo->length)) return; //Ç°ÕßÈ·±£ÁËºóÕß pBaseInfo->length ÓĞĞ§
+    if ((len < sizeof(BASE_MSG_INFO)) || (len != pBaseInfo->length)) return; //å‰è€…ç¡®ä¿äº†åè€… pBaseInfo->length æœ‰æ•ˆ
 
-    //Ç°ÃæÁ½¸öÊÇ¿Í»§¶ËµÄÏìÓ¦°ü
+    //å‰é¢ä¸¤ä¸ªæ˜¯å®¢æˆ·ç«¯çš„å“åº”åŒ…
     switch (pBaseInfo->msgtype)
     {
     case HP_ACKLOGINUSER_INFO:
     {
         ACK_LOGINUSER_INFO* pRecvInfo = (ACK_LOGINUSER_INFO*)data;
 
-        if (pRecvInfo->status == 0x00)      // µÇÂ½³É¹¦
+        if (pRecvInfo->status == 0x00)      // ç™»é™†æˆåŠŸ
         {
             pDevice->registerStatus = 0x01;
             websocketSetRegisterStatus(pDevice->websocket, pDevice->registerStatus);
@@ -311,7 +311,7 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
             pRecvInfo->myid[2] & 0xFFFF, pRecvInfo->myid[3]);
     }
     break;
-    case HP_NTIWEBRTCOFFER_INFO2:       // Caller¶Ë:  ÊÕµ½Éè±¸¶Ë·¢¹ıÀ´µÄoffer
+    case HP_NTIWEBRTCOFFER_INFO2:       // Callerç«¯:  æ”¶åˆ°è®¾å¤‡ç«¯å‘è¿‡æ¥çš„offer
     {
         NTI_WEBRTCOFFER_INFO2* pRecvInfo = (NTI_WEBRTCOFFER_INFO2*)data;
         if (len != (sizeof(NTI_WEBRTCOFFER_INFO2) + pRecvInfo->sdplen + pRecvInfo->sturndataslen)) return;
@@ -329,7 +329,7 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
             }
             else if (pRecvInfo->sturntypes[i] == 0x01)
             {
-                // ÕâÊÇ·Çjuice
+                // è¿™æ˜¯éjuice
                 sprintf(pDevice->serverConfig.turn_servers[pDevice->serverConfig.turn_server_count],
                     "turn:%s", pRecvInfo->sturndatas + offset);
                 offset += ((int)strlen(pRecvInfo->sturndatas + offset) + 1);
@@ -344,11 +344,11 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
                 sprintf(pDevice->serverConfig.turn_password, "%s", pRecvInfo->sturndatas + offset);
                 offset += ((int)strlen(pRecvInfo->sturndatas + offset) + 1);
 
-                pDevice->serverConfig.turn_server_count++;  //²»¹ÜÄÄÒ»ÖÖ turn, ²»¹ÜÊÇ·ñÓĞÕËºÅºÍÃÜÂë,¶¼±ØĞë´«µİÕËºÅºÍÃÜÂë¹ıÀ´,ÄÄÅÂÎª¿Õ
+                pDevice->serverConfig.turn_server_count++;  //ä¸ç®¡å“ªä¸€ç§ turn, ä¸ç®¡æ˜¯å¦æœ‰è´¦å·å’Œå¯†ç ,éƒ½å¿…é¡»ä¼ é€’è´¦å·å’Œå¯†ç è¿‡æ¥,å“ªæ€•ä¸ºç©º
             }
             else if (pRecvInfo->sturntypes[i] == 0x04)
             {
-                //ÕâÊÇ juice
+                //è¿™æ˜¯ juice
                 sprintf(pDevice->serverConfig.turn_servers[pDevice->serverConfig.turn_server_count],
                     "turn:%s", pRecvInfo->sturndatas + offset);
                 offset += ((int)strlen(pRecvInfo->sturndatas + offset) + 1);
@@ -366,10 +366,10 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         EASYRTC_PEER_T* peer = findPeerByUUID(pDevice->peerList, peer_id);
         if (NULL != peer)
         {
-            // ´Ë´¦ÊÍ·ÅÏàÓ¦¶ÔÏó
+            // æ­¤å¤„é‡Šæ”¾ç›¸åº”å¯¹è±¡
             EasyRTC_ReleasePeer(peer);
 
-            // ´Ó¶ÓÁĞÖĞÉ¾³ı
+            // ä»é˜Ÿåˆ—ä¸­åˆ é™¤
             LockPeerList(pDevice, __FUNCTION__, __LINE__);			    // Lock
             deletePeerByUUID(&pDevice->peerList, peer_id);
             UnlockPeerList(pDevice, __FUNCTION__, __LINE__);			// Unlock
@@ -407,7 +407,7 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         }
     }
     break;
-    case HP_REQGETWEBRTCOFFER_INFO:     // Éè±¸¶Ë: ÓĞCallerÇëÇóoffer
+    case HP_REQGETWEBRTCOFFER_INFO:     // è®¾å¤‡ç«¯: æœ‰Callerè¯·æ±‚offer
     {
         REQ_GETWEBRTCOFFER_INFO* pRecvInfo = (REQ_GETWEBRTCOFFER_INFO*)data;
 
@@ -416,7 +416,7 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         char peer_uuid[64] = { 0 };
         GetStringFromUUID(peer_uuid, &pRecvInfo->hisid[0]);
 
-        printf("ÊÕµ½ÁËuuidÎª: %s µÄÁ¬½ÓÇëÇó\n", peer_uuid);
+        printf("æ”¶åˆ°äº†uuidä¸º: %s çš„è¿æ¥è¯·æ±‚\n", peer_uuid);
 
         int iPos = 0;
         int turncount = 0;
@@ -433,7 +433,7 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
             }
             else if (pRecvInfo->sturntypes[i] == 0x01)
             {
-                // ÕâÊÇ·Çjuice
+                // è¿™æ˜¯éjuice
                 sprintf(pDevice->serverConfig.turn_servers[pDevice->serverConfig.turn_server_count], "turn:%s", pStrDatas + iPos);
                 iPos += (int)(strlen(pStrDatas + iPos) + 1);
             }
@@ -448,13 +448,13 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
                 sprintf(pDevice->serverConfig.turn_password, "%s", pStrDatas + iPos);
                 //printf("%d:%s\n", iceServersCount, conf_.iceServers[iceServersCount].credential);
                 iPos += (int)(strlen(pStrDatas + iPos) + 1);
-                iceServersCount++; //²»¹ÜÄÄÒ»ÖÖ turn, ²»¹ÜÊÇ·ñÓĞÕËºÅºÍÃÜÂë,¶¼±ØĞë´«µİÕËºÅºÍÃÜÂë¹ıÀ´,ÄÄÅÂÎª¿Õ
+                iceServersCount++; //ä¸ç®¡å“ªä¸€ç§ turn, ä¸ç®¡æ˜¯å¦æœ‰è´¦å·å’Œå¯†ç ,éƒ½å¿…é¡»ä¼ é€’è´¦å·å’Œå¯†ç è¿‡æ¥,å“ªæ€•ä¸ºç©º
                 pDevice->serverConfig.turn_server_count++;
                 turncount++;
             }
             else if (pRecvInfo->sturntypes[i] == 0x04)
             {
-                //ÕâÊÇÎª×Ô¼ºÊµÏÖµÄturn serverÔ¤ÁôµÄÀàĞÍ
+                //è¿™æ˜¯ä¸ºè‡ªå·±å®ç°çš„turn serveré¢„ç•™çš„ç±»å‹
                 sprintf(pDevice->serverConfig.turn_servers[pDevice->serverConfig.turn_server_count], "turn:%s", pStrDatas + iPos);
                 //printf("%d:%s\n", iceServersCount, conf_.iceServers[iceServersCount].urls);
                 iPos += (int)(strlen(pStrDatas + iPos) + 1);
@@ -464,10 +464,10 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         EASYRTC_PEER_T* peer = findPeerByUUID(pDevice->peerList, peer_uuid);
         if (NULL != peer)
         {
-            // ´Ë´¦ÊÍ·ÅÏàÓ¦¶ÔÏó
+            // æ­¤å¤„é‡Šæ”¾ç›¸åº”å¯¹è±¡
             EasyRTC_ReleasePeer(peer);
 
-            // ´Ó¶ÓÁĞÖĞÉ¾³ı
+            // ä»é˜Ÿåˆ—ä¸­åˆ é™¤
             LockPeerList(pDevice, __FUNCTION__, __LINE__);			    // Lock
             deletePeerByUUID(&pDevice->peerList, peer_uuid);
             UnlockPeerList(pDevice, __FUNCTION__, __LINE__);			// Unlock
@@ -478,7 +478,7 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         peer = findPeerByUUID(pDevice->peerList, peer_uuid);
         if (NULL == peer)
         {
-            // Î´´´½¨³É¹¦
+            // æœªåˆ›å»ºæˆåŠŸ
             return;
         }
 
@@ -487,16 +487,16 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         peer->caller_id[2] = pRecvInfo->hisid[2];
         peer->caller_id[3] = pRecvInfo->hisid[3];
 
-        // »Øµ÷¸øÉÏ²ã, ÈÃÉÏ²ã¾ö¶¨ÊÇ·ñ½ÓÊÜ¸ÃÁ¬½Ó
+        // å›è°ƒç»™ä¸Šå±‚, è®©ä¸Šå±‚å†³å®šæ˜¯å¦æ¥å—è¯¥è¿æ¥
         int ret = CallbackData(pDevice, peer_uuid, EASYRTC_CALLBACK_TYPE_PASSIVE_CALL, 0, 0, NULL, 0, 0, 0);
         if (ret == 1)
         {
-            // ·µ»Ø1Ö±½Ó½ÓÊÜÁ¬½Ó
+            // è¿”å›1ç›´æ¥æ¥å—è¿æ¥
             RTC_Device_PassiveCallResponse(pDevice, peer_uuid, 0);
         }
     }
     break;
-    case HP_NTIWEBRTCANSWER_INFO:   // Éè±¸¶Ë: ·¢ËÍofferºóÊÕµ½¶Ô·½µÄanswer
+    case HP_NTIWEBRTCANSWER_INFO:   // è®¾å¤‡ç«¯: å‘é€offeråæ”¶åˆ°å¯¹æ–¹çš„answer
     {
         NTI_WEBRTCANSWER_INFO* pRecvInfo = (NTI_WEBRTCANSWER_INFO*)data;
 
@@ -541,4 +541,4 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
     }
 
     return;
-}
+}

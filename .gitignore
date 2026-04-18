@@ -3,8 +3,7 @@ windows/EasyRTC_Open/x64/
 windows/EasyRTC-P2P/x64/
 windows/x64/
 android/.gradle/
-android/build/
-android/app/build/
+build/
 android/release/
 .worktrees/
 
@@ -12,3 +11,8 @@ android/release/
 .idea/
 superpowers/
 android/local.properties
+
+.cxx
+.settings
+.classpath
+.project
