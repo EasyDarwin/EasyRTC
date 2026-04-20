@@ -1,4 +1,5 @@
 #include "websocketClient.h"
+#include <stdlib.h>
 
 
 int socket_set_keepalive(int sockfd)

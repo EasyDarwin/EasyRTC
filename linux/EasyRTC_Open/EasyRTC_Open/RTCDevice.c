@@ -1,4 +1,4 @@
-﻿#include "RTCDevice.h"
+#include "RTCDevice.h"
 #include "g711.h"
 #ifdef ANDROID
 #include "jni/JNI_EasyRTCDevice.h"
@@ -172,7 +172,7 @@ int RTC_Device_Start(EASYRTC_DEVICE_T* pDevice, const char* local_id, EasyRTC_Da
 		pDevice->dataCallback = callback;
 		pDevice->dataUserptr = userptr;
 
-		websocketCreate(pDevice->serverAddr, pDevice->serverPort, pDevice->isSecure, (void*)pDevice, __ws_connect_callback, __ws_register_callback, __ws_data_callback, __ws_idle_callback, &pDevice->websocket);
+		websocketCreate(pDevice->serverAddr, pDevice->serverPort, pDevice->isSecure, (void*)pDevice, (ws_connect_callback)__ws_connect_callback, __ws_register_callback, __ws_data_callback, __ws_idle_callback, &pDevice->websocket);
 	}
 
 	return 0;

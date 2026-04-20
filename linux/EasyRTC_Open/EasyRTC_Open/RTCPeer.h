@@ -1,11 +1,11 @@
-﻿#ifndef __EASYRTC_PEER_H__
+#ifndef __EASYRTC_PEER_H__
 #define __EASYRTC_PEER_H__
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "osmutex.h"
-#include "../../rtcsdk/EasyRTCAPI.h"
+#include "EasyRTCAPI.h"
 #include "buff.h"
 
 typedef enum __OPERATE_TYPE_E

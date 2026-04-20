@@ -1,4 +1,4 @@
-﻿#ifndef __WEBSOCKET_CLIENT_H__
+#ifndef __WEBSOCKET_CLIENT_H__
 #define __WEBSOCKET_CLIENT_H__
 
 #include <stdint.h>
@@ -30,11 +30,21 @@
 
 
 //websocket
+#ifndef htobe16
 #define htobe16(x) htons(x)
+#endif
+#ifndef htobe64
 #define htobe64(x) (((uint64_t)htonl(((uint32_t)(((uint64_t)(x)) >> 32)))) | (((uint64_t)htonl(((uint32_t)(x)))) << 32))
+#endif
+#ifndef be16toh
 #define be16toh(x) ntohs(x)
+#endif
+#ifndef be32toh
 #define be32toh(x) ntohl(x)
+#endif
+#ifndef be64toh
 #define be64toh(x) (((uint64_t)ntohl(((uint32_t)(((uint64_t)(x)) >> 32)))) | (((uint64_t)ntohl(((uint32_t)(x)))) << 32))
+#endif
 
 enum ws_opcode
 {

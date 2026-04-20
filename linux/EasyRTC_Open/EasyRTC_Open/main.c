@@ -1,4 +1,4 @@
-﻿
+
 #ifdef _DEBUG
 #include <vld.h>
 #endif
@@ -8,6 +8,9 @@
 #include <string.h>
 #include "EasyRTCDeviceAPI.h"
 #include "EasyRTCAPI.h"
+
+int RTC_Device_Stop(void* pDevice);
+int RTC_Device_Release(void** ppDevice);
 
 #define SIGNALING_SERVER_NAME "rts.easyrtc.cn"
 //#define SIGNALING_SERVER_NAME "127.0.0.1"
@@ -145,7 +148,7 @@ int main()
     //EasyRTC_Device_SetChannelInfo(easyRTC_Peer.handle, EasyRTC_CODEC_H264, EasyRTC_CODEC_MULAW);
 
 
-	EasyRTC_Device_Create(&easyRTC_Peer.handle, SIGNALING_SERVER_NAME, SIGNALING_SERVER_PORT, SIGNALING_SERVER_ISSECURE, NULL, __EasyRTC_Data_Callback, (void*)&easyRTC_Peer);
+	EasyRTC_Device_Create(&easyRTC_Peer.handle, SIGNALING_SERVER_NAME, SIGNALING_SERVER_PORT, SIGNALING_SERVER_ISSECURE, local_uuid, __EasyRTC_Data_Callback, (void*)&easyRTC_Peer);
 
 
 	const char* peer_uuid = "92092eea-be8d-4ec4-8ac5-123456789001";

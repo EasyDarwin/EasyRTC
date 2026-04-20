@@ -14,8 +14,8 @@
 #define socklen_t	size_t
 #define __attribute__(x)
 #else
-#include <errno.h>      // ¶¨Òå EAGAIN, EWOULDBLOCK µÈ
-#include <unistd.h>     // ¿ÉÄÜĞèÒª£¨read/write£©
+#include <errno.h>      // å®šä¹‰ EAGAIN, EWOULDBLOCK ç­‰
+#include <unistd.h>     // å¯èƒ½éœ€è¦ï¼ˆread/writeï¼‰
 #include <stdio.h>
 #include <sys/random.h> 
 #include <sys/socket.h>
@@ -36,7 +36,7 @@ typedef struct __WSS_CLIENT_T
 	int		isSecure;          // 1 = wss, 0 = ws
 
 
-	int		sockfd;			// ½öÓÃÓÚ ws
+	int		sockfd;			// ä»…ç”¨äº ws
 	ws_connect_callback	connectCallback;
 	ws_register_callback	registerCallback;
 	ws_idle_callback		idleCallback;
@@ -48,16 +48,16 @@ typedef struct __WSS_CLIENT_T
 
 
 /**
- * Éú³ÉËæ»úUUID
- * @param buf - ÓÃÓÚ´æ´¢UUID×Ö·û´®µÄ»º³åÇø£¬´óĞ¡ÖÁÉÙÎª37×Ö½Ú
- * @return Ö¸ÏòbufµÄÖ¸Õë
+ * ç”ŸæˆéšæœºUUID
+ * @param buf - ç”¨äºå­˜å‚¨UUIDå­—ç¬¦ä¸²çš„ç¼“å†²åŒºï¼Œå¤§å°è‡³å°‘ä¸º37å­—èŠ‚
+ * @return æŒ‡å‘bufçš„æŒ‡é’ˆ
  */
 char* random_uuid(char buf[37]) {
-	const char* c = "89ab";  // UUID°æ±¾4µÄÌØ¶¨Î»
+	const char* c = "89ab";  // UUIDç‰ˆæœ¬4çš„ç‰¹å®šä½
 	char* p = buf;
 	int n;
 
-	// ³õÊ¼»¯Ëæ»úÊıÖÖ×Ó
+	// åˆå§‹åŒ–éšæœºæ•°ç§å­
 	static int seeded = 0;
 	if (!seeded) {
 		srand((unsigned int)time(NULL));
@@ -68,10 +68,10 @@ char* random_uuid(char buf[37]) {
 		int b = rand() % 255;
 
 		switch (n) {
-		case 6:  // ÉèÖÃ°æ±¾Î»Îª4
+		case 6:  // è®¾ç½®ç‰ˆæœ¬ä½ä¸º4
 			sprintf(p, "4%x", b % 15);
 			break;
-		case 8:  // ÉèÖÃ±äÌåÎ»
+		case 8:  // è®¾ç½®å˜ä½“ä½
 			sprintf(p, "%c%x", c[rand() % strlen(c)], b % 15);
 			break;
 		default:
@@ -80,7 +80,7 @@ char* random_uuid(char buf[37]) {
 		}
 		p += 2;
 
-		// ÔÚÌØ¶¨Î»ÖÃ²åÈëÁ¬×Ö·û
+		// åœ¨ç‰¹å®šä½ç½®æ’å…¥è¿å­—ç¬¦
 		switch (n) {
 		case 3:
 		case 5:
@@ -90,12 +90,12 @@ char* random_uuid(char buf[37]) {
 			break;
 		}
 	}
-	*p = '\0';  // ×Ö·û´®½áÊø·û
+	*p = '\0';  // å­—ç¬¦ä¸²ç»“æŸç¬¦
 	return buf;
 }
 
 
-// IPµØÖ·ÑéÖ¤º¯Êı
+// IPåœ°å€éªŒè¯å‡½æ•°
 int is_valid_ip(const char* ip) {
 	if (ip == NULL) return 0;
 
@@ -129,25 +129,25 @@ int is_valid_ip(const char* ip) {
 }
 
 
-// DNS ½âÎöº¯Êı£ºÊäÈëÓòÃû£¬Êä³öµÚÒ»¸ö IPv4 µØÖ·£¨×Ö·û´®ĞÎÊ½£©
-// ·µ»Ø 0 ±íÊ¾³É¹¦£¬-1 ±íÊ¾Ê§°Ü
+// DNS è§£æå‡½æ•°ï¼šè¾“å…¥åŸŸåï¼Œè¾“å‡ºç¬¬ä¸€ä¸ª IPv4 åœ°å€ï¼ˆå­—ç¬¦ä¸²å½¢å¼ï¼‰
+// è¿”å› 0 è¡¨ç¤ºæˆåŠŸï¼Œ-1 è¡¨ç¤ºå¤±è´¥
 int resolve_domain_to_ip(const char* hostname, char* ip_str, size_t ip_str_len) {
 	struct addrinfo hints, * res = NULL;
 	int status;
 
-	// ³õÊ¼»¯ hints
+	// åˆå§‹åŒ– hints
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;       // ½ö IPv4
-	hints.ai_socktype = SOCK_STREAM; // TCP£¨Ò²¿ÉÒÔÉèÎª0£©
+	hints.ai_family = AF_INET;       // ä»… IPv4
+	hints.ai_socktype = SOCK_STREAM; // TCPï¼ˆä¹Ÿå¯ä»¥è®¾ä¸º0ï¼‰
 
-	// µ÷ÓÃ getaddrinfo
+	// è°ƒç”¨ getaddrinfo
 	if ((status = getaddrinfo(hostname, NULL, &hints, &res)) != 0) {
 		//fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
 		printf("getaddrinfo error: %d\n", status);
 		return -1;
 	}
 
-	// »ñÈ¡µÚÒ»¸ö½á¹û²¢×ª»»Îª¿É¶Á IP
+	// è·å–ç¬¬ä¸€ä¸ªç»“æœå¹¶è½¬æ¢ä¸ºå¯è¯» IP
 	struct sockaddr_in* addr = (struct sockaddr_in*)res->ai_addr;
 	const char* ip = inet_ntop(AF_INET, &addr->sin_addr, ip_str, ip_str_len);
 	if (ip == NULL) {
@@ -156,7 +156,7 @@ int resolve_domain_to_ip(const char* hostname, char* ip_str, size_t ip_str_len) 
 		return -1;
 	}
 
-	freeaddrinfo(res); // ÊÍ·Å×ÊÔ´
+	freeaddrinfo(res); // é‡Šæ”¾èµ„æº
 	return 0;
 }
 
@@ -164,7 +164,7 @@ int resolve_domain_to_ip(const char* hostname, char* ip_str, size_t ip_str_len) 
 #if 1
 
 
-// ³õÊ¼»¯ÍøÂçÉÏÏÂÎÄ
+// åˆå§‹åŒ–ç½‘ç»œä¸Šä¸‹æ–‡
 static int net_init(WSS_CLIENT_T* ctx, int isSecure) {
 	//memset(ctx, 0, sizeof(*ctx));
 	ctx->isSecure = isSecure;
@@ -191,7 +191,7 @@ static int net_init(WSS_CLIENT_T* ctx, int isSecure) {
 			return -1;
 		}
 
-		// ¿ÉÑ¡£º¼ÓÔØ CA Ö¤Êé£¨»òÌø¹ıÑéÖ¤£©
+		// å¯é€‰ï¼šåŠ è½½ CA è¯ä¹¦ï¼ˆæˆ–è·³è¿‡éªŒè¯ï¼‰
 		// mbedtls_x509_crt_parse_file(&ctx->cacert, "ca.pem");
 		mbedtls_ssl_conf_authmode(&ctx->conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
 		mbedtls_ssl_conf_ca_chain(&ctx->conf, &ctx->cacert, NULL);
@@ -202,13 +202,13 @@ static int net_init(WSS_CLIENT_T* ctx, int isSecure) {
 		}
 		return 0;
 #else
-		return -1; // ±àÒëÊ±Î´ÆôÓÃ mbedtls
+		return -1; // ç¼–è¯‘æ—¶æœªå¯ç”¨ mbedtls
 #endif
 	}
 	return 0;
 }
 
-// Á¬½Ó·şÎñÆ÷
+// è¿æ¥æœåŠ¡å™¨
 static int net_connect(WSS_CLIENT_T* ctx, const char* host, int port) {
 	char port_str[16];
 	snprintf(port_str, sizeof(port_str), "%d", port);
@@ -222,7 +222,7 @@ static int net_connect(WSS_CLIENT_T* ctx, const char* host, int port) {
 		mbedtls_ssl_set_bio(&ctx->ssl, &ctx->net_ctx, mbedtls_net_send, mbedtls_net_recv, NULL);
 
 		while (mbedtls_ssl_handshake(&ctx->ssl) != 0) {
-			// ÎÕÊÖ»á×Ô¶¯ÖØÊÔ WANT_READ/WANT_WRITE
+			// æ¡æ‰‹ä¼šè‡ªåŠ¨é‡è¯• WANT_READ/WANT_WRITE
 		}
 		return 0;
 #else
@@ -254,13 +254,13 @@ int websocket_send(int sockfd, char* buf, int len)
 }
 
 
-// ·¢ËÍÊı¾İ
+// å‘é€æ•°æ®
 static int net_send(WSS_CLIENT_T* ctx, int opcode, const unsigned char* buf, size_t len) {
 
 	return rtc_websocket_write(ctx->sockfd, opcode, (const char*)buf, (int)len);
 }
 
-// ½ÓÊÕÊı¾İ
+// æ¥æ”¶æ•°æ®
 static int net_recv(WSS_CLIENT_T* ctx, unsigned char* buf, size_t len) {
 	if (ctx->isSecure) {
 #ifdef USE_MBEDTLS
@@ -274,7 +274,7 @@ static int net_recv(WSS_CLIENT_T* ctx, unsigned char* buf, size_t len) {
 	}
 }
 
-// ¹Ø±ÕÁ¬½Ó
+// å…³é—­è¿æ¥
 static void net_close(WSS_CLIENT_T* ctx) {
 	if (ctx->isSecure) {
 #ifdef USE_MBEDTLS
@@ -295,7 +295,7 @@ static void net_close(WSS_CLIENT_T* ctx) {
 	}
 }
 
-// »ñÈ¡µ×²ã fd£¨ÓÃÓÚ select£©
+// è·å–åº•å±‚ fdï¼ˆç”¨äº selectï¼‰
 static int net_get_fd(WSS_CLIENT_T* ctx) {
 	if (ctx->isSecure) {
 #ifdef USE_MBEDTLS
@@ -320,7 +320,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 
 	pThread->flag = THREAD_STATUS_RUNNING;
 
-	// Éú³É Sec-WebSocket-Key
+	// ç”Ÿæˆ Sec-WebSocket-Key
 	static unsigned char shakeKey[32] = { 0 };
 	if (memcmp(shakeKey, "\0\0\0\0", 4) == 0) {
 		size_t len = 0;
@@ -376,7 +376,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 			continue;
 		}
 
-		// ¹¹Ôì Host Í·£¨WSS Ä¬ÈÏ¶Ë¿Ú 443£¬WS Ä¬ÈÏ 80£©
+		// æ„é€  Host å¤´ï¼ˆWSS é»˜è®¤ç«¯å£ 443ï¼ŒWS é»˜è®¤ 80ï¼‰
 		char hostWithPort[128];
 		if ((pWssClient->isSecure && pWssClient->serverPort == 443) ||
 			(!pWssClient->isSecure && pWssClient->serverPort == 80)) {
@@ -407,7 +407,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		}
 
 
-		// ½ÓÊÕÎÕÊÖÏìÓ¦
+		// æ¥æ”¶æ¡æ‰‹å“åº”
 		memset(recvbuf, 0, maxrecvlen);
 		int total = 0;
 		while (total < 4 || strstr(recvbuf, "\r\n\r\n") == NULL) {
@@ -434,7 +434,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 
 		socket_set_keepalive(pWssClient->sockfd);
 
-		// ========== WebSocket Êı¾İÑ­»· ==========
+		// ========== WebSocket æ•°æ®å¾ªç¯ ==========
 		int pos = 0;
 		time_t registerTime = 0;
 		pWssClient->registerStatus = 0;
@@ -483,8 +483,8 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 			pos += rc;
 			recvbuf[pos] = '\0';
 
-			// === ¸´ÓÃÄãÔ­ÓĞµÄ WebSocket Ö¡½âÎöÂß¼­ ===
-			// ×¢Òâ£ºÒÔÏÂÊÇÄãÔ­À´µÄÖ¡´¦Àí´úÂë£¨ÂÔ×÷µ÷Õû£©
+			// === å¤ç”¨ä½ åŸæœ‰çš„ WebSocket å¸§è§£æé€»è¾‘ ===
+			// æ³¨æ„ï¼šä»¥ä¸‹æ˜¯ä½ åŸæ¥çš„å¸§å¤„ç†ä»£ç ï¼ˆç•¥ä½œè°ƒæ•´ï¼‰
 			ws_comm_header* wsheader = (ws_comm_header*)recvbuf;
 			ws_0_header* ws0header = (ws_0_header*)recvbuf;
 			ws_1_header* ws1header = (ws_1_header*)recvbuf;
@@ -508,7 +508,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 					: (sizeof(ws_0m_header) + payloadlen);
 				if (framesize > pos) continue;
 
-				// ·¢ËÍ PONG
+				// å‘é€ PONG
 				unsigned char pong[2] = { 0x8A, 0x00 }; // FIN=1, opcode=10 (PONG), no payload
 				net_send(pWssClient, WS_OPCODE_PONG, pong, 2);
 
@@ -633,10 +633,10 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		unsigned char tempKey[16] = { 0 };
 
 #ifdef _WIN32
-		GUID* guid = (GUID*)tempKey; // GUID ³¤¶È¸ÕºÃÊÇ16¸ö×Ö½Ú
+		GUID* guid = (GUID*)tempKey; // GUID é•¿åº¦åˆšå¥½æ˜¯16ä¸ªå­—èŠ‚
 		CoCreateGuid(guid);
 #else
-		// ·½·¨£º´Ó /dev/urandom ¶ÁÈ¡ 16 ×Ö½ÚËæ»úÊı¾İ£¨µÈ¼ÛÓÚ GUID£©
+		// æ–¹æ³•ï¼šä» /dev/urandom è¯»å– 16 å­—èŠ‚éšæœºæ•°æ®ï¼ˆç­‰ä»·äº GUIDï¼‰
 		FILE* urandom = fopen("/dev/urandom", "rb");
 		if (urandom)
 		{
@@ -645,7 +645,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 
 			if (bytesRead != sizeof(tempKey))
 			{
-				return -1; // ¶ÁÈ¡²»ÍêÕû
+				return -1; // è¯»å–ä¸å®Œæ•´
 			}
 		}
 #endif
@@ -690,7 +690,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		int isDomainName = 1;
 		if (is_valid_ip(pWssClient->serverAddr))
 		{
-			isDomainName = 0;		// ²»ÎªÓòÃû, ÎªIP
+			isDomainName = 0;		// ä¸ä¸ºåŸŸå, ä¸ºIP
 		}
 
 		struct sockaddr_in servAddr = { 0 };
@@ -701,7 +701,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		{
 			if (pThread->flag == THREAD_STATUS_EXIT)			break;
 
-			//int nReceivedCount = 0; //ÊÕµ½µÄDNS½âÎö°üµÄ¸öÊı
+			//int nReceivedCount = 0; //æ”¶åˆ°çš„DNSè§£æåŒ…çš„ä¸ªæ•°
 			//for (int i = 0; i < sizeof(NAMESERVERS) / sizeof(NAMESERVERS[0]); i++)
 			{
 				if (isDomainName)
@@ -774,7 +774,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 
 		}
 
-		pdest = strstr(recvbuf, "\r\n\r\n"); // websocketµÄÎÕÊÖÓ¦´ğ°ü½ÓÊÕÍê±ÏµÄ±êÖ¾ÊÇ×îºó4¸ö×Ö½ÚÎª"\r\n\r\n"
+		pdest = strstr(recvbuf, "\r\n\r\n"); // websocketçš„æ¡æ‰‹åº”ç­”åŒ…æ¥æ”¶å®Œæ¯•çš„æ ‡å¿—æ˜¯æœ€å4ä¸ªå­—èŠ‚ä¸º"\r\n\r\n"
 		if ((pdest == NULL) || (pdest[4] != 0) || ((recvbuf + rc) != (pdest + 4)))
 		{
 			//CallbackData(pDevice, NULL, EASYRTC_CALLBACK_TYPE_DISCONNECT, 0, 0, NULL, 0, 0, 0);
@@ -812,7 +812,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		//pThis->CheckEasyRtcPeerConnection();
 
 		time_t registerTime = 0;// time(NULL);
-		pWssClient->registerStatus = 0;						// ÖÃÎªÎ´×¢²á
+		pWssClient->registerStatus = 0;						// ç½®ä¸ºæœªæ³¨å†Œ
 
 		while (1)
 		{
@@ -823,9 +823,9 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 				time_t tCurrent = time(NULL);
 				if (tCurrent - registerTime > 5)
 				{
-					pWssClient->registerCallback(pWssClient->userptr);		// ·¢ËÍ×¢²á°ü
+					pWssClient->registerCallback(pWssClient->userptr);		// å‘é€æ³¨å†ŒåŒ…
 
-					// ×¢²áºóÓÉÉÏ²ãµ÷ÓÃSetRegisterStatusÉèÖÃ×¢²á×´Ì¬
+					// æ³¨å†Œåç”±ä¸Šå±‚è°ƒç”¨SetRegisterStatusè®¾ç½®æ³¨å†ŒçŠ¶æ€
 
 					registerTime = tCurrent;
 				}
@@ -849,7 +849,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 			}
 			else if (rc < 0)
 			{
-				//ÓĞ´í
+				//æœ‰é”™
 
 				break;
 			}
@@ -862,7 +862,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 				break;
 			}
 
-			//ÔÚÕâÀïµÃµ½µÄÊı¾İ
+			//åœ¨è¿™é‡Œå¾—åˆ°çš„æ•°æ®
 			pos += rc;
 			if (pos < sizeof(ws_comm_header)) continue;
 
@@ -871,7 +871,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		NEXTLOOP1:
 			if ((wsheader->fin == 0) || (wsheader->rsv1 != 0) || (wsheader->rsv2 != 0) || (wsheader->rsv3 != 0) || (wsheader->opcode == WS_OPCODE_CLOSE))// || (wsheader->opcode == WS_OPCODE_TEXT))
 			{
-				//¸ñÊ½²»ÕıÈ·
+				//æ ¼å¼ä¸æ­£ç¡®
 				break;
 			}
 			else if (wsheader->opcode == WS_OPCODE_PING)
@@ -880,7 +880,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 
 				payloadlen = ws0header->payloadlen;
 				if (ws0header->mask == 0) framesize = sizeof(ws_0_header) + payloadlen; else framesize = sizeof(ws_0m_header) + payloadlen;
-				if (framesize > pos) continue; //Ã»ÓĞ½ÓÊÕÍê±Ï
+				if (framesize > pos) continue; //æ²¡æœ‰æ¥æ”¶å®Œæ¯•
 
 				easyrtc_websocket_write(pWssClient->sockfd, WS_OPCODE_PONG, NULL, 0);
 
@@ -894,7 +894,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 				{
 					payloadlen = ws0header->payloadlen;
 					if (ws0header->mask == 0) framesize = sizeof(ws_0_header) + payloadlen; else framesize = sizeof(ws_0m_header) + payloadlen;
-					if (framesize > pos) continue; //Ã»ÓĞ½ÓÊÕÍê±Ï
+					if (framesize > pos) continue; //æ²¡æœ‰æ¥æ”¶å®Œæ¯•
 					if (ws0header->mask == 0)
 					{
 						ws0header->payloaddata[payloadlen] = '\0';
@@ -943,7 +943,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 						ws0mheader = (ws_0m_header*)recvbuf;
 						ws1mheader = (ws_1m_header*)recvbuf;
 					}
-					if (framesize > pos) continue; //Ã»ÓĞ½ÓÊÕÍê±Ï
+					if (framesize > pos) continue; //æ²¡æœ‰æ¥æ”¶å®Œæ¯•
 					if (ws1header->mask == 0)
 					{
 						ws1header->payloaddata[payloadlen] = '\0';
@@ -973,7 +973,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 				}
 				else if (wsheader->payloadlen == 127)
 				{
-					//²»ÕıÈ·,ÎÒÃÇÄ¿Ç°Ã»·¢ËÍÕâÃ´³¤µÄÊı¾İ
+					//ä¸æ­£ç¡®,æˆ‘ä»¬ç›®å‰æ²¡å‘é€è¿™ä¹ˆé•¿çš„æ•°æ®
 					break;
 				}
 			}
@@ -1076,8 +1076,8 @@ void websocketRelease(void** ppWssClient)
 
 
 /****************************************************
- * º¯Êı: getBuildTime
- * ¹¦ÄÜ: »ñÈ¡Èí¼ş±àÒëÊ±¼äºÍÈÕÆÚ
+ * å‡½æ•°: getBuildTime
+ * åŠŸèƒ½: è·å–è½¯ä»¶ç¼–è¯‘æ—¶é—´å’Œæ—¥æœŸ
  ***************************************************/
 void getBuildTime(int* _year, int* _month, int* _day, int* _hour, int* _minute, int* _second)
 {

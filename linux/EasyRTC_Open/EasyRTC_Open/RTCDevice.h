@@ -1,4 +1,4 @@
-﻿#ifndef __EASYRTC_DEVICE_H__
+#ifndef __EASYRTC_DEVICE_H__
 #define __EASYRTC_DEVICE_H__
 
 
@@ -213,6 +213,7 @@ int EasyRTC_ReleasePeer(EASYRTC_PEER_T* peer);
 
 void trim(char* strIn, char* strOut);
 int GetUUIDSFromString(char* struuid, uint32_t* myids);
+int GetStringFromUUID(char *outString, unsigned int* hisid);
 
 // ICE canidate 回调函数
 int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char* sdp);

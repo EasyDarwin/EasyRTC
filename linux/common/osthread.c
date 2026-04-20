@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdarg.h>
 #ifndef _WIN32
 #include <unistd.h>
@@ -46,7 +47,7 @@ int CreateOSThread(OSTHREAD_OBJ_T **handle, void *(*procFunc)(void *), void *use
 		free(pThread);
 		return THREAD_STATUS_EXIT;
 	}
-	else if (pThread->flag == THREAD_STATUS_EXIT_EXT)		//表示已处理, 线程正常退出
+	else if (pThread->flag == THREAD_STATUS_EXIT_EXT)		//锟斤拷示锟窖达拷锟斤拷, 锟竭筹拷锟斤拷锟斤拷锟剿筹拷
 	{
 		free(pThread);
 		return THREAD_STATUS_EXIT_EXT;
@@ -119,7 +120,7 @@ int SetOSThreadName(OSTHREAD_OBJ_T* handle, const char* szFormat, ...)
 
 	
 
-	// 以下为三种方式
+	// 锟斤拷锟斤拷为锟斤拷锟街凤拷式
 
 	
 
@@ -130,11 +131,11 @@ int SetOSThreadName(OSTHREAD_OBJ_T* handle, const char* szFormat, ...)
 #elif LINUX_SET_THREAD_NAME_TYPE==0x02
 	prctl(PR_SET_NAME, szBuf, 0, 0, 0);
 #elif LINUX_SET_THREAD_NAME_TYPE==0x03
-	size_t stacksize = sysconf(_SC_THREAD_STACK_MIN); // 获取最小栈大小
+	size_t stacksize = sysconf(_SC_THREAD_STACK_MIN); // 锟斤拷取锟斤拷小栈锟斤拷小
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-	pthread_attr_setstacksize(&attr, stacksize + PTHREAD_STACK_MIN); // 设置栈大小，确保有足够的空间存放名称信息
-	pthread_setname_np(szBuf); // 设置线程名称
+	pthread_attr_setstacksize(&attr, stacksize + PTHREAD_STACK_MIN); // 锟斤拷锟斤拷栈锟斤拷小锟斤拷确锟斤拷锟斤拷锟姐够锟侥空硷拷锟斤拷锟斤拷锟斤拷锟斤拷息
+	pthread_setname_np(szBuf); // 锟斤拷锟斤拷锟竭筹拷锟斤拷锟斤拷
 #endif
 
 	return 0;

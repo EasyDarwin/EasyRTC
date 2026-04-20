@@ -1,10 +1,31 @@
-﻿#include "EasyRTC_websocket.h"
+#include "EasyRTC_websocket.h"
 
 
 #include "websocketClient.h"
 //#include "mbedtls/base64.h"
 #include "osthread.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <time.h>
+
+static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static int b64_encode(const unsigned char* src, size_t src_len, char* dst, size_t* dst_len) {
+    size_t i, j = 0;
+    for (i = 0; i < src_len; i += 3) {
+        unsigned int val = (src[i] << 16);
+        if (i + 1 < src_len) val |= (src[i + 1] << 8);
+        if (i + 2 < src_len) val |= src[i + 2];
+        dst[j++] = b64_table[(val >> 18) & 0x3F];
+        dst[j++] = b64_table[(val >> 12) & 0x3F];
+        dst[j++] = (i + 1 < src_len) ? b64_table[(val >> 6) & 0x3F] : '=';
+        dst[j++] = (i + 2 < src_len) ? b64_table[val & 0x3F] : '=';
+    }
+    dst[j] = '\0';
+    if (dst_len) *dst_len = j;
+    return 0;
+}
 
 
 
@@ -337,7 +358,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 			fclose(urandom);
 		}
 #endif
-		mbedtls_base64_encode(shakeKey, 32, &len, tempKey, 16);
+		b64_encode(tempKey, 16, (char*)shakeKey, &len);
 		if (0 == strcmp((char*)shakeKey, "\0"))
 		{
 			strcpy((char*)shakeKey, "uip7XrAOPE634xuUNvv0vg==");
@@ -655,9 +676,8 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		}
 #endif
 
-		mbedtls_base64_encode(shakeKey, 32, &len, tempKey, 16);
+		b64_encode(tempKey, 16, (char*)shakeKey, &len);
 	}
-
 
 
 
