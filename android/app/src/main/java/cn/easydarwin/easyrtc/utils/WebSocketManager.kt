@@ -194,6 +194,9 @@ public class WebSocketManager(private val url: String, private val token: String
 
     fun handlerCallerSDP(sdp: String) {
         if (sdp.isNotEmpty()) {
+            var videoCodec = 0
+            var audioCodec = 0
+
             if (sdp.contains("m=video", ignoreCase = true)) {
 //                Log.d(TAG, "handlerSDP sdp=${SPUtil.Companion.getInstance().hevaddDataChannelcCodec}")
                 var codeID = 0;
@@ -206,9 +209,7 @@ public class WebSocketManager(private val url: String, private val token: String
                 } else if (sdp.contains("VP8/90000")) {
                     codeID = EasyRTCCodec.VP8
                 }
-                if (codeID != 0) {
-                    EasyRTCSdk.addTransceiver(codeID, "0", "0", EasyRTCStreamTrack.VIDEO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
-                }
+                if (codeID != 0) videoCodec = codeID
             }
 
             if (sdp.contains("m=audio", ignoreCase = true)) {
@@ -220,11 +221,17 @@ public class WebSocketManager(private val url: String, private val token: String
                 } else if (sdp.contains("opus/48000", ignoreCase = true)) {
                     codeID = EasyRTCCodec.OPUS
                 }
-                if (codeID != 0) {
-                    EasyRTCSdk.addTransceiver(codeID, "0", "1", EasyRTCStreamTrack.AUDIO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
-                }
+                if (codeID != 0) audioCodec = codeID
 
             }
+
+            if (videoCodec == 0) videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
+            if (audioCodec == 0) audioCodec = EasyRTCCodec.ALAW
+
+            val session = EasyRTCSdk.getMediaSession()
+            session.addTransceivers(videoCodec, audioCodec)
+            EasyRTCSdk.syncTransceiversFromMediaSession()
+
             if (sdp.contains("webrtc-datachannel", ignoreCase = true)) EasyRTCSdk.addDataChannel()
             EasyRTCSdk.createAnswer(sdp)  //创建 Answer 的 SDP
         }
@@ -257,9 +264,9 @@ public class WebSocketManager(private val url: String, private val token: String
             //device 设备端逻辑
             handlerPeerConnection(data)
             val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-            //创建音视频轨道
-            EasyRTCSdk.addTransceiver(videoCodeID, "0", "0", EasyRTCStreamTrack.VIDEO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
-            EasyRTCSdk.addTransceiver(EasyRTCCodec.ALAW, "0", "1", EasyRTCStreamTrack.AUDIO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
+            val session = EasyRTCSdk.getMediaSession()
+            session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
+            EasyRTCSdk.syncTransceiversFromMediaSession()
             //创建消息轨道
             EasyRTCSdk.addDataChannel("123") //name 设备端随机字符串
             EasyRTCSdk.createOffer()  //创建  Offer  sdp

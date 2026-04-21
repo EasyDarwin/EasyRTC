@@ -1,6 +1,7 @@
 #ifndef EASYRTC_MEDIA_H
 #define EASYRTC_MEDIA_H
 
+#include "easyrtc_common.h"
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
 #include <camera/NdkCameraDevice.h>
@@ -12,12 +13,13 @@
 #include <pthread.h>
 #include <atomic>
 #include <cstdint>
+#include <string>
 
 struct MediaPipeline {
     AMediaCodec* encoder = nullptr;
     AMediaFormat* format = nullptr;
     ANativeWindow* window = nullptr;
-    void* transceiver = nullptr;
+    EasyRTC_Transceiver transceiver = nullptr;
     int width = 0;
     int height = 0;
     int bitrate = 0;
@@ -52,5 +54,11 @@ struct MediaPipeline {
     MediaPipeline(MediaPipeline&&) = delete;
     MediaPipeline& operator=(MediaPipeline&&) = delete;
 };
+
+std::string findCameraId(int facing);
+bool startCameraCapture(MediaPipeline* pipeline);
+void releaseCaptureSession(MediaPipeline* pipeline);
+void closeCamera(MediaPipeline* pipeline);
+void* outputThreadFunc(void* arg);
 
 #endif

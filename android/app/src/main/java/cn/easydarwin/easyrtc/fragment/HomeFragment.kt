@@ -36,9 +36,7 @@ import cn.easydarwin.easyrtc.ui.live.NativePipelineController
 import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
-import cn.easyrtc.helper.AudioHelper
 import cn.easyrtc.helper.MagicFileHelper
-import cn.easyrtc.helper.RemoteRTCAudioHelper
 import cn.easyrtc.helper.RemoteRTCHelper
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -46,7 +44,7 @@ import java.util.Date
 import java.util.Locale
 
 
-class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, AudioHelper.OnAudioDataListener, WebSocketManager.WebSocketCallback,
+class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketManager.WebSocketCallback,
     EasyRTCSdk.EasyRTCEventListener {
 
     companion object {
@@ -67,11 +65,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, AudioHelper
     private var mainSurfaceTexture: SurfaceTexture? = null
     private var smallSurfaceTexture: SurfaceTexture? = null
 
-    private var audioHelper: AudioHelper? = null
-
     private lateinit var drawerManager: DrawerManager
     private lateinit var mMagicFileHelper: MagicFileHelper
-    private var mRemoteRTCAudioHelper: RemoteRTCAudioHelper? = null
 
     private var mWebSocketManager: WebSocketManager? = null
 
@@ -376,13 +371,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, AudioHelper
         }
     }
 
-    override fun onAudioData(data: ByteArray, pts: Long) {
-        EasyRTCSdk.sendAudioFrame(data, pts)
-    }
-
-    override fun onError(error: String) {
-    }
-
     override fun onWSConnected() {
     }
 
@@ -425,6 +413,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, AudioHelper
     override fun connectionStateChange(state: Int) {
         Log.d(TAG, "connectionStateChange state =$state  ${state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED}")
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
+            EasyRTCSdk.syncTransceiversFromMediaSession()
             val videoTransceiver = EasyRTCSdk.getVideoTransceiver()
             if (videoTransceiver != 0L) {
                 mediaPipeline?.setTransceiver(videoTransceiver)
@@ -435,15 +424,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, AudioHelper
             }
 
             val audioTransceiver = EasyRTCSdk.getAudioTransceiver()
-            if (audioTransceiver != 0L && audioHelper == null) {
-                audioHelper = AudioHelper()
-                audioHelper?.setOnAudioDataListener(this)
-                audioHelper?.start()
-            }
-
-            if (mRemoteRTCAudioHelper == null) {
-                mRemoteRTCAudioHelper = RemoteRTCAudioHelper(requireContext())
-            }
+            Log.d(TAG, "Audio transceiver on connected: $audioTransceiver (native-owned)")
 
             ensureRemoteRTCHelper()
             liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
@@ -463,9 +444,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, AudioHelper
     }
 
     override fun onTransceiverCallback(track: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long) {
-        if (track == EasyRTCStreamTrack.AUDIO) {
-            mRemoteRTCAudioHelper?.processRemoteAudioFrameSafe(frameData, frameData.size)
-        } else if (track == EasyRTCStreamTrack.VIDEO) {
+        if (track == EasyRTCStreamTrack.VIDEO) {
             remoteRTCHelper?.onRemoteVideoFrame(frameData)
         }
     }
@@ -547,12 +526,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, AudioHelper
 
     private fun stopEasyRTC() {
         stopNativeMediaPipeline()
-        audioHelper?.stop()
         remoteRTCHelper?.release()
-        mRemoteRTCAudioHelper?.release()
-        audioHelper = null
         remoteRTCHelper = null
-        mRemoteRTCAudioHelper = null
     }
 
     private fun runOnMainThread(action: () -> Unit) {

@@ -11,19 +11,17 @@ public class peerconnection {
     //peer_connection  create 的返回值
     public native int release(long peer_connection);
 
-    public native long AddTransceiver(long peer_connection, int codecID, String streamId, String trackId, int streamTrackType, int direction, long user_ptr);
-
     public native long AddDataChannel(long peer_connection, String name, long user_ptr);
+
+    public native long AddTransceiver(long peer_connection, int codecID, String streamId, String trackId, int streamTrackType, int direction, long user_ptr);
 
     public native long FreeDataChannel(long data_channel);
 
-    public native int SendVideoFrame(long video_transceiver, byte[] frame_video_data, int frame_size, int keyframe, long pts);
+    public native int DataChannelSend(long data_channel, int isBinary, byte[] data_binary, int size);
 
     public native int SendAudioFrame(long audio_transceiver, byte[] frame_audio_data, int frame_size, long pts);
 
     public native int FreeTransceiver(long transceiver);
-
-    public native int DataChannelSend(long data_channel, int isBinary, byte[] data_binary, int size);
 
     public native int CreateAnswer(long peer_connection, String offer_sdp, long user_ptr);
 

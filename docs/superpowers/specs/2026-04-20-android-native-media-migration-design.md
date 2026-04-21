@@ -2,224 +2,238 @@
 
 ## Goal
 
-Migrate audio capture, remote audio playback, and remote video decoding from Java/Kotlin to native C++ within the existing `libeasyrtc_media.so`, following the pattern established by the camera+encoder pipeline.
+Migrate all media processing (transceiver creation, audio capture, audio playback, video encoding, video decoding) into native C++ within `libeasyrtc_media.so`, using the C API from `EasyRTCAPI.h` directly. Media frames never cross the JNI boundary. Only signaling remains in Java/Kotlin.
 
-## Architecture: Multi-.cpp, Single .so
+## Architecture: Native Media Session
 
-All native media code compiles into one `libeasyrtc_media.so`. Each module gets its own `.cpp`/`.h` pair. A shared header provides common utilities.
+`libeasyrtc_media.so` owns the entire media lifecycle. It receives a `peerConnection` handle (the `jlong` from `peerconnection.create()`, which is `EasyRTC_PeerConnection*`) and internally calls `EasyRTC_AddTransceiver()` with native C callbacks.
+
+```
+peerconnection.java (signaling only):
+  create() → returns EasyRTC_PeerConnection* as jlong
+  CreateOffer() / CreateAnswer() / SetRemoteDescription()
+  AddDataChannel() / DataChannelSend() / FreeDataChannel()
+  GetIceCandidateType()
+  StateChange callback → Java (UI)
+  IceCandidate callback → Java (WebSocket)
+  DataChannel callback → Java (UI)
+
+libeasyrtc_media.so (all media):
+  Receives EasyRTC_PeerConnection* from Java
+  Calls EasyRTC_AddTransceiver() directly → registers C callbacks
+  Camera2 NDK → MediaCodec Encoder → EasyRTC_SendFrame()
+  AAudio Record → EasyRTC_SendFrame()
+  Transceiver_Callback(VIDEO) → NDK MediaCodec Decoder → Surface
+  Transceiver_Callback(AUDIO) → AAudio Playback → Speaker
+```
+
+## Key Decisions
+
+### 1. Direct C API (No dlsym, no Java Transceiver_Callback)
+
+Use `#include "EasyRTCAPI.h"` from repo's `include/` directory. Link directly against `libEasyRTC.so`.
+
+`EasyRTC_AddTransceiver()` takes a C function pointer `EasyRTC_Transceiver_Callback`. We register our own native function — frames stay in C++, never touch Java.
+
+### 2. peerconnection.java simplification
+
+Remove from `peerconnection.java`:
+- `AddTransceiver` — now called natively
+- `SendVideoFrame` / `SendAudioFrame` — now called natively
+- `FreeTransceiver` — now called natively
+- `OnEasyRTC_Transceiver_Callback` — no longer needed
+
+Keep in `peerconnection.java`:
+- `create` / `release` — PeerConnection lifecycle
+- `CreateOffer` / `CreateAnswer` / `SetRemoteDescription` — SDP signaling
+- `AddDataChannel` / `FreeDataChannel` / `DataChannelSend` — data channel
+- `GetIceCandidateType` — connection stats
+- `OnEasyRTC_ConnectionStateChange_Callback` — UI state
+- `OnEasyRTC_IceCandidate_Callback` — WebSocket SDP exchange
+- `OnEasyRTC_DataChannel_Callback` — UI messaging
+
+### 3. peerconnection.create() jlong is EasyRTC_PeerConnection*
+
+The `jlong` returned by `peerconnection.create()` IS the `EasyRTC_PeerConnection` pointer (void*). We pass it into `libeasyrtc_media.so` as context for calling `EasyRTC_AddTransceiver()` directly.
+
+## File Structure
 
 ```
 easyrtc/src/main/cpp/
-  easyrtc_common.h           # Shared: logging macros, EasyRTCAPI.h include, common types
-  easyrtc_media.h/.cpp       # Existing: Camera + Encoder pipeline
-  easyrtc_audio.h/.cpp       # NEW: Audio capture pipeline (AAudio + AEC)
-  easyrtc_audio_playback.h/.cpp  # NEW: Remote audio playback pipeline (AAudio)
-  easyrtc_video_decoder.h/.cpp   # NEW: Remote video decoder pipeline (NDK MediaCodec)
-  CMakeLists.txt             # Updated: add new sources, link libEasyRTC
+  easyrtc_common.h              # Shared: logging, EasyRTCAPI.h include, constants
+  easyrtc_media.h               # Existing: MediaPipeline struct (modified)
+  easyrtc_media.cpp             # Existing: Camera+Encoder (modified: remove dlsym)
+  easyrtc_audio.h               # NEW: AudioCapturePipeline struct
+  easyrtc_audio.cpp             # NEW: AAudio recording → EasyRTC_SendFrame
+  easyrtc_audio_playback.h      # NEW: AudioPlaybackPipeline struct
+  easyrtc_audio_playback.cpp    # NEW: Transceiver audio callback → AAudio playback
+  easyrtc_video_decoder.h       # NEW: VideoDecoderPipeline struct
+  easyrtc_video_decoder.cpp     # NEW: Transceiver video callback → NDK MediaCodec decoder
+  easyrtc_session.h             # NEW: Top-level MediaSession — owns all pipelines, registers transceivers
+  easyrtc_session.cpp           # NEW: Creates transceivers via EasyRTC_AddTransceiver, routes callbacks
+  CMakeLists.txt                # Updated: all new sources, include path, link aaudio + EasyRTC
+
+easyrtc/src/main/java/cn/easyrtc/
+  peerconnection.java           # Simplified: remove media-related native methods
+  EasyRTCSdk.kt                 # Simplified: remove AddTransceiver/SendFrame, add createMediaSession
+  media/MediaPipeline.kt        # Existing (unchanged)
+  media/MediaSession.kt         # NEW: Thin Kotlin wrapper for native MediaSession
+
+app/src/main/java/.../fragment/
+  HomeFragment.kt               # Modified: use MediaSession for all media
 ```
 
-## Key Decision: Direct Linking (No dlsym)
+## Core: MediaSession
 
-Use `#include "EasyRTCAPI.h"` from the repo's `include/` directory and link directly against `libEasyRTC.so`. This eliminates the existing `dlopen/dlsym` hack in `easyrtc_media.cpp`. The existing dlsym code should be cleaned up as part of this migration.
+### Native (easyrtc_session.h)
 
-CMakeLists.txt will:
-- Add `../../include` as include directory (or a relative path to the repo root `include/`)
-- Add `target_link_libraries(easyrtc_media EasyRTC)` using the prebuilt .so from jniLibs
+```cpp
+struct MediaSession {
+    EasyRTC_PeerConnection peerConnection = nullptr;
+    EasyRTC_Transceiver videoTransceiver = nullptr;
+    EasyRTC_Transceiver audioTransceiver = nullptr;
+
+    MediaPipeline* videoEncoder = nullptr;      // camera + encoder
+    AudioCapturePipeline* audioCapture = nullptr;
+    AudioPlaybackPipeline* audioPlayback = nullptr;
+    VideoDecoderPipeline* videoDecoder = nullptr;
+
+    ANativeWindow* previewWindow = nullptr;
+    ANativeWindow* decoderSurface = nullptr;
+
+    std::atomic<bool> running{false};
+};
+```
+
+### Native Transceiver Callback
+
+```cpp
+static int mediaTransceiverCallback(void* userPtr,
+    EASYRTC_TRANSCEIVER_CALLBACK_TYPE_E type,
+    EasyRTC_CODEC codecID,
+    EasyRTC_Frame* frame,
+    double bandwidthEstimation) {
+
+    auto* session = static_cast<MediaSession*>(userPtr);
+
+    switch (type) {
+        case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
+            // Feed directly to video decoder pipeline
+            session->videoDecoder->enqueueFrame(frame);
+            break;
+        case EASYRTC_TRANSCEIVER_CALLBACK_AUDIO_FRAME:
+            // Feed directly to audio playback pipeline
+            session->audioPlayback->enqueueFrame(frame);
+            break;
+        case EASYRTC_TRANSCEIVER_CALLBACK_KEY_FRAME_REQ:
+            // Request key frame on encoder
+            session->videoEncoder->requestKeyFrame();
+            break;
+        case EASYRTC_TRANSCEIVER_CALLBACK_BANDWIDTH:
+            break;
+    }
+    return 0;
+}
+```
+
+### JNI Interface (MediaSession.kt)
+
+```kotlin
+class MediaSession {
+    private var nativePtr: Long = 0
+
+    // Called after peerconnection.create() returns the peerConnection handle
+    fun create(peerConnectionHandle: Long, videoCodec: Int, audioCodec: Int): Int
+    fun setEncoderConfig(codec: Int, width: Int, height: Int, bitrate: Int, fps: Int, iframeInterval: Int, cameraFacing: Int): Int
+    fun setPreviewSurface(surface: Surface)
+    fun setDecoderSurface(surface: Surface)
+    fun start(): Int
+    fun stop()
+    fun switchCamera()
+    fun release()
+
+    companion object {
+        init { System.loadLibrary("easyrtc_media") }
+    }
+}
+```
+
+### Data Flow After Migration
+
+```
+SENDING:
+  Camera2 NDK → MediaCodec Encoder → EasyRTC_SendFrame(videoTransceiver) → libEasyRTC.so
+  AAudio Record → EasyRTC_SendFrame(audioTransceiver) → libEasyRTC.so
+
+RECEIVING:
+  libEasyRTC.so → mediaTransceiverCallback(VIDEO) → VideoDecoderPipeline → Surface
+  libEasyRTC.so → mediaTransceiverCallback(AUDIO) → AudioPlaybackPipeline → AAudio → Speaker
+
+SIGNALING (Java):
+  WebSocketManager → EasyRTCSdk → peerconnection.java → libEasyRTC.so
+  libEasyRTC.so → StateChange/IceCandidate/DataChannel callbacks → Java
+```
+
+## No Kotlin Bridge Classes for Audio
+
+Audio capture and playback are entirely internal to native. No `AudioCapturePipeline.kt` or `AudioPlaybackPipeline.kt`. The `MediaSession.kt` is the only Kotlin entry point.
 
 ## Migration Order
 
-### Step 1: Audio Capture (AudioHelper -> native)
+1. **Task 1:** Create `easyrtc_common.h` + update CMakeLists.txt (same as before)
+2. **Task 2:** Clean up `easyrtc_media.cpp` — remove dlsym, use direct linking
+3. **Task 3:** Create `easyrtc_audio.h/.cpp` — AAudio capture pipeline (internal, no JNI)
+4. **Task 4:** Create `easyrtc_audio_playback.h/.cpp` — AAudio playback pipeline (internal, no JNI)
+5. **Task 5:** Create `easyrtc_video_decoder.h/.cpp` — NDK MediaCodec decoder pipeline (internal, no JNI)
+6. **Task 6:** Create `easyrtc_session.h/.cpp` — top-level MediaSession that calls `EasyRTC_AddTransceiver` with native callbacks, owns all pipelines
+7. **Task 7:** Create `MediaSession.kt` — Kotlin wrapper, simplify `peerconnection.java` and `EasyRTCSdk.kt`
+8. **Task 8:** Update `HomeFragment.kt` — use MediaSession instead of individual helpers
+9. **Task 9:** Clean up legacy Java helpers
 
-**Java source:** `cn.easyrtc.helper.AudioHelper` (176 lines)
-**New native files:** `easyrtc_audio.h`, `easyrtc_audio.cpp`
-**New Kotlin bridge:** `cn.easyrtc.media.AudioCapturePipeline`
-
-**AudioCapturePipeline struct:**
-```
-struct AudioCapturePipeline {
-    AAudioStream* stream;
-    EasyRTC_Transceiver audioTransceiver;
-    std::atomic<bool> running;
-    pthread_mutex_t mutex;
-};
-```
-
-**API:** AAudio (requires API 27+, confirmed acceptable)
-**Format:** 8kHz, mono, PCM 16-bit, 20ms frames (320 bytes)
-**AEC:** Integrate `libaecm-shared.so` directly in native layer
-**Audio source:** VOICE_RECOGNITION (matching current Java behavior)
-
-**JNI interface (AudioCapturePipeline.kt):**
-- `nativeCreate(transceiverHandle: Long): Long`
-- `nativeStart(pipelinePtr: Long): Int`
-- `nativeStop(pipelinePtr: Long)`
-- `nativeRelease(pipelinePtr: Long)`
-
-**Data flow:**
-```
-AAudio recording callback -> PCM 20ms frame -> AEC processing -> EasyRTC_SendFrame() -> libEasyRTC.so
-```
-
-### Step 2: Remote Audio Playback (RemoteRTCAudioHelper -> native)
-
-**Java source:** `cn.easyrtc.helper.RemoteRTCAudioHelper` (210 lines)
-**New native files:** `easyrtc_audio_playback.h`, `easyrtc_audio_playback.cpp`
-**New Kotlin bridge:** `cn.easyrtc.media.AudioPlaybackPipeline`
-
-**AudioPlaybackPipeline struct:**
-```
-struct AudioPlaybackPipeline {
-    AAudioStream* stream;
-    std::queue<std::vector<uint8_t>> jitterBuffer;
-    std::mutex queueMutex;
-    std::condition_variable queueCv;
-    std::atomic<bool> playing;
-    std::atomic<bool> stopped;
-    static constexpr size_t MAX_QUEUE_SIZE = 200;
-};
-```
-
-**API:** AAudio (output stream)
-**Format:** 8kHz, mono, PCM 16-bit
-**Jitter buffer:** C++ queue, max 200 frames, drop oldest on overflow
-**Silence:** Write silence frame (320 zero bytes) when queue empty
-
-**JNI interface (AudioPlaybackPipeline.kt):**
-- `nativeCreate(): Long`
-- `nativeWriteFrame(pipelinePtr: Long, data: ByteArray, size: Int)`
-- `nativeRelease(pipelinePtr: Long)`
-
-**Data flow:**
-```
-libEasyRTC.so audio callback -> Kotlin bridge -> nativeWriteFrame -> jitter queue -> AAudio playback callback -> speaker
-```
-
-### Step 3: Remote Video Decoding (RemoteRTCHelper -> native)
-
-**Java source:** `cn.easyrtc.helper.RemoteRTCHelper` (372 lines)
-**New native files:** `easyrtc_video_decoder.h`, `easyrtc_video_decoder.cpp`
-**New Kotlin bridge:** `cn.easyrtc.media.VideoDecoderPipeline`
-
-**VideoDecoderPipeline struct:**
-```
-struct VideoDecoderPipeline {
-    AMediaCodec* decoder;
-    ANativeWindow* surface;
-    std::queue<std::vector<uint8_t>> frameQueue;
-    std::mutex queueMutex;
-    std::atomic<bool> running;
-    std::atomic<bool> destroyed;
-    pthread_t decodeThread;
-    std::string currentCodecType;  // "video/avc" or "video/hevc"
-    int width;
-    int height;
-    int frameRate;
-    std::atomic<int> errorCount;
-    static constexpr int MAX_ERROR_COUNT = 5;
-    static constexpr size_t MAX_QUEUE_SIZE = 30;
-};
-```
-
-**API:** NDK MediaCodec decoder (AMediaCodec)
-**Codec support:** H.264 (video/avc), H.265 (video/hevc)
-**Error recovery:** Auto-reinit decoder after 5 consecutive errors
-**Codec switching:** Support runtime codec type change
-
-**JNI interface (VideoDecoderPipeline.kt):**
-- `nativeCreate(surface: Surface, codecType: Int, width: Int, height: Int): Long`
-- `nativeWriteFrame(pipelinePtr: Long, data: ByteArray, size: Int)`
-- `nativeReinit(pipelinePtr: Long, codecType: Int)`
-- `nativeRelease(pipelinePtr: Long)`
-
-**Data flow:**
-```
-libEasyRTC.so video callback -> Kotlin bridge -> nativeWriteFrame -> frame queue -> decodeThread (AMediaCodec decoder) -> Surface render
-```
-
-## Cleanup: Remove dlsym from existing code
-
-**File:** `easyrtc_media.cpp`
-- Remove `dlopen`/`dlsym`/`dlclose` code (lines 31-61)
-- Remove local `EasyRTC_Frame` typedef (use `EasyRTCAPI.h`)
-- Remove local `sendFrame` wrapper function
-- Replace `sendFrame(realTransceiver, &frame)` with `EasyRTC_SendFrame(realTransceiver, &frame)`
-- Add `#include "EasyRTCAPI.h"` (via `easyrtc_common.h`)
-
-**File:** `CMakeLists.txt`
-- Add include path for `include/` directory
-- Add `target_link_libraries` for `EasyRTC`
-
-## Shared Header: easyrtc_common.h
-
-```cpp
-#ifndef EASYRTC_COMMON_H
-#define EASYRTC_COMMON_H
-
-#include <android/log.h>
-#include "EasyRTCAPI.h"
-
-#define LOG_TAG "EasyRTCMedia"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
-
-#endif
-```
-
-## CMakeLists.txt Changes
+## CMakeLists.txt
 
 ```cmake
-# Add include path for EasyRTCAPI.h
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../include)
+cmake_minimum_required(VERSION 3.22)
+project(easyrtc_media)
+
+set(REPO_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../include")
 
 add_library(easyrtc_media SHARED
     easyrtc_media.cpp
     easyrtc_audio.cpp
     easyrtc_audio_playback.cpp
     easyrtc_video_decoder.cpp
+    easyrtc_session.cpp
 )
 
-# Link against prebuilt libEasyRTC.so
-find_library(EASYRTC_LIB EasyRTC PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
+target_include_directories(easyrtc_media PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${REPO_INCLUDE_DIR}
+)
+
 target_link_libraries(easyrtc_media
-    ${EASYRTC_LIB}
-    log
     android
-    camera2ndk
+    log
     mediandk
+    camera2ndk
     aaudio
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libEasyRTC.so
 )
+
+target_compile_definitions(easyrtc_media PRIVATE ANDROID_BUILD)
+
+set_target_properties(easyrtc_media PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON)
 ```
 
-## Kotlin Bridge Classes
+## What Gets Deleted
 
-All follow the same handle-based pattern as existing `MediaPipeline.kt`:
-- Store native pointer as `Long`
-- `init` / `finalize` lifecycle
-- Thin wrappers around JNI native methods
-
-## Final Architecture After Migration
-
-```
-Native Layer (libeasyrtc_media.so):
-  Camera2 NDK -> MediaCodec Encoder -> EasyRTC_SendFrame -> libEasyRTC.so
-  AAudio Record -> AEC(libaecm) -> EasyRTC_SendFrame -> libEasyRTC.so
-  libEasyRTC.so -> VideoDecoderPipeline -> Surface
-  libEasyRTC.so -> AudioPlaybackPipeline -> AAudio -> Speaker
-
-Java/Kotlin Layer (unchanged):
-  WebSocketManager (OkHttp) -> signaling
-  EasyRTCSdk -> JNI bridge to libEasyRTC.so
-  HomeFragment -> UI + native pipeline orchestration
-```
-
-## What Gets Deleted After Migration
-
-- `cn.easyrtc.helper.AudioHelper` - replaced by native AudioCapturePipeline
-- `cn.easyrtc.helper.RemoteRTCAudioHelper` - replaced by native AudioPlaybackPipeline
-- `cn.easyrtc.helper.RemoteRTCHelper` - replaced by native VideoDecoderPipeline
-- `cn.easyrtc.helper.CameraHelper` - legacy, already unused
-- `cn.easyrtc.helper.CameraHelperV2` - legacy stub
-- `cn.easyrtc.helper.VideoEncoder` - legacy, already unused
-- `cn.easyrtc.helper.MediaHelper` - codec enumeration, may still be needed for UI
-- `org.easydarwin.sw.JNIUtil` - only used by legacy CameraHelper path
+- `cn.easyrtc.peerconnection` methods: AddTransceiver, SendVideoFrame, SendAudioFrame, FreeTransceiver, OnEasyRTC_Transceiver_Callback
+- `cn.easyrtc.helper.AudioHelper`
+- `cn.easyrtc.helper.RemoteRTCAudioHelper`
+- `cn.easyrtc.helper.RemoteRTCHelper`
+- `cn.easyrtc.helper.CameraHelper`, `CameraHelperV2`
+- `cn.easyrtc.helper.VideoEncoder`
+- `cn.easyrtc.helper.MediaHelper` (may keep for UI codec enumeration)
+- `org.easydarwin.sw.JNIUtil` (only used by legacy CameraHelper)

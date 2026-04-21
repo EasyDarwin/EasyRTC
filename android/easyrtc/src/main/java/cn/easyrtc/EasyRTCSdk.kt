@@ -3,6 +3,7 @@ package cn.easyrtc
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import cn.easyrtc.media.MediaSession
 import cn.easyrtc.media.MediaPipeline
 import cn.easyrtc.model.VideoEncodeConfig
 import java.util.concurrent.ExecutorService
@@ -55,9 +56,10 @@ object EasyRTCSdk {
     private const val TAG = "EasyRTCSdk"
     private var mUserPtr: Long = 0
     private var mPeerConnection: Long = 0L
+    private var data_channel: Long = 0L
+    private var mediaSession: MediaSession? = null
     private var video_transceiver: Long = 0L
     private var audio_transceiver: Long = 0L
-    private var data_channel: Long = 0L
 
     private var peerConnection: peerconnection? = peerconnection()
 
@@ -84,26 +86,26 @@ object EasyRTCSdk {
         return peerConnection!!
     }
 
-    //获取audio_transceiver
-    fun getAudioTransceiver(): Long {
-        return this.audio_transceiver
+    fun getPeerConnectionHandle(): Long = mPeerConnection
+
+    fun getMediaSession(): MediaSession = mediaSession!!
+
+    fun syncTransceiversFromMediaSession() {
+        val session = mediaSession ?: return
+        val video = session.getVideoTransceiverHandle()
+        val audio = session.getAudioTransceiverHandle()
+        video_transceiver = video
+        audio_transceiver = audio
+        Log.d(TAG, "syncTransceiversFromMediaSession video=$video audio=$audio")
     }
 
-    // 提供封装的方法
     fun connection(stun: String, turn: String, username: String, credential: String, version: Int = 0, iceTransportPolicy: Int = 2, userPtr: Long = 0) {
         this.mUserPtr = userPtr
         this.mPeerConnection = peerConnection!!.create(version, iceTransportPolicy, stun, turn, username, credential, userPtr)
         Log.d(TAG, "初始化中... this.mPeerConnection = ${this.mPeerConnection}")
-    }
 
-    fun addTransceiver(codecID: Int, streamId: String, trackId: String, streamTrackType: Int, direction: Int) {
-        val transceiver = peerConnection!!.AddTransceiver(this.mPeerConnection, codecID, streamId, trackId, streamTrackType, direction, this.mUserPtr)
-        if (streamTrackType == EasyRTCStreamTrack.VIDEO) {
-            video_transceiver = transceiver
-        } else {
-            audio_transceiver = transceiver
-        }
-
+        mediaSession = MediaSession()
+        mediaSession!!.create(mPeerConnection)
     }
 
     fun addDataChannel(name: String = "") {
@@ -136,28 +138,27 @@ object EasyRTCSdk {
 //        Log.d(TAG, "发送数据 :data_channel = ${this.data_channel},isBinary= $isBinary,msg= $msg size = ${data.size}")
     }
 
-    fun sendVideoFrame(data: ByteArray, keyframe: Int, pts: Long) {
-        if (this.video_transceiver == 0L) return
-//        Log.d(TAG, "sendVideoFrame.....= ${this.video_transceiver} $keyframe")
-        peerConnection?.SendVideoFrame(this.video_transceiver, data, data.size, keyframe, pts)
-    }
-
-    fun sendAudioFrame(data: ByteArray, pts: Long) {
-        if (this.audio_transceiver == 0L) return
-//        Log.d(TAG, "sendAudioFrame.....= ${this.audio_transceiver}")
-        peerConnection?.SendAudioFrame(this.audio_transceiver, data, data.size, pts)
-    }
-
-
-    fun getVideoTransceiver(): Long = video_transceiver
-
+    // Backward-compatible APIs for legacy HomeFragment path.
     fun createMediaPipeline(config: VideoEncodeConfig): MediaPipeline {
         return MediaPipeline(video_transceiver, config)
     }
 
+    fun getVideoTransceiver(): Long = video_transceiver
+
+    fun getAudioTransceiver(): Long = audio_transceiver
+
+    fun sendAudioFrame(data: ByteArray, pts: Long) {
+        if (this.audio_transceiver == 0L) return
+        peerConnection?.SendAudioFrame(this.audio_transceiver, data, data.size, pts)
+    }
+
     fun release() {
+        mediaSession?.release()
+        mediaSession = null
+
         if (this.video_transceiver != 0L) peerConnection?.FreeTransceiver(this.video_transceiver)
         if (this.audio_transceiver != 0L) peerConnection?.FreeTransceiver(this.audio_transceiver)
+
         if (this.data_channel != 0L) peerConnection?.FreeDataChannel(this.data_channel)
 
         if (this.mPeerConnection != 0L) peerConnection?.release(this.mPeerConnection)

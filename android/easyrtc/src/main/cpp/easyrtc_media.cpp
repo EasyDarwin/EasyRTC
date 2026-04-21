@@ -1,66 +1,10 @@
 #include "easyrtc_media.h"
+#include "EasyRTCAPI.h"
 #include <jni.h>
-#include <android/log.h>
-#include <dlfcn.h>
 #include <cstring>
 #include <string>
 
-#define LOG_TAG "EasyRTCMedia"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-
-#define COLOR_FormatSurface 0x7f420888
-
-#define BUFFER_FLAG_CODEC_CONFIG 2
-
-typedef unsigned int UINT32;
-typedef unsigned long long UINT64;
-
-typedef struct __EasyRTC_Frame {
-    UINT32 version;
-    UINT32 index;
-    UINT32 flags;
-    UINT64 decodingTs;
-    UINT64 presentationTs;
-    UINT64 duration;
-    UINT32 size;
-    uint8_t* frameData;
-    UINT64 trackId;
-} EasyRTC_Frame;
-
-typedef int (*EasyRTC_SendFrame_t)(void*, void*);
-
-static EasyRTC_SendFrame_t g_sendFrame = nullptr;
-static void* g_dlHandle = nullptr;
-
-static int sendFrame(void* transceiver, void* frame) {
-    if (!g_sendFrame) {
-        LOGE("EasyRTC_SendFrame not resolved");
-        return -1;
-    }
-    return g_sendFrame(transceiver, frame);
-}
-
-__attribute__((constructor)) static void loadSendFrame() {
-    g_dlHandle = dlopen("libEasyRTC.so", RTLD_NOW);
-    if (g_dlHandle) {
-        void* sym = dlsym(g_dlHandle, "EasyRTC_SendFrame");
-        g_sendFrame = reinterpret_cast<EasyRTC_SendFrame_t>(sym);
-        LOGD("EasyRTC_SendFrame resolved: %p", g_sendFrame);
-    } else {
-        LOGE("Failed to dlopen libEasyRTC.so");
-    }
-}
-
-__attribute__((destructor)) static void unloadSendFrame() {
-    g_sendFrame = nullptr;
-    if (g_dlHandle) {
-        dlclose(g_dlHandle);
-        g_dlHandle = nullptr;
-    }
-}
-
-static void releaseCaptureSession(MediaPipeline* pipeline) {
+void releaseCaptureSession(MediaPipeline* pipeline) {
     if (pipeline->captureSession) {
         ACameraCaptureSession_stopRepeating(pipeline->captureSession);
         ACameraCaptureSession_close(pipeline->captureSession);
@@ -92,7 +36,7 @@ static void releaseCaptureSession(MediaPipeline* pipeline) {
     }
 }
 
-static bool startCameraCapture(MediaPipeline* pipeline) {
+bool startCameraCapture(MediaPipeline* pipeline) {
     if (!pipeline->cameraDevice || !pipeline->window) {
         LOGE("startCameraCapture: cameraDevice or window is null");
         return false;
@@ -221,7 +165,7 @@ static bool startCameraCapture(MediaPipeline* pipeline) {
     return true;
 }
 
-static std::string findCameraId(int facing) {
+std::string findCameraId(int facing) {
     ACameraManager* mgr = ACameraManager_create();
     if (!mgr) {
         LOGE("Failed to create ACameraManager");
@@ -288,7 +232,7 @@ static ACameraDevice_StateCallbacks getCameraDeviceCallbacks(void* ctx) {
     return cb;
 }
 
-static void closeCamera(MediaPipeline* pipeline) {
+void closeCamera(MediaPipeline* pipeline) {
     pthread_mutex_lock(&pipeline->mutex);
     releaseCaptureSession(pipeline);
     if (pipeline->cameraDevice) {
@@ -298,7 +242,7 @@ static void closeCamera(MediaPipeline* pipeline) {
     pthread_mutex_unlock(&pipeline->mutex);
 }
 
-static void* outputThreadFunc(void* arg) {
+void* outputThreadFunc(void* arg) {
     auto* pipeline = static_cast<MediaPipeline*>(arg);
     LOGD("Output thread started");
 
@@ -336,13 +280,15 @@ static void* outputThreadFunc(void* arg) {
         EasyRTC_Frame frame{};
         frame.version = 0;
         frame.size = static_cast<UINT32>(dataSize);
-        frame.flags = (info.flags & 1) ? 1 : 0;
+        frame.flags = (info.flags & 1)
+                ? EASYRTC_FRAME_FLAG_KEY_FRAME
+                : EASYRTC_FRAME_FLAG_NONE;
         frame.presentationTs = static_cast<UINT64>(info.presentationTimeUs) * 100ULL;
         frame.decodingTs = frame.presentationTs;
         frame.frameData = data;
         frame.trackId = 0;
 
-        if (frame.flags == 1) {
+        if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
             pthread_mutex_lock(&pipeline->mutex);
             if (pipeline->sps_pps_buffer && pipeline->sps_pps_size > 0) {
                 size_t totalSize = pipeline->sps_pps_size + dataSize;
@@ -360,18 +306,13 @@ static void* outputThreadFunc(void* arg) {
             continue;
         }
 
-        void* realTransceiver = nullptr;
-        auto* transceiverPtr = reinterpret_cast<void**>(pipeline->transceiver);
-        if (transceiverPtr) {
-            realTransceiver = *transceiverPtr;
-        }
-        if (!realTransceiver) {
+        if (!pipeline->transceiver) {
             AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
             continue;
         }
 
-        LOGD("Sending frame: transceiverWrapper=%p transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, realTransceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
-        int sendResult = sendFrame(realTransceiver, &frame);
+        LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
+        int sendResult = EasyRTC_SendFrame(pipeline->transceiver, &frame);
         if (sendResult != 0) {
             LOGE("EasyRTC_SendFrame failed: %d, size=%u, flags=%u", sendResult, frame.size, frame.flags);
         }
@@ -395,14 +336,14 @@ Java_cn_easyrtc_media_MediaPipeline_nativeCreate(
     jlong transceiverHandle, jint codec, jint width, jint height,
     jint bitrate, jint fps, jint iframeInterval) {
     auto* pipeline = new MediaPipeline();
-    pipeline->transceiver = reinterpret_cast<void*>(transceiverHandle);
+    pipeline->transceiver = reinterpret_cast<EasyRTC_Transceiver>(transceiverHandle);
     pipeline->width = width;
     pipeline->height = height;
     pipeline->bitrate = bitrate;
     pipeline->fps = fps;
     pipeline->iframeInterval = iframeInterval;
 
-    const char* mime = (codec == 1) ? "video/hevc" : "video/avc";
+    const char* mime = (codec == 6) ? "video/hevc" : "video/avc";
     AMediaFormat* format = AMediaFormat_new();
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, mime);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, width);
@@ -547,7 +488,7 @@ Java_cn_easyrtc_media_MediaPipeline_nativeSetTransceiver(
     JNIEnv* env, jobject thiz, jlong pipelinePtr, jlong transceiverHandle) {
     auto* pipeline = reinterpret_cast<MediaPipeline*>(pipelinePtr);
     if (!pipeline) return;
-    pipeline->transceiver = reinterpret_cast<void*>(transceiverHandle);
+    pipeline->transceiver = reinterpret_cast<EasyRTC_Transceiver>(transceiverHandle);
     LOGD("Transceiver updated: %p", pipeline->transceiver);
 }
 
