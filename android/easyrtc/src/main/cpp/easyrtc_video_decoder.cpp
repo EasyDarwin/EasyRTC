@@ -3,7 +3,7 @@
 #include <unistd.h>
 
 static bool initDecoder(VideoDecoderPipeline* pipeline) {
-    pthread_mutex_lock(&pipeline->mutex);
+    std::lock_guard<std::mutex> lock(pipeline->decoderMutex);
 
     if (pipeline->decoder) {
         AMediaCodec_stop(pipeline->decoder);
@@ -14,7 +14,6 @@ static bool initDecoder(VideoDecoderPipeline* pipeline) {
     pipeline->decoder = AMediaCodec_createDecoderByType(pipeline->currentCodecType.c_str());
     if (!pipeline->decoder) {
         LOGE("Failed to create video decoder for %s", pipeline->currentCodecType.c_str());
-        pthread_mutex_unlock(&pipeline->mutex);
         return false;
     }
 
@@ -32,7 +31,6 @@ static bool initDecoder(VideoDecoderPipeline* pipeline) {
         LOGE("Failed to configure video decoder: %d", status);
         AMediaCodec_delete(pipeline->decoder);
         pipeline->decoder = nullptr;
-        pthread_mutex_unlock(&pipeline->mutex);
         return false;
     }
 
@@ -41,15 +39,12 @@ static bool initDecoder(VideoDecoderPipeline* pipeline) {
         LOGE("Failed to start video decoder: %d", status);
         AMediaCodec_delete(pipeline->decoder);
         pipeline->decoder = nullptr;
-        pthread_mutex_unlock(&pipeline->mutex);
         return false;
     }
 
     pipeline->errorCount.store(0);
     LOGD("Video decoder initialized: %s %dx%d", pipeline->currentCodecType.c_str(),
             pipeline->width, pipeline->height);
-
-    pthread_mutex_unlock(&pipeline->mutex);
     return true;
 }
 
@@ -142,12 +137,7 @@ int videoDecoderStart(VideoDecoderPipeline* pipeline) {
     if (!pipeline) return -1;
 
     pipeline->running.store(true);
-    int ret = pthread_create(&pipeline->decodeThread, nullptr, decodeThreadFunc, pipeline);
-    if (ret != 0) {
-        LOGE("Failed to create decode thread: %d", ret);
-        pipeline->running.store(false);
-        return -1;
-    }
+    pipeline->decodeThread = std::thread([pipeline]() { decodeThreadFunc(pipeline); });
     return 0;
 }
 
@@ -173,9 +163,8 @@ void videoDecoderReinit(VideoDecoderPipeline* pipeline, int codecType) {
     LOGD("Reinitializing video decoder: %s -> %s", pipeline->currentCodecType.c_str(), newCodec.c_str());
 
     pipeline->running.store(false);
-    if (pipeline->decodeThread) {
-        pthread_join(pipeline->decodeThread, nullptr);
-        pipeline->decodeThread = 0;
+    if (pipeline->decodeThread.joinable()) {
+        pipeline->decodeThread.join();
     }
 
     {
@@ -187,10 +176,7 @@ void videoDecoderReinit(VideoDecoderPipeline* pipeline, int codecType) {
     initDecoder(pipeline);
 
     pipeline->running.store(true);
-    int ret = pthread_create(&pipeline->decodeThread, nullptr, decodeThreadFunc, pipeline);
-    if (ret != 0) {
-        LOGE("Failed to restart decode thread: %d", ret);
-    }
+    pipeline->decodeThread = std::thread([pipeline]() { decodeThreadFunc(pipeline); });
 }
 
 void videoDecoderRelease(VideoDecoderPipeline* pipeline) {
@@ -199,9 +185,8 @@ void videoDecoderRelease(VideoDecoderPipeline* pipeline) {
     pipeline->running.store(false);
     pipeline->destroyed.store(true);
 
-    if (pipeline->decodeThread) {
-        pthread_join(pipeline->decodeThread, nullptr);
-        pipeline->decodeThread = 0;
+    if (pipeline->decodeThread.joinable()) {
+        pipeline->decodeThread.join();
     }
 
     {
@@ -209,13 +194,14 @@ void videoDecoderRelease(VideoDecoderPipeline* pipeline) {
         while (!pipeline->frameQueue.empty()) pipeline->frameQueue.pop();
     }
 
-    pthread_mutex_lock(&pipeline->mutex);
-    if (pipeline->decoder) {
-        AMediaCodec_stop(pipeline->decoder);
-        AMediaCodec_delete(pipeline->decoder);
-        pipeline->decoder = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(pipeline->decoderMutex);
+        if (pipeline->decoder) {
+            AMediaCodec_stop(pipeline->decoder);
+            AMediaCodec_delete(pipeline->decoder);
+            pipeline->decoder = nullptr;
+        }
     }
-    pthread_mutex_unlock(&pipeline->mutex);
 
     if (pipeline->surface) {
         ANativeWindow_release(pipeline->surface);

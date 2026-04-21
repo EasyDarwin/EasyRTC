@@ -3,22 +3,18 @@
 
 #include "easyrtc_common.h"
 #include <aaudio/AAudio.h>
-#include <pthread.h>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 
 struct AudioCapturePipeline {
     AAudioStream* stream = nullptr;
     EasyRTC_Transceiver audioTransceiver = nullptr;
     std::atomic<bool> running{false};
-    pthread_mutex_t mutex;
+    std::mutex mutex;
 
-    AudioCapturePipeline() {
-        pthread_mutex_init(&mutex, nullptr);
-    }
-    ~AudioCapturePipeline() {
-        pthread_mutex_destroy(&mutex);
-    }
+    AudioCapturePipeline() = default;
+    ~AudioCapturePipeline() = default;
     AudioCapturePipeline(const AudioCapturePipeline&) = delete;
     AudioCapturePipeline& operator=(const AudioCapturePipeline&) = delete;
 };

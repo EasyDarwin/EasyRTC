@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
+import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easyrtc.EasyRTCPeerConnectionState
 import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCStreamTrack
@@ -44,7 +45,7 @@ import java.util.Date
 import java.util.Locale
 
 
-class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketManager.WebSocketCallback,
+class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     EasyRTCSdk.EasyRTCEventListener {
 
     companion object {
@@ -68,7 +69,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
     private lateinit var drawerManager: DrawerManager
     private lateinit var mMagicFileHelper: MagicFileHelper
 
-    private var mWebSocketManager: WebSocketManager? = null
+    private var webSocketService: WebSocketService? = null
 
     private var tvLogs: TextView? = null
     private var logs: StringBuilder? = null
@@ -91,13 +92,24 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        mWebSocketManager = WebSocketManager(url = "ws://rts.easyrtc.cn:19000", token = "", callback = this)
-        mWebSocketManager?.connect()
+        (activity as? MainActivity)?.webSocketServiceLiveData?.observe(viewLifecycleOwner) { service ->
+            webSocketService = service
+            service?.events?.observe(viewLifecycleOwner) { event ->
+                when (event) {
+                    is WebSocketService.Event.Connected -> onWSConnected()
+                    is WebSocketService.Event.Message -> onWSMessage(event.text)
+                    is WebSocketService.Event.Disconnected -> onWSDisconnected(event.code, event.reason)
+                    is WebSocketService.Event.Error -> onWSError(event.throwable)
+                    is WebSocketService.Event.OnlineUsers -> onWSOnlineUsers(event.users)
+                    is WebSocketService.Event.Logs -> onWSLogs(event.text)
+                }
+            }
+        }
 
         drawerManager = DrawerManager(requireContext(), view) { user ->
             activeSessionUser = user.username
             Toast.makeText(requireContext(), "正在连接 ${user.username}", Toast.LENGTH_LONG).show()
-            mWebSocketManager?.call(user.uuid)
+            webSocketService?.call(user.uuid)
         }
 
         EasyRTCSdk.getInstance()
@@ -179,12 +191,16 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
 
         endCallButton.setOnClickListener {
             Log.d(TAG, "挂电话")
-            endCallButton.visibility = View.INVISIBLE
-            stopEasyRTC()
-            val session = EasyRTCSdk.getMediaSession()
-            session.stopPreview()
-            EasyRTCSdk.release()
-            liveSessionController.onClosed()
+//            endCallButton.visibility = View.INVISIBLE
+//            stopEasyRTC()
+//            val session = EasyRTCSdk.getMediaSession()
+//            session.stopPreview()
+//            EasyRTCSdk.release()
+//            liveSessionController.onClosed()
+            (activity as? MainActivity)?.apply {
+//                switchFragment(if (lastFragment != null) lastFragment!! else "hub")
+                bottomNavigationView?.selectedItemId = R.id.navigation_hub
+            }
         }
 
         switchCameraButton.setOnClickListener {
@@ -312,9 +328,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
         super.onDestroyView()
         Log.d(TAG, "onDestroyView")
         stopEasyRTC()
-        mWebSocketManager?.shutdown()
-        mWebSocketManager = null
-
         val session = EasyRTCSdk.getMediaSession()
         session.stopPreview()
         EasyRTCSdk.release()
@@ -349,10 +362,10 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
         }
     }
 
-    override fun onWSConnected() {
+    private fun onWSConnected() {
     }
 
-    override fun onWSMessage(text: String) {
+    private fun onWSMessage(text: String) {
         val json = JSONObject(text)
         if (json.getInt("code") == WebSocketManager.HPACKLOGINUSERINFO) {
             if (json.getInt("status") == 0) {
@@ -364,21 +377,21 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
         }
     }
 
-    override fun onWSDisconnected(code: Int, reason: String) {
+    private fun onWSDisconnected(code: Int, reason: String) {
     }
 
-    override fun onWSError(error: Throwable) {
+    private fun onWSError(error: Throwable) {
         Log.d(TAG, "onWSError state =${error.message} ")
     }
 
-    override fun onWSOnlineUsers(users: List<EasyRTCUser>) {
+    private fun onWSOnlineUsers(users: List<EasyRTCUser>) {
         Log.d(TAG, "现在用户 = ${users.size}")
         requireActivity().runOnUiThread {
             drawerManager.updateUserListUI(users)
         }
     }
 
-    override fun onWSLogs(txt: String) {
+    private fun onWSLogs(txt: String) {
         appendLog(txt)
     }
 
@@ -407,7 +420,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
     }
 
     override fun onSDPCallback(isOffer: Int, sdp: String) {
-        mWebSocketManager?.sendOfferSDP(sdp, isOffer == 1)
+        webSocketService?.sendOfferSDP(sdp, isOffer == 1)
         if (isOffer == 1) appendLog(sdp) else {
             appendLog("======= answer ====== \n $sdp")
         }

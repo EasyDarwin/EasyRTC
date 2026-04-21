@@ -4,10 +4,11 @@
 #include "easyrtc_common.h"
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
-#include <pthread.h>
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <thread>
+#include <mutex>
 
 struct MediaPipeline {
     AMediaCodec* encoder = nullptr;
@@ -20,18 +21,12 @@ struct MediaPipeline {
     int fps = 0;
     int iframeInterval = 0;
     std::atomic<bool> running{false};
-    pthread_t output_thread = 0;
+    std::thread outputThread;
     uint8_t* sps_pps_buffer = nullptr;
     size_t sps_pps_size = 0;
-    pthread_mutex_t mutex;
+    std::recursive_mutex mutex;
 
-    MediaPipeline() {
-        pthread_mutexattr_t attr;
-        pthread_mutexattr_init(&attr);
-        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-        pthread_mutex_init(&mutex, &attr);
-        pthread_mutexattr_destroy(&attr);
-    }
+    MediaPipeline() = default;
     MediaPipeline(const MediaPipeline&) = delete;
     MediaPipeline& operator=(const MediaPipeline&) = delete;
     MediaPipeline(MediaPipeline&&) = delete;

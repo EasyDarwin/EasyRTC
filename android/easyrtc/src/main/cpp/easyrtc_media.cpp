@@ -67,12 +67,11 @@ void* outputThreadFunc(void* arg) {
         size_t dataSize = static_cast<size_t>(info.size);
 
         if (info.flags & BUFFER_FLAG_CODEC_CONFIG) {
-            pthread_mutex_lock(&pipeline->mutex);
+            std::lock_guard<std::recursive_mutex> lock(pipeline->mutex);
             delete[] pipeline->sps_pps_buffer;
             pipeline->sps_pps_buffer = new uint8_t[dataSize];
             memcpy(pipeline->sps_pps_buffer, data, dataSize);
             pipeline->sps_pps_size = dataSize;
-            pthread_mutex_unlock(&pipeline->mutex);
             AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
             continue;
         }
@@ -89,7 +88,7 @@ void* outputThreadFunc(void* arg) {
         frame.trackId = 0;
 
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            pthread_mutex_lock(&pipeline->mutex);
+            std::lock_guard<std::recursive_mutex> lock(pipeline->mutex);
             if (pipeline->sps_pps_buffer && pipeline->sps_pps_size > 0) {
                 size_t totalSize = pipeline->sps_pps_size + dataSize;
                 auto* combined = new uint8_t[totalSize];
@@ -98,7 +97,6 @@ void* outputThreadFunc(void* arg) {
                 frame.frameData = combined;
                 frame.size = static_cast<UINT32>(totalSize);
             }
-            pthread_mutex_unlock(&pipeline->mutex);
         }
 
         if (!pipeline->transceiver) {

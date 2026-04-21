@@ -6,8 +6,8 @@
 #include <camera/NdkCameraDevice.h>
 #include <camera/NdkCameraCaptureSession.h>
 #include <camera/NdkCaptureRequest.h>
-#include <pthread.h>
 #include <atomic>
+#include <mutex>
 
 struct MediaSession {
     EasyRTC_PeerConnection peerConnection = nullptr;
@@ -24,8 +24,7 @@ struct MediaSession {
     ACameraOutputTarget* encoderTarget = nullptr;
     ACameraOutputTarget* previewTarget = nullptr;
     ACaptureRequest* captureRequest = nullptr;
-    pthread_mutex_t cameraMutex;
-    MediaSession() { pthread_mutex_init(&cameraMutex, nullptr); }
+    std::mutex cameraMutex;
 
     struct MediaPipeline* videoEncoder = nullptr;
     struct AudioCapturePipeline* audioCapture = nullptr;

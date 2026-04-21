@@ -35,6 +35,10 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name="cn.easydarwin.easyrtc.service.WebSocketService"
+            android:exported="false" />
+
     </application>
 
 </manifest>

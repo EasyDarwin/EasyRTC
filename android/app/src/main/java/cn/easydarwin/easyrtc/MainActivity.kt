@@ -1,16 +1,22 @@
 package cn.easydarwin.easyrtc
 
 import android.Manifest
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.IBinder
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.Fragment
+import androidx.lifecycle.MutableLiveData
 import cn.easydarwin.easyrtc.fragment.AboutFragment
 import cn.easydarwin.easyrtc.fragment.SettingFragment
+import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.hub.HubFragment
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
 import cn.easydarwin.easyrtc.utils.SPUtil
@@ -19,7 +25,9 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class MainActivity : AppCompatActivity() {
 
-    private var bottomNavigationView: BottomNavigationView? = null
+    var bottomNavigationView: BottomNavigationView? = null
+    val webSocketServiceLiveData = MutableLiveData<WebSocketService?>()
+    private var webSocketServiceConnection: ServiceConnection? = null
     var currentFragmentTag: String? = null
     var cFragmentTag: String?
         get() = currentFragmentTag
@@ -39,8 +47,25 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         checkPermission()
+        bindWebSocketService()
 
         initBNView()
+    }
+
+    private fun bindWebSocketService() {
+        if (webSocketServiceConnection != null) return
+        val connection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                val binder = service as? WebSocketService.LocalBinder
+                webSocketServiceLiveData.postValue(binder?.getService())
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                webSocketServiceLiveData.postValue(null)
+            }
+        }
+        webSocketServiceConnection = connection
+        bindService(Intent(this, WebSocketService::class.java), connection, Context.BIND_AUTO_CREATE)
     }
 
     private fun checkPermission() {
@@ -57,22 +82,22 @@ class MainActivity : AppCompatActivity() {
         bottomNavigationView?.setOnItemSelectedListener {
             when (it.itemId) {
                 R.id.navigation_hub -> {
-                    switchFragment(HubFragment(), "hub")
+                    switchFragment("hub")
                     true
                 }
 
                 R.id.navigation_live -> {
-                    switchFragment(LiveFragment.newInstance(), "live")
+                    switchFragment("live")
                     true
                 }
 
                 R.id.navigation_setting -> {
-                    switchFragment(SettingFragment(), "setting")
+                    switchFragment("setting")
                     true
                 }
 
                 R.id.navigation_about -> {
-                    switchFragment(AboutFragment(), "about")
+                    switchFragment("about")
                     true
                 }
 
@@ -83,19 +108,26 @@ class MainActivity : AppCompatActivity() {
         bottomNavigationView?.selectedItemId = R.id.navigation_hub
     }
 
-    private fun switchFragment(fragment: Fragment, tag: String) {
+    fun switchFragment(tag: String) {
         val fm = supportFragmentManager
         if (fm.isStateSaved) return
 
         val transaction = fm.beginTransaction()
         currentFragmentTag = tag
 
-        fm.fragments.forEach { transaction.hide(it) }
+        fm.fragments.forEach { transaction.remove(it) }
 
         val exist = fm.findFragmentByTag(tag)
         if (exist != null) {
             transaction.show(exist)
         } else {
+            val fragment = when (tag) {
+                "hub" -> HubFragment()
+                "live" -> LiveFragment.newInstance()
+                "setting" -> SettingFragment()
+                "about" -> AboutFragment()
+                else -> return
+            }
             transaction.add(R.id.fragment_container, fragment, tag)
         }
 
@@ -137,5 +169,11 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.MODIFY_AUDIO_SETTINGS
         )
+    }
+
+    override fun onDestroy() {
+        webSocketServiceConnection?.let { unbindService(it) }
+        webSocketServiceConnection = null
+        super.onDestroy()
     }
 }

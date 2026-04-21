@@ -8,6 +8,8 @@
 #include <cassert>
 #include <jni.h>
 #include <cstring>
+#include <thread>
+#include <mutex>
 
 static void releaseCaptureSession(MediaSession* s) {
     if (s->captureSession) {
@@ -81,13 +83,12 @@ static bool createCaptureSession(MediaSession* s, bool withEncoder) {
 }
 
 static void closeCamera(MediaSession* s) {
-    pthread_mutex_lock(&s->cameraMutex);
+    std::lock_guard<std::mutex> lock(s->cameraMutex);
     releaseCaptureSession(s);
     if (s->cameraDevice) {
         ACameraDevice_close(s->cameraDevice);
         s->cameraDevice = nullptr;
     }
-    pthread_mutex_unlock(&s->cameraMutex);
 }
 
 static int mediaTransceiverCallback(void* userPtr,
@@ -390,15 +391,16 @@ Java_cn_easyrtc_media_MediaSession_nativeStart(JNIEnv* env, jobject thiz, jlong 
         if (status != AMEDIA_OK) { LOGE("Failed to start encoder: %d", status); return -1; }
 
         p->running.store(true);
-        pthread_create(&p->output_thread, nullptr, outputThreadFunc, p);
+        p->outputThread = std::thread([p]() {
+            outputThreadFunc(p);
+        });
 
         if (session->cameraDevice) {
-            pthread_mutex_lock(&session->cameraMutex);
+            std::lock_guard<std::mutex> lock(session->cameraMutex);
             releaseCaptureSession(session);
             if (!createCaptureSession(session, true)) {
                 LOGE("Failed to recreate capture session with encoder");
             }
-            pthread_mutex_unlock(&session->cameraMutex);
         }
         LOGD("Video encoder started");
     }
@@ -436,26 +438,28 @@ Java_cn_easyrtc_media_MediaSession_nativeStop(JNIEnv* env, jobject thiz, jlong s
         auto* p = session->videoEncoder;
         if (p->running.exchange(false)) {
             if (p->encoder) { AMediaCodec_signalEndOfInputStream(p->encoder); }
-            if (p->output_thread) { pthread_join(p->output_thread, nullptr); p->output_thread = 0; }
+            if (p->outputThread.joinable()) { p->outputThread.join(); }
             if (p->encoder) { AMediaCodec_stop(p->encoder); }
         }
         if (p->encoder) { AMediaCodec_delete(p->encoder); p->encoder = nullptr; }
         if (p->format) { AMediaFormat_delete(p->format); p->format = nullptr; }
         if (p->window) { ANativeWindow_release(p->window); p->window = nullptr; }
-        pthread_mutex_lock(&p->mutex);
-        delete[] p->sps_pps_buffer; p->sps_pps_buffer = nullptr; p->sps_pps_size = 0;
-        pthread_mutex_unlock(&p->mutex);
+        {
+            std::lock_guard<std::recursive_mutex> lock(p->mutex);
+            delete[] p->sps_pps_buffer;
+            p->sps_pps_buffer = nullptr;
+            p->sps_pps_size = 0;
+        }
         delete p;
         session->videoEncoder = nullptr;
     }
 
     if (session->cameraDevice) {
-        pthread_mutex_lock(&session->cameraMutex);
+        std::lock_guard<std::mutex> lock(session->cameraMutex);
         releaseCaptureSession(session);
         if (session->previewWindow) {
             createCaptureSession(session, false);
         }
-        pthread_mutex_unlock(&session->cameraMutex);
     }
 
     LOGD("MediaSession stopped");
@@ -467,7 +471,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
     assert(session && "Invalid session");
 
-    pthread_mutex_lock(&session->cameraMutex);
+    std::lock_guard<std::mutex> lock(session->cameraMutex);
     releaseCaptureSession(session);
     if (session->cameraDevice) {
         ACameraDevice_close(session->cameraDevice);
@@ -477,7 +481,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
     session->cameraFacing = (session->cameraFacing == 0) ? 1 : 0;
 
     ACameraManager* cameraMgr = ACameraManager_create();
-    if (!cameraMgr) { pthread_mutex_unlock(&session->cameraMutex); return; }
+    if (!cameraMgr) { return; }
 
     std::string cameraId = findCameraId(session->cameraFacing);
     if (!cameraId.empty()) {
@@ -493,7 +497,6 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
         }
     }
     ACameraManager_delete(cameraMgr);
-    pthread_mutex_unlock(&session->cameraMutex);
 }
 
 JNIEXPORT void JNICALL
@@ -539,7 +542,6 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
 
     if (session->decoderSurface) { ANativeWindow_release(session->decoderSurface); session->decoderSurface = nullptr; }
 
-    pthread_mutex_destroy(&session->cameraMutex);
     delete session;
     LOGD("MediaSession released");
 }
