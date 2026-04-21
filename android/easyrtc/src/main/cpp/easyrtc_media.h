@@ -4,12 +4,6 @@
 #include "easyrtc_common.h"
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
-#include <camera/NdkCameraDevice.h>
-#include <camera/NdkCameraManager.h>
-#include <camera/NdkCameraMetadataTags.h>
-#include <camera/NdkCameraCaptureSession.h>
-#include <camera/NdkCaptureRequest.h>
-#include <android/native_window_jni.h>
 #include <pthread.h>
 #include <atomic>
 #include <cstdint>
@@ -31,17 +25,6 @@ struct MediaPipeline {
     size_t sps_pps_size = 0;
     pthread_mutex_t mutex;
 
-    ACameraDevice* cameraDevice = nullptr;
-    ACameraCaptureSession* captureSession = nullptr;
-    ACaptureSessionOutputContainer* outputContainer = nullptr;
-    ACaptureSessionOutput* encoderOutput = nullptr;
-    ACaptureSessionOutput* previewOutput = nullptr;
-    ACameraOutputTarget* encoderTarget = nullptr;
-    ACameraOutputTarget* previewTarget = nullptr;
-    ACaptureRequest* captureRequest = nullptr;
-    ANativeWindow* previewWindow = nullptr;
-    int cameraFacing = 0;
-
     MediaPipeline() {
         pthread_mutexattr_t attr;
         pthread_mutexattr_init(&attr);
@@ -56,9 +39,6 @@ struct MediaPipeline {
 };
 
 std::string findCameraId(int facing);
-bool startCameraCapture(MediaPipeline* pipeline);
-void releaseCaptureSession(MediaPipeline* pipeline);
-void closeCamera(MediaPipeline* pipeline);
 void* outputThreadFunc(void* arg);
 
 #endif

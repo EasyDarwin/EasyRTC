@@ -181,6 +181,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
             Log.d(TAG, "挂电话")
             endCallButton.visibility = View.INVISIBLE
             stopEasyRTC()
+            val session = EasyRTCSdk.getMediaSession()
+            session.stopPreview()
             EasyRTCSdk.release()
             liveSessionController.onClosed()
         }
@@ -264,35 +266,22 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
         }
 
         try {
-            val config = getVideoEncodeConfig()
             val session = EasyRTCSdk.getMediaSession()
 
-            val setupResult = session.setupVideoEncoder(config)
-            if (setupResult != 0) {
-                Log.e(TAG, "setupVideoEncoder() failed: $setupResult")
-                pipelineController.reportError("setupVideoEncoder failed: $setupResult")
-                return
-            }
-
             if (mainVideoView.isAvailable) {
-                mainVideoView.surfaceTexture?.let {
-                    session.setPreviewSurface(Surface(it))
+                val result = session.startPreview(Surface(mainVideoView.surfaceTexture))
+                if (result != 0) {
+                    Log.e(TAG, "startPreview() failed: $result")
+                    pipelineController.reportError("startPreview failed: $result")
+                    return
                 }
-            }
-
-            val result = session.start()
-            if (result != 0) {
-                Log.e(TAG, "MediaSession.start() failed: $result")
-                pipelineController.reportError("start failed: $result")
-                session.stop()
-                return
             }
 
             pipelineController.start()
             isMainViewShowingLocal = true
-            Log.d(TAG, "Native camera preview started via MediaSession")
+            Log.d(TAG, "Camera preview started")
         } catch (e: Exception) {
-            Log.e(TAG, "Native camera preview failed: ${e.message}")
+            Log.e(TAG, "Camera preview failed: ${e.message}")
             pipelineController.reportError(e.message ?: "unknown")
         }
     }
@@ -306,11 +295,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
         EasyRTCSdk.getMediaSession().switchCamera()
         pipelineController.switchCamera()
         Log.d(TAG, "Camera switched")
-    }
-
-    private fun stopNativeMediaPipeline() {
-        EasyRTCSdk.getMediaSession().stop()
-        pipelineController.stop()
     }
 
     override fun onPause() {
@@ -330,6 +314,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
         stopEasyRTC()
         mWebSocketManager?.shutdown()
         mWebSocketManager = null
+
+        val session = EasyRTCSdk.getMediaSession()
+        session.stopPreview()
         EasyRTCSdk.release()
     }
 
@@ -404,11 +391,13 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
     override fun connectionStateChange(state: Int) {
         Log.d(TAG, "connectionStateChange state =$state  ${state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED}")
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
-            val session = EasyRTCSdk.getMediaSession()
-            session.requestKeyFrame()
-
-            ensureRemoteRTCHelper()
-            liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
+            activity?.runOnUiThread {
+                val session = EasyRTCSdk.getMediaSession()
+                session.start()
+                session.requestKeyFrame()
+                ensureRemoteRTCHelper()
+                liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
+            }
 
         } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED) {
             liveSessionController.onFailed()
@@ -505,8 +494,10 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
         remoteRTCHelper = RemoteRTCHelper(Surface(renderSurfaceTexture))
     }
 
-    private fun stopEasyRTC() {
-        stopNativeMediaPipeline()
+    private fun stopEasyRTC() {        
+        val session = EasyRTCSdk.getMediaSession()
+        session.stop()
+        pipelineController.stop()
         remoteRTCHelper?.release()
         remoteRTCHelper = null
     }

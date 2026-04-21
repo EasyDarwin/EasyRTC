@@ -12,6 +12,14 @@ class MediaSession {
         nativePtr = nativeCreate()
     }
 
+    fun startPreview(surface: Surface): Int {
+        return nativeStartPreview(nativePtr, surface)
+    }
+
+    fun stopPreview() {
+        nativeStopPreview(nativePtr)
+    }
+
     fun setPeerConnection(peerConnectionHandle: Long) {
         nativeSetPeerConnection(nativePtr, peerConnectionHandle)
     }
@@ -68,6 +76,8 @@ class MediaSession {
     }
 
     private external fun nativeCreate(): Long
+    private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
+    private external fun nativeStopPreview(sessionPtr: Long)
     private external fun nativeSetPeerConnection(sessionPtr: Long, peerConnectionHandle: Long)
     private external fun nativeAddTransceivers(sessionPtr: Long, videoCodec: Int, audioCodec: Int): Int
     private external fun nativeSetupVideoEncoder(sessionPtr: Long, codec: Int, width: Int, height: Int, bitrate: Int, fps: Int, iframeInterval: Int): Int

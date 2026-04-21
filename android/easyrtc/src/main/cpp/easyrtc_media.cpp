@@ -2,167 +2,8 @@
 #include "EasyRTCAPI.h"
 #include <cstring>
 #include <string>
-
-void releaseCaptureSession(MediaPipeline* pipeline) {
-    if (pipeline->captureSession) {
-        ACameraCaptureSession_stopRepeating(pipeline->captureSession);
-        ACameraCaptureSession_close(pipeline->captureSession);
-        pipeline->captureSession = nullptr;
-    }
-    if (pipeline->captureRequest) {
-        ACaptureRequest_free(pipeline->captureRequest);
-        pipeline->captureRequest = nullptr;
-    }
-    if (pipeline->encoderTarget) {
-        ACameraOutputTarget_free(pipeline->encoderTarget);
-        pipeline->encoderTarget = nullptr;
-    }
-    if (pipeline->previewTarget) {
-        ACameraOutputTarget_free(pipeline->previewTarget);
-        pipeline->previewTarget = nullptr;
-    }
-    if (pipeline->encoderOutput) {
-        ACaptureSessionOutput_free(pipeline->encoderOutput);
-        pipeline->encoderOutput = nullptr;
-    }
-    if (pipeline->previewOutput) {
-        ACaptureSessionOutput_free(pipeline->previewOutput);
-        pipeline->previewOutput = nullptr;
-    }
-    if (pipeline->outputContainer) {
-        ACaptureSessionOutputContainer_free(pipeline->outputContainer);
-        pipeline->outputContainer = nullptr;
-    }
-}
-
-bool startCameraCapture(MediaPipeline* pipeline) {
-    if (!pipeline->cameraDevice || !pipeline->window) {
-        LOGE("startCameraCapture: cameraDevice or window is null");
-        return false;
-    }
-
-    pthread_mutex_lock(&pipeline->mutex);
-    releaseCaptureSession(pipeline);
-
-    camera_status_t camStatus;
-
-    camStatus = ACaptureSessionOutputContainer_create(&pipeline->outputContainer);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to create output container: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    camStatus = ACaptureSessionOutput_create(reinterpret_cast<ACameraWindowType*>(pipeline->window),
-                                              &pipeline->encoderOutput);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to create encoder output: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    camStatus = ACaptureSessionOutputContainer_add(pipeline->outputContainer, pipeline->encoderOutput);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to add encoder output to container: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    camStatus = ACameraDevice_createCaptureRequest(pipeline->cameraDevice, TEMPLATE_RECORD,
-                                                    &pipeline->captureRequest);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to create capture request: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    camStatus = ACameraOutputTarget_create(reinterpret_cast<ACameraWindowType*>(pipeline->window),
-                                            &pipeline->encoderTarget);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to create encoder target: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    camStatus = ACaptureRequest_addTarget(pipeline->captureRequest, pipeline->encoderTarget);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to add encoder target to request: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    if (pipeline->previewWindow) {
-        camStatus = ACaptureSessionOutput_create(reinterpret_cast<ACameraWindowType*>(pipeline->previewWindow),
-                                                  &pipeline->previewOutput);
-        if (camStatus != ACAMERA_OK) {
-            LOGE("Failed to create preview output: %d", camStatus);
-            releaseCaptureSession(pipeline);
-            pthread_mutex_unlock(&pipeline->mutex);
-            return false;
-        }
-
-        camStatus = ACaptureSessionOutputContainer_add(pipeline->outputContainer, pipeline->previewOutput);
-        if (camStatus != ACAMERA_OK) {
-            LOGE("Failed to add preview output to container: %d", camStatus);
-            releaseCaptureSession(pipeline);
-            pthread_mutex_unlock(&pipeline->mutex);
-            return false;
-        }
-
-        camStatus = ACameraOutputTarget_create(reinterpret_cast<ACameraWindowType*>(pipeline->previewWindow),
-                                                &pipeline->previewTarget);
-        if (camStatus != ACAMERA_OK) {
-            LOGE("Failed to create preview target: %d", camStatus);
-            releaseCaptureSession(pipeline);
-            pthread_mutex_unlock(&pipeline->mutex);
-            return false;
-        }
-
-        camStatus = ACaptureRequest_addTarget(pipeline->captureRequest, pipeline->previewTarget);
-        if (camStatus != ACAMERA_OK) {
-            LOGE("Failed to add preview target to request: %d", camStatus);
-            releaseCaptureSession(pipeline);
-            pthread_mutex_unlock(&pipeline->mutex);
-            return false;
-        }
-    }
-
-    uint8_t afMode = ACAMERA_CONTROL_AF_MODE_CONTINUOUS_VIDEO;
-    ACaptureRequest_setEntry_u8(pipeline->captureRequest,
-                                 ACAMERA_CONTROL_AF_MODE, 1, &afMode);
-
-    static const ACameraCaptureSession_stateCallbacks sessionCallbacks = {
-        nullptr, nullptr, nullptr, nullptr
-    };
-
-    camStatus = ACameraDevice_createCaptureSession(pipeline->cameraDevice, pipeline->outputContainer,
-                                                    &sessionCallbacks, &pipeline->captureSession);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to create capture session: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    camStatus = ACameraCaptureSession_setRepeatingRequest(pipeline->captureSession, nullptr, 1,
-                                                          &pipeline->captureRequest, nullptr);
-    if (camStatus != ACAMERA_OK) {
-        LOGE("Failed to set repeating request: %d", camStatus);
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-        return false;
-    }
-
-    LOGD("Camera capture session started");
-    pthread_mutex_unlock(&pipeline->mutex);
-    return true;
-}
+#include <camera/NdkCameraManager.h>
+#include <camera/NdkCameraMetadataTags.h>
 
 std::string findCameraId(int facing) {
     ACameraManager* mgr = ACameraManager_create();
@@ -199,46 +40,6 @@ std::string findCameraId(int facing) {
 
     ACameraManager_delete(mgr);
     return result;
-}
-
-static void onCameraDeviceDisconnected(void* context, ACameraDevice* device) {
-    LOGD("Camera device disconnected");
-    auto* pipeline = static_cast<MediaPipeline*>(context);
-    if (pipeline) {
-        pthread_mutex_lock(&pipeline->mutex);
-        pipeline->cameraDevice = nullptr;
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-    }
-}
-
-static void onCameraDeviceError(void* context, ACameraDevice* device, int error) {
-    LOGE("Camera device error: %d", error);
-    auto* pipeline = static_cast<MediaPipeline*>(context);
-    if (pipeline) {
-        pthread_mutex_lock(&pipeline->mutex);
-        pipeline->cameraDevice = nullptr;
-        releaseCaptureSession(pipeline);
-        pthread_mutex_unlock(&pipeline->mutex);
-    }
-}
-
-static ACameraDevice_StateCallbacks getCameraDeviceCallbacks(void* ctx) {
-    ACameraDevice_StateCallbacks cb{};
-    cb.context = ctx;
-    cb.onDisconnected = onCameraDeviceDisconnected;
-    cb.onError = onCameraDeviceError;
-    return cb;
-}
-
-void closeCamera(MediaPipeline* pipeline) {
-    pthread_mutex_lock(&pipeline->mutex);
-    releaseCaptureSession(pipeline);
-    if (pipeline->cameraDevice) {
-        ACameraDevice_close(pipeline->cameraDevice);
-        pipeline->cameraDevice = nullptr;
-    }
-    pthread_mutex_unlock(&pipeline->mutex);
 }
 
 void* outputThreadFunc(void* arg) {
@@ -305,11 +106,6 @@ void* outputThreadFunc(void* arg) {
             continue;
         }
 
-        if (!pipeline->transceiver) {
-            AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
-            continue;
-        }
-
         LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
         int sendResult = EasyRTC_SendFrame(pipeline->transceiver, &frame);
         if (sendResult != 0) {
@@ -326,5 +122,3 @@ void* outputThreadFunc(void* arg) {
     LOGD("Output thread exiting");
     return nullptr;
 }
-
-

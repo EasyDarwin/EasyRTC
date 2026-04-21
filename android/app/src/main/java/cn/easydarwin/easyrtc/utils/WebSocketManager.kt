@@ -178,6 +178,16 @@ public class WebSocketManager(private val url: String, private val token: String
         }
 //        Log.d(TAG, " mStunTurnInfo= ${mStunTurnInfo.toString()},uuid = $uuid")
         this.uuidClientB = uuid
+        EasyRTCSdk.setEncoderConfig(
+            cn.easyrtc.model.VideoEncodeConfig(
+                SPUtil.getInstance().getIsHevc(),
+                SPUtil.getInstance().getVideoFrameRate(),
+                SPUtil.getInstance().cameraId,
+                SPUtil.getInstance().getVideoResolution(),
+                cn.easyrtc.model.VideoEncodeConfig.ORIENTATION_90,
+                SPUtil.getInstance().getVideoBitRateKbps()
+            )
+        )
         EasyRTCSdk.connection(
             "stun:${mStunTurnInfo.stunServer}",
             "turn:${mStunTurnInfo.turnServer}",
