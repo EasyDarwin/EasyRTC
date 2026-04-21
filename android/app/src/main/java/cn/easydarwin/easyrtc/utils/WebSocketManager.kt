@@ -230,7 +230,6 @@ public class WebSocketManager(private val url: String, private val token: String
 
             val session = EasyRTCSdk.getMediaSession()
             session.addTransceivers(videoCodec, audioCodec)
-            EasyRTCSdk.syncTransceiversFromMediaSession()
 
             if (sdp.contains("webrtc-datachannel", ignoreCase = true)) EasyRTCSdk.addDataChannel()
             EasyRTCSdk.createAnswer(sdp)  //创建 Answer 的 SDP
@@ -266,8 +265,6 @@ public class WebSocketManager(private val url: String, private val token: String
             val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
             val session = EasyRTCSdk.getMediaSession()
             session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
-            EasyRTCSdk.syncTransceiversFromMediaSession()
-            //创建消息轨道
             EasyRTCSdk.addDataChannel("123") //name 设备端随机字符串
             EasyRTCSdk.createOffer()  //创建  Offer  sdp
 

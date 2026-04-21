@@ -1,33 +1,31 @@
 package cn.easyrtc.media
 
 import android.view.Surface
+import cn.easyrtc.model.VideoEncodeConfig
 
 class MediaSession {
 
     private var nativePtr: Long = 0
 
-    fun create(peerConnectionHandle: Long) {
+    fun create() {
         assert(nativePtr == 0L)
-        nativePtr = nativeCreate(peerConnectionHandle)
+        nativePtr = nativeCreate()
+    }
+
+    fun setPeerConnection(peerConnectionHandle: Long) {
+        nativeSetPeerConnection(nativePtr, peerConnectionHandle)
     }
 
     fun addTransceivers(videoCodec: Int, audioCodec: Int): Int {
         return nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
     }
 
-    fun setupVideoEncoder(
-        codec: Int = 1,
-        width: Int = 720,
-        height: Int = 1280,
-        bitrate: Int = 2000000,
-        fps: Int = 30,
-        iframeInterval: Int = 1
-    ): Int {
-        return nativeSetupVideoEncoder(nativePtr, codec, width, height, bitrate, fps, iframeInterval)
-    }
-
-    fun createEncoderSurface(): Surface? {
-        return nativeCreateEncoderSurface(nativePtr)
+    fun setupVideoEncoder(config: VideoEncodeConfig): Int {
+        val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
+        return nativeSetupVideoEncoder(nativePtr, codec,
+            config.getWidth(), config.getHeight(),
+            config.getBitRate(), config.getFrameRate(),
+            config.getIFrameInterval())
     }
 
     fun setPreviewSurface(surface: Surface?) {
@@ -69,10 +67,10 @@ class MediaSession {
         }
     }
 
-    private external fun nativeCreate(peerConnectionHandle: Long): Long
+    private external fun nativeCreate(): Long
+    private external fun nativeSetPeerConnection(sessionPtr: Long, peerConnectionHandle: Long)
     private external fun nativeAddTransceivers(sessionPtr: Long, videoCodec: Int, audioCodec: Int): Int
     private external fun nativeSetupVideoEncoder(sessionPtr: Long, codec: Int, width: Int, height: Int, bitrate: Int, fps: Int, iframeInterval: Int): Int
-    private external fun nativeCreateEncoderSurface(sessionPtr: Long): Surface?
     private external fun nativeSetPreviewSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeStart(sessionPtr: Long): Int
@@ -84,6 +82,9 @@ class MediaSession {
     private external fun nativeRelease(sessionPtr: Long)
 
     companion object {
+        const val CODEC_H264 = 1
+        const val CODEC_H265 = 6
+
         init {
             System.loadLibrary("easyrtc_media")
         }

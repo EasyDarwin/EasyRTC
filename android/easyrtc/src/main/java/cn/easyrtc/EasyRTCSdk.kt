@@ -4,8 +4,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import cn.easyrtc.media.MediaSession
-import cn.easyrtc.media.MediaPipeline
-import cn.easyrtc.model.VideoEncodeConfig
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -23,32 +21,32 @@ object EasyRTCCodec {
 }
 
 object EasyRTCStreamTrack {
-    const val AUDIO = 1   //  音频轨,
-    const val VIDEO = 2    // 视频轨
+    const val AUDIO = 1
+    const val VIDEO = 2
 }
 
 
 object EasyRTCDirection {
-    const val EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV = 1      // 发送&接收
-    const val EaSyRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY = 2      // 仅发送
-    const val EaSyRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY = 3      // 仅接收
-    const val EasyRTC_RTP_TRANSCEIVER_DIRECTION_INACTIVE = 4      // 对端无法发送或接收数据;
+    const val EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV = 1
+    const val EaSyRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY = 2
+    const val EaSyRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY = 3
+    const val EasyRTC_RTP_TRANSCEIVER_DIRECTION_INACTIVE = 4
 }
 
 object EasyRTCPeerConnectionState {
-    const val EASYRTC_PEER_CONNECTION_STATE_NONE = 0            //初始状态
-    const val EASYRTC_PEER_CONNECTION_STATE_NEW = 1             //当ICE代理等待远程凭证时设置此状态
-    const val EASYRTC_PEER_CONNECTION_STATE_CONNECTING = 2      //当ICE代理检查连接时设置此状态         连接中
-    const val EASYRTC_PEER_CONNECTION_STATE_CONNECTED = 3       //当ICE代理就绪时设置此状态            连接成功
-    const val EASYRTC_PEER_CONNECTION_STATE_DISCONNECTED = 4    //当ICE代理断开连接时设置此状态         连接断开
-    const val EASYRTC_PEER_CONNECTION_STATE_FAILED = 5          //当ICE代理转换为失败状态时设置此状态    连接失败
-    const val EASYRTC_PEER_CONNECTION_STATE_CLOSED = 6         //此状态导致流会话终止                  连接断开
-    const val EASYRTC_PEER_CONNECTION_TOTAL_STATE_COUNT = 7    //此状态表示对等连接状态的最大数量
+    const val EASYRTC_PEER_CONNECTION_STATE_NONE = 0
+    const val EASYRTC_PEER_CONNECTION_STATE_NEW = 1
+    const val EASYRTC_PEER_CONNECTION_STATE_CONNECTING = 2
+    const val EASYRTC_PEER_CONNECTION_STATE_CONNECTED = 3
+    const val EASYRTC_PEER_CONNECTION_STATE_DISCONNECTED = 4
+    const val EASYRTC_PEER_CONNECTION_STATE_FAILED = 5
+    const val EASYRTC_PEER_CONNECTION_STATE_CLOSED = 6
+    const val EASYRTC_PEER_CONNECTION_TOTAL_STATE_COUNT = 7
 }
 
 object EasyRTCIceTransportPolicy {
-    const val EaSyRTC_ICE_TRANSPORT_POLICY_RELAY = 1 // ICE代理只使用媒体中继
-    const val EaSyRTC_ICE_TRANSPORT_POLICY_ALL = 2 // ICE代理使用任何类型的候选
+    const val EaSyRTC_ICE_TRANSPORT_POLICY_RELAY = 1
+    const val EaSyRTC_ICE_TRANSPORT_POLICY_ALL = 2
 }
 
 
@@ -57,13 +55,10 @@ object EasyRTCSdk {
     private var mUserPtr: Long = 0
     private var mPeerConnection: Long = 0L
     private var data_channel: Long = 0L
-    private var mediaSession: MediaSession? = null
-    private var video_transceiver: Long = 0L
-    private var audio_transceiver: Long = 0L
+    private var mediaSession: MediaSession = MediaSession().also { it.create() }
 
     private var peerConnection: peerconnection? = peerconnection()
 
-    //TODO 线程处理
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -81,40 +76,26 @@ object EasyRTCSdk {
     }
 
     fun getInstance(): peerconnection {
-
         if (peerConnection == null) peerConnection = peerconnection()
         return peerConnection!!
     }
 
     fun getPeerConnectionHandle(): Long = mPeerConnection
 
-    fun getMediaSession(): MediaSession = mediaSession!!
-
-    fun syncTransceiversFromMediaSession() {
-        val session = mediaSession ?: return
-        val video = session.getVideoTransceiverHandle()
-        val audio = session.getAudioTransceiverHandle()
-        video_transceiver = video
-        audio_transceiver = audio
-        Log.d(TAG, "syncTransceiversFromMediaSession video=$video audio=$audio")
-    }
+    fun getMediaSession(): MediaSession = mediaSession
 
     fun connection(stun: String, turn: String, username: String, credential: String, version: Int = 0, iceTransportPolicy: Int = 2, userPtr: Long = 0) {
         this.mUserPtr = userPtr
         this.mPeerConnection = peerConnection!!.create(version, iceTransportPolicy, stun, turn, username, credential, userPtr)
         Log.d(TAG, "初始化中... this.mPeerConnection = ${this.mPeerConnection}")
-
-        mediaSession = MediaSession()
-        mediaSession!!.create(mPeerConnection)
+        mediaSession.setPeerConnection(mPeerConnection)
     }
 
     fun addDataChannel(name: String = "") {
         this.data_channel = peerConnection?.AddDataChannel(this.mPeerConnection, name, this.mUserPtr)!!
-//        Log.d(TAG, "创建 createDataChannel ... data_channel = ${this.data_channel}")
     }
 
     fun createAnswer(sdp: String) {
-//        Log.d(TAG, "创建 CreateAnswer ...")
         peerConnection?.CreateAnswer(this.mPeerConnection, sdp, this.mUserPtr)
     }
 
@@ -135,37 +116,20 @@ object EasyRTCSdk {
     fun sendMsg(isBinary: Int, data: ByteArray = ByteArray(0)) {
         if (this.data_channel == 0L) return
         peerConnection?.DataChannelSend(this.data_channel!!, isBinary, data, data.size)
-//        Log.d(TAG, "发送数据 :data_channel = ${this.data_channel},isBinary= $isBinary,msg= $msg size = ${data.size}")
     }
 
-    // Backward-compatible APIs for legacy HomeFragment path.
-    fun createMediaPipeline(config: VideoEncodeConfig): MediaPipeline {
-        return MediaPipeline(video_transceiver, config)
-    }
-
-    fun getVideoTransceiver(): Long = video_transceiver
-
-    fun getAudioTransceiver(): Long = audio_transceiver
-
-    fun sendAudioFrame(data: ByteArray, pts: Long) {
-        if (this.audio_transceiver == 0L) return
-        peerConnection?.SendAudioFrame(this.audio_transceiver, data, data.size, pts)
+    private fun releaseMediaSession() {
+        mediaSession.release()
     }
 
     fun release() {
-        mediaSession?.release()
-        mediaSession = null
-
-        if (this.video_transceiver != 0L) peerConnection?.FreeTransceiver(this.video_transceiver)
-        if (this.audio_transceiver != 0L) peerConnection?.FreeTransceiver(this.audio_transceiver)
+        releaseMediaSession()
+        mediaSession = MediaSession().also { it.create() }
 
         if (this.data_channel != 0L) peerConnection?.FreeDataChannel(this.data_channel)
-
         if (this.mPeerConnection != 0L) peerConnection?.release(this.mPeerConnection)
 
         this.mPeerConnection = 0L
-        this.video_transceiver = 0L
-        this.audio_transceiver = 0L
         this.data_channel = 0L
     }
 
@@ -205,6 +169,4 @@ object EasyRTCSdk {
         }
         return 0
     }
-
-
 }

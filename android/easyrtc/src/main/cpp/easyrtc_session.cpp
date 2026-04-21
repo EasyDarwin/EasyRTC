@@ -3,6 +3,7 @@
 #include "easyrtc_audio.h"
 #include "easyrtc_audio_playback.h"
 #include "easyrtc_video_decoder.h"
+#include <cassert>
 #include <jni.h>
 #include <cstring>
 
@@ -59,11 +60,23 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeCreate(
-        JNIEnv* env, jobject thiz, jlong peerConnectionHandle) {
+        JNIEnv* env, jobject thiz) {
     auto* session = new MediaSession();
-    session->peerConnection = reinterpret_cast<EasyRTC_PeerConnection>(peerConnectionHandle);
-    LOGD("MediaSession created: peerConnection=%p", session->peerConnection);
+    LOGD("MediaSession created");
     return reinterpret_cast<jlong>(session);
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeSetPeerConnection(
+        JNIEnv* env, jobject thiz, jlong sessionPtr, jlong peerConnectionHandle) {
+    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+    assert(session && "Invalid session");
+    if (0 == peerConnectionHandle) {
+        assert(!session->running.load() && "should call stop before resetting peerConnection");
+    }
+    session->peerConnection = reinterpret_cast<EasyRTC_PeerConnection>(peerConnectionHandle);
+    session->transceiversAdded.store(false);
+    LOGD("MediaSession peerConnection updated: %p", session->peerConnection);
 }
 
 JNIEXPORT jint JNICALL
@@ -71,14 +84,11 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
         JNIEnv* env, jobject thiz, jlong sessionPtr,
         jint videoCodec, jint audioCodec) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session || !session->peerConnection) {
-        return -1;
-    }
-
-    if (session->transceiversAdded.load()) {
-        LOGD("nativeAddTransceivers skip: already added video=%p audio=%p", session->videoTransceiver, session->audioTransceiver);
-        return 0;
-    }
+    assert(session && "Invalid session");
+    assert(session->peerConnection && "Invalid peerConnection");
+    assert(videoCodec > 0 && audioCodec > 0 && "Invalid codec IDs");
+    // assert(!session->running.load() && "should call stop before adding transceivers");
+    assert(!session->transceiversAdded.load() && "Transceivers already added");
 
     session->videoCodec = videoCodec;
     session->audioCodec = audioCodec;
@@ -97,6 +107,7 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
             mediaTransceiverCallback, session);
     if (result != 0 || !session->videoTransceiver) {
         LOGE("Failed to add video transceiver: %d", result);
+        assert(false && "Failed to add video transceiver");
         return -1;
     }
     LOGD("Video transceiver added: %p", session->videoTransceiver);
@@ -115,11 +126,22 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
             mediaTransceiverCallback, session);
     if (result != 0 || !session->audioTransceiver) {
         LOGE("Failed to add audio transceiver: %d", result);
+        assert(false && "Failed to add audio transceiver");
         return -2;
     }
     LOGD("Audio transceiver added: %p", session->audioTransceiver);
 
     session->transceiversAdded.store(true);
+
+    if (session->videoEncoder && session->videoTransceiver) {
+        session->videoEncoder->transceiver = session->videoTransceiver;
+        LOGD("Video encoder transceiver wired: %p", session->videoTransceiver);
+    }
+
+    if (session->audioTransceiver && session->running.load() && !session->audioCapture) {
+        session->audioCapture = audioCaptureCreate(session->audioTransceiver);
+        audioCaptureStart(session->audioCapture);
+    }
 
     return 0;
 }
@@ -129,9 +151,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
         JNIEnv* env, jobject thiz, jlong sessionPtr,
         jint codec, jint width, jint height, jint bitrate, jint fps, jint iframeInterval) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session) {
-        return -1;
-    }
+    assert(session && "Invalid session");
 
     const char* mime = (codec == 6) ? "video/hevc" : "video/avc";
     AMediaFormat* format = AMediaFormat_new();
@@ -171,45 +191,37 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
     }
 
     pipeline->encoder = encoder;
+
+    ANativeWindow* inputWindow = nullptr;
+    media_status_t surfStatus = AMediaCodec_createInputSurface(encoder, &inputWindow);
+    if (surfStatus != AMEDIA_OK || !inputWindow) {
+        LOGE("Failed to create input surface: %d", surfStatus);
+        AMediaCodec_delete(encoder);
+        AMediaFormat_delete(format);
+        delete pipeline;
+        return -1;
+    }
+    pipeline->window = inputWindow;
+
     session->videoEncoder = pipeline;
     LOGD("Video encoder setup: %dx%d @ %d bps, mime=%s", width, height, bitrate, mime);
     return 0;
-}
-
-JNIEXPORT jobject JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeCreateEncoderSurface(
-        JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session || !session->videoEncoder || !session->videoEncoder->encoder) {
-        return nullptr;
-    }
-
-    ANativeWindow* window = nullptr;
-    media_status_t status = AMediaCodec_createInputSurface(session->videoEncoder->encoder, &window);
-    if (status != AMEDIA_OK || !window) {
-        LOGE("Failed to create input surface: %d", status);
-        return nullptr;
-    }
-
-    session->videoEncoder->window = window;
-    return ANativeWindow_toSurface(env, window);
 }
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetPreviewSurface(
         JNIEnv* env, jobject thiz, jlong sessionPtr, jobject surface) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session || !session->videoEncoder) {
-        return;
-    }
-
+    assert(session && "Invalid session");
+    assert(session->videoEncoder && "Invalid video encoder");
     if (session->videoEncoder->previewWindow) {
         ANativeWindow_release(session->videoEncoder->previewWindow);
         session->videoEncoder->previewWindow = nullptr;
+        LOGD("Previous preview surface released");
     }
-
     if (surface) {
         session->videoEncoder->previewWindow = ANativeWindow_fromSurface(env, surface);
+        LOGD("New preview surface set: %p", session->videoEncoder->previewWindow);
     }
 }
 
@@ -217,17 +229,17 @@ JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
         JNIEnv* env, jobject thiz, jlong sessionPtr, jobject surface) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session) {
-        return;
-    }
+    assert(session && "Invalid session");
 
     if (session->decoderSurface) {
         ANativeWindow_release(session->decoderSurface);
         session->decoderSurface = nullptr;
+        LOGD("Previous decoder surface released");
     }
 
     if (surface) {
         session->decoderSurface = ANativeWindow_fromSurface(env, surface);
+        LOGD("New decoder surface set: %p", session->decoderSurface);
     }
 }
 
@@ -235,9 +247,7 @@ JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStart(
         JNIEnv* env, jobject thiz, jlong sessionPtr) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session) {
-        return -1;
-    }
+    assert(session && "Invalid session");
 
     if (session->videoEncoder) {
         auto* p = session->videoEncoder;
@@ -294,9 +304,7 @@ JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStop(
         JNIEnv* env, jobject thiz, jlong sessionPtr) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session) {
-        return;
-    }
+    assert(session && "Invalid session");
 
     session->running.store(false);
 
@@ -365,7 +373,8 @@ JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
         JNIEnv* env, jobject thiz, jlong sessionPtr) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    if (!session || !session->videoEncoder) {
+    assert(session && "Invalid session");
+    if (!session->videoEncoder) {
         return;
     }
 

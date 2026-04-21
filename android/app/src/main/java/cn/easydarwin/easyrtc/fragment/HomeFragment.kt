@@ -5,9 +5,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
-import cn.easyrtc.model.VideoEncodeConfig
 import android.graphics.SurfaceTexture
 import android.media.MediaFormat
+import cn.easyrtc.model.VideoEncodeConfig
 import android.os.Bundle
 import android.os.Looper
 import android.text.method.ScrollingMovementMethod
@@ -77,7 +77,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
     private val MAX_LOG_LENGTH = 100 * 1024
     private var isRelease: Boolean = false
 
-    private var mediaPipeline: cn.easyrtc.media.MediaPipeline? = null
     private val pipelineController = NativePipelineController()
 
     private val liveSessionController = LiveSessionController()
@@ -266,38 +265,32 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
 
         try {
             val config = getVideoEncodeConfig()
-            mediaPipeline = EasyRTCSdk.createMediaPipeline(config)
+            val session = EasyRTCSdk.getMediaSession()
 
-            val currentVideoTransceiver = EasyRTCSdk.getVideoTransceiver()
-            if (currentVideoTransceiver != 0L) {
-                mediaPipeline?.setTransceiver(currentVideoTransceiver)
-                Log.d(TAG, "Native pipeline transceiver set at startup: $currentVideoTransceiver")
-            }
-
-            val surface = mediaPipeline?.setSurface()
-            if (surface == null) {
-                Log.e(TAG, "setSurface() returned null")
-                pipelineController.reportError("setSurface returned null")
+            val setupResult = session.setupVideoEncoder(config)
+            if (setupResult != 0) {
+                Log.e(TAG, "setupVideoEncoder() failed: $setupResult")
+                pipelineController.reportError("setupVideoEncoder failed: $setupResult")
                 return
             }
 
             if (mainVideoView.isAvailable) {
                 mainVideoView.surfaceTexture?.let {
-                    mediaPipeline?.setPreviewSurface(Surface(it))
+                    session.setPreviewSurface(Surface(it))
                 }
             }
 
-            val result = mediaPipeline?.start() ?: -1
+            val result = session.start()
             if (result != 0) {
-                Log.e(TAG, "MediaPipeline.start() failed: $result")
+                Log.e(TAG, "MediaSession.start() failed: $result")
                 pipelineController.reportError("start failed: $result")
-                stopNativeMediaPipeline()
+                session.stop()
                 return
             }
 
             pipelineController.start()
             isMainViewShowingLocal = true
-            Log.d(TAG, "Native camera preview started")
+            Log.d(TAG, "Native camera preview started via MediaSession")
         } catch (e: Exception) {
             Log.e(TAG, "Native camera preview failed: ${e.message}")
             pipelineController.reportError(e.message ?: "unknown")
@@ -310,15 +303,13 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
             Log.w(TAG, "Cannot switch camera: pipeline not running")
             return
         }
-        mediaPipeline?.switchCamera()
+        EasyRTCSdk.getMediaSession().switchCamera()
         pipelineController.switchCamera()
         Log.d(TAG, "Camera switched")
     }
 
     private fun stopNativeMediaPipeline() {
-        mediaPipeline?.stop()
-        mediaPipeline?.release()
-        mediaPipeline = null
+        EasyRTCSdk.getMediaSession().stop()
         pipelineController.stop()
     }
 
@@ -413,18 +404,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, WebSocketMa
     override fun connectionStateChange(state: Int) {
         Log.d(TAG, "connectionStateChange state =$state  ${state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED}")
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
-            EasyRTCSdk.syncTransceiversFromMediaSession()
-            val videoTransceiver = EasyRTCSdk.getVideoTransceiver()
-            if (videoTransceiver != 0L) {
-                mediaPipeline?.setTransceiver(videoTransceiver)
-                mediaPipeline?.requestKeyFrame()
-                Log.d(TAG, "Updated native pipeline transceiver after connect: $videoTransceiver")
-            } else {
-                Log.w(TAG, "Video transceiver is 0 on connected state")
-            }
-
-            val audioTransceiver = EasyRTCSdk.getAudioTransceiver()
-            Log.d(TAG, "Audio transceiver on connected: $audioTransceiver (native-owned)")
+            val session = EasyRTCSdk.getMediaSession()
+            session.requestKeyFrame()
 
             ensureRemoteRTCHelper()
             liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
