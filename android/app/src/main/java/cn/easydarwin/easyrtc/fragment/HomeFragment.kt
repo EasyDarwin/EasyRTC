@@ -6,7 +6,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
-import android.media.MediaFormat
 import cn.easyrtc.model.VideoEncodeConfig
 import android.os.Bundle
 import android.os.Looper
@@ -38,7 +37,6 @@ import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
 import cn.easyrtc.helper.MagicFileHelper
-import cn.easyrtc.helper.RemoteRTCHelper
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,9 +57,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     private lateinit var tvFragmentUUID: TextView
     private lateinit var smallVideoView: TextureView
     private lateinit var smallVideoContainer: View
-
-    private var remoteRTCHelper: RemoteRTCHelper? = null
-    private var isMainViewShowingLocal = true
 
     private var mainSurfaceTexture: SurfaceTexture? = null
     private var smallSurfaceTexture: SurfaceTexture? = null
@@ -243,9 +238,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
             smallVideoView.surfaceTexture -> {
                 smallSurfaceTexture = surface
-                smallSurfaceTexture?.let {
-                    remoteRTCHelper = RemoteRTCHelper(Surface(it), MediaFormat.MIMETYPE_VIDEO_AVC, 720, 1280)
-                }
+                EasyRTCSdk.getMediaSession().setDecoderSurface(Surface(surface))
                 Log.d(TAG, "小窗口 SurfaceTexture 已创建")
             }
         }
@@ -267,7 +260,10 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         Log.d(TAG, "SurfaceTexture 被销毁")
         when {
             surface == mainVideoView.surfaceTexture -> mainSurfaceTexture = null
-            surface == smallVideoView.surfaceTexture -> smallSurfaceTexture = null
+            surface == smallVideoView.surfaceTexture -> {
+                smallSurfaceTexture = null
+                EasyRTCSdk.getMediaSession().setDecoderSurface(null)
+            }
         }
         return true
     }
@@ -294,7 +290,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
             }
 
             pipelineController.start()
-            isMainViewShowingLocal = true
             Log.d(TAG, "Camera preview started")
         } catch (e: Exception) {
             Log.e(TAG, "Camera preview failed: ${e.message}")
@@ -357,7 +352,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         if (isRelease) {
             if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
                 startNativeCameraPreview()
-                ensureRemoteRTCHelper()
             }
         }
     }
@@ -406,9 +400,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
             activity?.runOnUiThread {
                 val session = EasyRTCSdk.getMediaSession()
+                smallSurfaceTexture?.let { session.setDecoderSurface(Surface(it)) }
                 session.start()
                 session.requestKeyFrame()
-                ensureRemoteRTCHelper()
                 liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
             }
 
@@ -427,9 +421,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     }
 
     override fun onTransceiverCallback(track: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long) {
-        if (track == EasyRTCStreamTrack.VIDEO) {
-            remoteRTCHelper?.onRemoteVideoFrame(frameData)
-        }
+        // Native media session handles remote playback now.
     }
 
     override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
@@ -497,22 +489,10 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         }
     }
 
-    private fun ensureRemoteRTCHelper() {
-        if (remoteRTCHelper != null) return
-        val renderSurfaceTexture = if (isMainViewShowingLocal) smallSurfaceTexture else mainSurfaceTexture
-        if (renderSurfaceTexture == null) {
-            Log.w(TAG, "远端渲染 SurfaceTexture 未就绪，跳过 RemoteRTCHelper 初始化")
-            return
-        }
-        remoteRTCHelper = RemoteRTCHelper(Surface(renderSurfaceTexture))
-    }
-
     private fun stopEasyRTC() {        
         val session = EasyRTCSdk.getMediaSession()
         session.stop()
         pipelineController.stop()
-        remoteRTCHelper?.release()
-        remoteRTCHelper = null
     }
 
     private fun runOnMainThread(action: () -> Unit) {

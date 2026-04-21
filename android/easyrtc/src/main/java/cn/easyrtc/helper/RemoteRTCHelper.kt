@@ -113,7 +113,7 @@ class RemoteRTCHelper(
             try {
                 // 创建并配置解码器
                 videoDecoder = MediaCodec.createDecoderByType(currentCodecType)
-                val format = MediaFormat.createVideoFormat(currentCodecType, videoWidth, videoHeight)
+                val format = MediaFormat.createVideoFormat(currentCodecType, 720, 1280)
                 format.setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
                 format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameInterval)
                 format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)

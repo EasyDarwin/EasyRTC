@@ -103,12 +103,18 @@ static int mediaTransceiverCallback(void* userPtr,
     switch (type) {
         case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
-                LOGD("mediaTransceiverCallback VIDEO codec=%d size=%u pts=%llu", codecID,
-                     frame ? frame->size : 0,
-                     static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
+                LOGD("mediaTransceiverCallback VIDEO codec=%d size=%u pts=%llu decoder=%p", codecID,
+                     frame->size,
+                     static_cast<unsigned long long>(frame->presentationTs),
+                     session->videoDecoder);
                 videoDecoderEnqueueFrame(session->videoDecoder, frame->frameData, static_cast<int32_t>(frame->size));
-            }else {
-                LOGD("mediaTransceiverCallback VIDEO ");
+            } else {
+                LOGW("mediaTransceiverCallback VIDEO empty decoder=%p frame=%p data=%p size=%u codec=%d", 
+                     session->videoDecoder,
+                     frame,
+                     frame ? frame->frameData : nullptr,
+                     frame ? frame->size : 0,
+                     codecID);
             }
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_AUDIO_FRAME:
@@ -376,6 +382,17 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
     if (surface) {
         session->decoderSurface = ANativeWindow_fromSurface(env, surface);
         LOGD("New decoder surface set: %p", session->decoderSurface);
+
+        if (session->videoDecoder) {
+            videoDecoderRelease(session->videoDecoder);
+            session->videoDecoder = nullptr;
+        }
+        session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720, 1280);
+        if (session->videoDecoder) {
+            videoDecoderStart(session->videoDecoder);
+            LOGD("Video decoder (re)started on new surface");
+        }
+        session->decoderSurface = nullptr;
     }
 }
 

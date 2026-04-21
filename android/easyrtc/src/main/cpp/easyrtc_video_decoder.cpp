@@ -82,7 +82,8 @@ static void* decodeThreadFunc(void* arg) {
         size_t outSize = 0;
         uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
         if (!inputBuf || frameData.size() > outSize) {
-            AMediaCodec_releaseOutputBuffer(decoder, static_cast<size_t>(inputBufId), false);
+            LOGW("Invalid decoder input buffer: inputBuf=%p frame=%zu cap=%zu",
+                 inputBuf, frameData.size(), outSize);
             continue;
         }
 
@@ -101,12 +102,6 @@ static void* decodeThreadFunc(void* arg) {
             } else if (outputBufId == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
                 LOGD("Decoder output format changed");
             }
-        }
-
-        int errors = pipeline->errorCount.fetch_add(1) + 1;
-        if (errors > 0 && errors % pipeline->MAX_ERROR_COUNT == 0) {
-            LOGW("Too many decoder errors (%d), reinitializing", errors);
-            initDecoder(pipeline);
         }
     }
 
