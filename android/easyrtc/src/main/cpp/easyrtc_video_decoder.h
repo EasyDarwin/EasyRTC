@@ -14,13 +14,22 @@
 #include <thread>
 
 struct VideoDecoderPipeline {
+    struct Packet {
+        std::vector<uint8_t> data;
+        int64_t ptsUs = 0;
+        uint32_t frameFlags = 0;
+    };
+
     AMediaCodec* decoder = nullptr;
     ANativeWindow* surface = nullptr;
-    std::queue<std::vector<uint8_t>> frameQueue;
+    std::queue<Packet> frameQueue;
     std::mutex queueMutex;
     std::mutex decoderMutex;
     std::atomic<bool> running{false};
     std::atomic<bool> destroyed{false};
+    std::atomic<uint64_t> enqueuedFrames{0};
+    std::atomic<uint64_t> renderedFrames{0};
+    std::atomic<uint64_t> tryLaterCount{0};
     std::thread decodeThread;
     std::string currentCodecType;
     int width = 0;
@@ -40,7 +49,7 @@ struct VideoDecoderPipeline {
 
 VideoDecoderPipeline* videoDecoderCreate(ANativeWindow* surface, int codecType, int width, int height);
 int videoDecoderStart(VideoDecoderPipeline* pipeline);
-void videoDecoderEnqueueFrame(VideoDecoderPipeline* pipeline, const uint8_t* data, int32_t size);
+void videoDecoderEnqueueFrame(VideoDecoderPipeline* pipeline, const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags);
 void videoDecoderReinit(VideoDecoderPipeline* pipeline, int codecType);
 void videoDecoderRelease(VideoDecoderPipeline* pipeline);
 

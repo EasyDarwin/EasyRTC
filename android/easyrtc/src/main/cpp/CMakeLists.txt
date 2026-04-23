@@ -4,6 +4,7 @@ project(easyrtc_media)
 set(REPO_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../include")
 
 add_library(easyrtc_media SHARED
+    easyrtc_logger.cpp
     easyrtc_media.cpp
     easyrtc_audio.cpp
     easyrtc_audio_playback.cpp

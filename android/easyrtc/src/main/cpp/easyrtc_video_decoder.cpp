@@ -1,6 +1,14 @@
 #include "easyrtc_video_decoder.h"
 #include <cstring>
 #include <unistd.h>
+#include <atomic>
+
+namespace {
+std::atomic<uint64_t> gDecQueued{0};
+std::atomic<uint64_t> gDecRendered{0};
+std::atomic<uint64_t> gDecTryLater{0};
+std::atomic<uint64_t> gDecFormatChanged{0};
+}
 
 static bool initDecoder(VideoDecoderPipeline* pipeline) {
     std::lock_guard<std::mutex> lock(pipeline->decoderMutex);
@@ -54,16 +62,16 @@ static void* decodeThreadFunc(void* arg) {
     AMediaCodecBufferInfo bufferInfo;
 
     while (pipeline->running.load() && !pipeline->destroyed.load()) {
-        std::vector<uint8_t> frameData;
+        VideoDecoderPipeline::Packet packet;
         {
             std::lock_guard<std::mutex> lock(pipeline->queueMutex);
             if (!pipeline->frameQueue.empty()) {
-                frameData = std::move(pipeline->frameQueue.front());
+                packet = std::move(pipeline->frameQueue.front());
                 pipeline->frameQueue.pop();
             }
         }
 
-        if (frameData.empty()) {
+        if (packet.data.empty()) {
             usleep(1000);
             continue;
         }
@@ -81,14 +89,28 @@ static void* decodeThreadFunc(void* arg) {
 
         size_t outSize = 0;
         uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
-        if (!inputBuf || frameData.size() > outSize) {
+        if (!inputBuf || packet.data.size() > outSize) {
             LOGW("Invalid decoder input buffer: inputBuf=%p frame=%zu cap=%zu",
-                 inputBuf, frameData.size(), outSize);
+                 inputBuf, packet.data.size(), outSize);
             continue;
         }
 
-        memcpy(inputBuf, frameData.data(), frameData.size());
-        AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, frameData.size(), 0, 0);
+        memcpy(inputBuf, packet.data.data(), packet.data.size());
+        int flags = 0;
+        if (packet.frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
+            flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
+        }
+        AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet.data.size(), packet.ptsUs, flags);
+        uint64_t q = gDecQueued.fetch_add(1) + 1;
+        pipeline->enqueuedFrames.store(q);
+        if (q <= 8 || (q % 120) == 0) {
+            LOGD("DEC_IN q=%llu size=%zu pts=%lld flags=0x%x queue_remain=%zu", 
+                 static_cast<unsigned long long>(q),
+                 packet.data.size(),
+                 static_cast<long long>(packet.ptsUs),
+                 packet.frameFlags,
+                 pipeline->frameQueue.size());
+        }
 
         while (pipeline->running.load() && !pipeline->destroyed.load()) {
             ssize_t outputBufId = AMediaCodec_dequeueOutputBuffer(decoder, &bufferInfo,
@@ -96,11 +118,33 @@ static void* decodeThreadFunc(void* arg) {
             if (outputBufId >= 0) {
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
                 pipeline->errorCount.store(0);
+                uint64_t r = gDecRendered.fetch_add(1) + 1;
+                pipeline->renderedFrames.store(r);
+                if (r <= 8 || (r % 120) == 0) {
+                    LOGD("DEC_OUT r=%llu size=%d pts=%lld flags=0x%x", 
+                         static_cast<unsigned long long>(r),
+                         bufferInfo.size,
+                         static_cast<long long>(bufferInfo.presentationTimeUs),
+                         bufferInfo.flags);
+                }
                 break;
             } else if (outputBufId == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
+                uint64_t t = gDecTryLater.fetch_add(1) + 1;
+                pipeline->tryLaterCount.store(t);
+                if (t <= 8 || (t % 240) == 0) {
+                    LOGD("DEC_TRY_LATER count=%llu", static_cast<unsigned long long>(t));
+                }
                 break;
             } else if (outputBufId == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
-                LOGD("Decoder output format changed");
+                uint64_t f = gDecFormatChanged.fetch_add(1) + 1;
+                AMediaFormat* outFormat = AMediaCodec_getOutputFormat(decoder);
+                if (outFormat) {
+                    const char* fmt = AMediaFormat_toString(outFormat);
+                    LOGD("DEC_FMT_CHANGED count=%llu fmt=%s", static_cast<unsigned long long>(f), fmt ? fmt : "null");
+                    AMediaFormat_delete(outFormat);
+                } else {
+                    LOGD("DEC_FMT_CHANGED count=%llu", static_cast<unsigned long long>(f));
+                }
             }
         }
     }
@@ -136,16 +180,19 @@ int videoDecoderStart(VideoDecoderPipeline* pipeline) {
     return 0;
 }
 
-void videoDecoderEnqueueFrame(VideoDecoderPipeline* pipeline, const uint8_t* data, int32_t size) {
+void videoDecoderEnqueueFrame(VideoDecoderPipeline* pipeline, const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags) {
     if (!pipeline || !pipeline->running.load() || pipeline->destroyed.load() || size <= 0) return;
 
-    std::vector<uint8_t> frame(data, data + size);
+    VideoDecoderPipeline::Packet packet;
+    packet.data.assign(data, data + size);
+    packet.ptsUs = ptsUs;
+    packet.frameFlags = frameFlags;
     {
         std::lock_guard<std::mutex> lock(pipeline->queueMutex);
         if (pipeline->frameQueue.size() >= pipeline->MAX_QUEUE_SIZE) {
             pipeline->frameQueue.pop();
         }
-        pipeline->frameQueue.push(std::move(frame));
+        pipeline->frameQueue.push(std::move(packet));
     }
 }
 

@@ -10,6 +10,14 @@
 #include <cstring>
 #include <thread>
 #include <mutex>
+#include <atomic>
+
+namespace {
+std::atomic<uint64_t> gVideoCbCount{0};
+std::atomic<uint64_t> gVideoCbBytes{0};
+std::atomic<uint64_t> gVideoCbAnnexB{0};
+std::atomic<uint64_t> gVideoCbAvcc{0};
+}
 
 static void releaseCaptureSession(MediaSession* s) {
     if (s->captureSession) {
@@ -103,13 +111,58 @@ static int mediaTransceiverCallback(void* userPtr,
     switch (type) {
         case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
-                LOGD("mediaTransceiverCallback VIDEO codec=%d size=%u pts=%llu decoder=%p", codecID,
-                     frame->size,
-                     static_cast<unsigned long long>(frame->presentationTs),
-                     session->videoDecoder);
-                videoDecoderEnqueueFrame(session->videoDecoder, frame->frameData, static_cast<int32_t>(frame->size));
+                const uint8_t* p = frame->frameData;
+                const uint32_t n = frame->size;
+                bool annexB = false;
+                bool avcc = false;
+                int nalType = -1;
+                if (n >= 4) {
+                    if (p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x00 && p[3] == 0x01) {
+                        annexB = true;
+                        if (n >= 5) nalType = p[4] & 0x1F;
+                    } else if (p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x01) {
+                        annexB = true;
+                        if (n >= 4) nalType = p[3] & 0x1F;
+                    } else {
+                        avcc = true;
+                        if (n >= 5) nalType = p[4] & 0x1F;
+                    }
+                }
+
+                uint64_t idx = gVideoCbCount.fetch_add(1) + 1;
+                gVideoCbBytes.fetch_add(n);
+                if (annexB) gVideoCbAnnexB.fetch_add(1);
+                if (avcc) gVideoCbAvcc.fetch_add(1);
+
+                if (idx <= 8 || (idx % 120) == 0) {
+                    const uint64_t totalBytes = gVideoCbBytes.load();
+                    const uint64_t annexBCount = gVideoCbAnnexB.load();
+                    const uint64_t avccCount = gVideoCbAvcc.load();
+                    LOGD("VIDEO_CB idx=%llu codec=%d size=%u nal=%d fmt=%s pts=%llu dec=%p b0=%02X b1=%02X b2=%02X b3=%02X avg=%llu annexb=%llu avcc=%llu",
+                         static_cast<unsigned long long>(idx),
+                         codecID,
+                         n,
+                         nalType,
+                         annexB ? "annexb" : (avcc ? "avcc" : "unknown"),
+                         static_cast<unsigned long long>(frame->presentationTs),
+                         session->videoDecoder,
+                         n > 0 ? p[0] : 0,
+                         n > 1 ? p[1] : 0,
+                         n > 2 ? p[2] : 0,
+                         n > 3 ? p[3] : 0,
+                         static_cast<unsigned long long>(idx ? totalBytes / idx : 0),
+                         static_cast<unsigned long long>(annexBCount),
+                         static_cast<unsigned long long>(avccCount));
+                }
+
+                const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
+                videoDecoderEnqueueFrame(session->videoDecoder,
+                                         frame->frameData,
+                                         static_cast<int32_t>(frame->size),
+                                         ptsUs,
+                                         static_cast<uint32_t>(frame->flags));
             } else {
-                LOGW("mediaTransceiverCallback VIDEO empty decoder=%p frame=%p data=%p size=%u codec=%d", 
+                LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d", 
                      session->videoDecoder,
                      frame,
                      frame ? frame->frameData : nullptr,
@@ -142,6 +195,29 @@ static int mediaTransceiverCallback(void* userPtr,
             break;
     }
     return 0;
+}
+
+static void ensureVideoDecoderForSession(MediaSession* session) {
+    if (!session) return;
+    if (session->videoDecoder) return;
+    if (!session->decoderSurface) {
+        LOGW("ensureVideoDecoderForSession: decoderSurface is null");
+        return;
+    }
+    session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720, 1280);
+    if (!session->videoDecoder) {
+        LOGE("ensureVideoDecoderForSession: videoDecoderCreate failed");
+        return;
+    }
+    if (videoDecoderStart(session->videoDecoder) != 0) {
+        LOGE("ensureVideoDecoderForSession: videoDecoderStart failed");
+        videoDecoderRelease(session->videoDecoder);
+        session->videoDecoder = nullptr;
+        return;
+    }
+    // Ownership transferred to VideoDecoderPipeline (released in videoDecoderRelease).
+    session->decoderSurface = nullptr;
+    LOGD("ensureVideoDecoderForSession: decoder ready %p", session->videoDecoder);
 }
 
 extern "C" {
@@ -387,12 +463,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
             videoDecoderRelease(session->videoDecoder);
             session->videoDecoder = nullptr;
         }
-        session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720, 1280);
-        if (session->videoDecoder) {
-            videoDecoderStart(session->videoDecoder);
-            LOGD("Video decoder (re)started on new surface");
-        }
-        session->decoderSurface = nullptr;
+        ensureVideoDecoderForSession(session);
     }
 }
 
@@ -429,11 +500,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStart(JNIEnv* env, jobject thiz, jlong 
 
     session->audioPlayback = audioPlaybackCreate();
 
-    if (session->decoderSurface) {
-        session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720, 1280);
-        if (session->videoDecoder) { videoDecoderStart(session->videoDecoder); }
-        session->decoderSurface = nullptr;
-    }
+    ensureVideoDecoderForSession(session);
 
     session->running.store(true);
     LOGD("MediaSession started");

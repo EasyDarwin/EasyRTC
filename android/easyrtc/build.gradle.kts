@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "cn.easyrtc"
     compileSdk = 35
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         minSdk = 28
