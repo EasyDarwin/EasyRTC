@@ -409,7 +409,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
             activity?.runOnUiThread {
                 val session = EasyRTCSdk.getMediaSession()
-                smallSurfaceTexture?.let { session.setDecoderSurface(Surface(it)) }
                 session.start()
                 session.requestKeyFrame()
                 liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
