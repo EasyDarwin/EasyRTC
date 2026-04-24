@@ -97,7 +97,16 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
                     is WebSocketService.Event.Error -> onWSError(event.throwable)
                     is WebSocketService.Event.OnlineUsers -> onWSOnlineUsers(event.users)
                     is WebSocketService.Event.Logs -> onWSLogs(event.text)
+                    is WebSocketService.Event.IncomingCall -> {}
                 }
+            }
+        }
+
+        (activity as? MainActivity)?.incomingCallLiveData?.observe(viewLifecycleOwner) { uuid ->
+            if (uuid != null) {
+                activeSessionUser = uuid
+                tvFragmentUUID.text = "来电: $uuid"
+                appendLog("来电: $uuid")
             }
         }
 

@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.Observer
 import cn.easydarwin.easyrtc.fragment.AboutFragment
 import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.service.WebSocketService
@@ -27,8 +28,21 @@ class MainActivity : AppCompatActivity() {
 
     var bottomNavigationView: BottomNavigationView? = null
     val webSocketServiceLiveData = MutableLiveData<WebSocketService?>()
+    val incomingCallLiveData = MutableLiveData<String?>()
     private var webSocketServiceConnection: ServiceConnection? = null
     var currentFragmentTag: String? = null
+
+    var ws: WebSocketService? = null
+    val observer = Observer<WebSocketService.Event> { event ->
+        if (event is WebSocketService.Event.IncomingCall) {
+            incomingCallLiveData.postValue(event.uuid)
+            runOnUiThread {
+                if (bottomNavigationView?.selectedItemId != R.id.navigation_live)
+                    bottomNavigationView?.selectedItemId = R.id.navigation_live
+            }
+        }
+    }
+
     var cFragmentTag: String?
         get() = currentFragmentTag
         set(value) {
@@ -55,12 +69,16 @@ class MainActivity : AppCompatActivity() {
     private fun bindWebSocketService() {
         if (webSocketServiceConnection != null) return
         val connection = object : ServiceConnection {
+
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
                 val binder = service as? WebSocketService.LocalBinder
-                webSocketServiceLiveData.postValue(binder?.getService())
+                ws = binder?.getService()
+                webSocketServiceLiveData.postValue(ws)
+                ws?.events?.observeForever(observer)
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
+                ws?.events?.removeObserver(observer)
                 webSocketServiceLiveData.postValue(null)
             }
         }
@@ -172,6 +190,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        ws?.events?.removeObserver(observer)
         webSocketServiceConnection?.let { unbindService(it) }
         webSocketServiceConnection = null
         super.onDestroy()

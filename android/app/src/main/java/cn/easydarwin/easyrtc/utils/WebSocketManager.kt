@@ -74,7 +74,8 @@ public class WebSocketManager(private val url: String, private val token: String
         fun onWSDisconnected(code: Int, reason: String)
         fun onWSError(error: Throwable)
         fun onWSOnlineUsers(users: List<EasyRTCUser>)
-        fun onWSLogs(txt: String)  
+        fun onWSLogs(txt: String)
+        fun onWSIncomingCall(uuid: String)
     }
 
     private val listener = object : WebSocketListener() {
@@ -272,6 +273,7 @@ public class WebSocketManager(private val url: String, private val token: String
         } else if (HPREQGETWEBRTCOFFERINFO == type) {
             //device 设备端逻辑
             handlerPeerConnection(data)
+            callback.onWSIncomingCall(uuidClientB)
             val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
             val session = EasyRTCSdk.getMediaSession()
             session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)

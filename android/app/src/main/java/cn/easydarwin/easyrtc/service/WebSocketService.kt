@@ -18,6 +18,7 @@ class WebSocketService : Service() {
         data class Error(val throwable: Throwable) : Event()
         data class OnlineUsers(val users: List<EasyRTCUser>) : Event()
         data class Logs(val text: String) : Event()
+        data class IncomingCall(val uuid: String) : Event()
     }
 
     inner class LocalBinder : Binder() {
@@ -55,6 +56,10 @@ class WebSocketService : Service() {
 
                 override fun onWSLogs(txt: String) {
                     _events.postValue(Event.Logs(txt))
+                }
+
+                override fun onWSIncomingCall(uuid: String) {
+                    _events.postValue(Event.IncomingCall(uuid))
                 }
             }
         )
