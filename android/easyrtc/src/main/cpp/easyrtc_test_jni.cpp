@@ -1,4 +1,5 @@
 #include "easyrtc_video_decoder.h"
+#include "easyrtc_audio_playback.h"
 #include "easyrtc_frame_reader.h"
 #include <jni.h>
 #include <android/native_window_jni.h>
@@ -29,6 +30,8 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
     }
     videoDecoderStart(decoder);
 
+    AudioPlaybackPipeline* audioPlayback = audioPlaybackCreate();
+
     int64_t lastPts = 0;
     for (size_t i = 0; i < frames.size(); i++) {
         auto& f = frames[i];
@@ -41,12 +44,16 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
                 std::this_thread::sleep_for(std::chrono::nanoseconds(deltaNs));
             }
         }
-        if (f.kind != 0 || f.data.empty()) continue;
-        videoDecoderEnqueueFrame(decoder, f.data.data(), static_cast<int32_t>(f.data.size()), f.ptsUs, f.flags);
+        if (f.data.empty()) continue;
+        if (f.kind == 0) {
+            videoDecoderEnqueueFrame(decoder, f.data.data(), static_cast<int32_t>(f.data.size()), f.ptsUs, f.flags);
+        } else if (f.kind == 1) {
+            audioPlaybackEnqueueFrame(audioPlayback, f.data.data(), static_cast<int32_t>(f.data.size()));
+        }
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
+    audioPlaybackRelease(audioPlayback);
     videoDecoderRelease(decoder);
-    // ANativeWindow_release(window);
 }
