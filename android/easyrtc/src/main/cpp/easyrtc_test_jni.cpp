@@ -29,22 +29,24 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
     }
     videoDecoderStart(decoder);
 
+    int64_t lastPts = 0;
     for (size_t i = 0; i < frames.size(); i++) {
         auto& f = frames[i];
-        if (f.kind != 0 || f.data.empty()) continue;
-
+        auto ptsDeltaUS = f.ptsUs - lastPts;
+        lastPts = f.ptsUs;
         if (i > 0) {
             int64_t deltaNs = f.callbackNs - frames[i - 1].callbackNs;
-            if (deltaNs > 0 && deltaNs < 500000000LL) {
+            LOGD("pts delta:%ld, callback delta:%ld", ptsDeltaUS, deltaNs/1000);
+            if (deltaNs > 0 ) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(deltaNs));
             }
         }
-
+        if (f.kind != 0 || f.data.empty()) continue;
         videoDecoderEnqueueFrame(decoder, f.data.data(), static_cast<int32_t>(f.data.size()), f.ptsUs, f.flags);
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     videoDecoderRelease(decoder);
-    ANativeWindow_release(window);
+    // ANativeWindow_release(window);
 }
