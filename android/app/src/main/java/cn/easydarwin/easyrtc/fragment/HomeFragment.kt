@@ -409,7 +409,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
             activity?.runOnUiThread {
                 val session = EasyRTCSdk.getMediaSession()
-                session.start()
+                session.startSend()
+                session.startRecv()
                 session.requestKeyFrame()
                 liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
             }
@@ -513,7 +514,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     private fun stopEasyRTC() {        
         val session = EasyRTCSdk.getMediaSession()
-        session.stop()
+        session.stopSend()
+        session.stopRecv()
         pipelineController.stop()
     }
 

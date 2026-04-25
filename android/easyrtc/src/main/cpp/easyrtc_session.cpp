@@ -217,13 +217,13 @@ static void onRemoteVideoSizeCallback(void* userPtr, int width, int height) {
         }
     }
     if (attached) {
-        jclass clazz = env->GetObjectClass(session->javaObj);
-        if (clazz) {
-            jmethodID mid = env->GetMethodID(clazz, "onRemoteVideoSize", "(II)V");
-            if (mid) {
-                env->CallVoidMethod(session->javaObj, mid, width, height);
-            }
+    jclass clazz = env->GetObjectClass(session->javaObj);
+    if (clazz) {
+        jmethodID mid = env->GetMethodID(clazz, "onRemoteVideoSize", "(II)V");
+        if (mid) {
+            env->CallVoidMethod(session->javaObj, mid, width, height);
         }
+    }
         session->jvm->DetachCurrentThread();
     }
 }
@@ -469,16 +469,6 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
 }
 
 JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeSetPreviewSurface(
-        JNIEnv* env, jobject thiz, jlong sessionPtr, jobject surface) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
-    assert(session && "Invalid session");
-    assert(session->videoEncoder && "Invalid video encoder");
-    // no-op: preview surface is set via startPreview, encoder preview goes through capture session
-    // kept for API compat but preview is managed by MediaSession's camera
-}
-
-JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
         JNIEnv* env, jobject thiz, jlong sessionPtr, jobject surface) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
@@ -503,7 +493,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
 }
 
 JNIEXPORT jint JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStart(JNIEnv* env, jobject thiz, jlong sessionPtr) {
+Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv* env, jobject thiz, jlong sessionPtr) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
     assert(session && "Invalid session");
     assert(!session->running.load() && "already running");
@@ -533,25 +523,30 @@ Java_cn_easyrtc_media_MediaSession_nativeStart(JNIEnv* env, jobject thiz, jlong 
         audioCaptureStart(session->audioCapture);
     }
 
-    session->audioPlayback = audioPlaybackCreate();
-
-    ensureVideoDecoderForSession(session);
-
     session->running.store(true);
-    LOGD("MediaSession started");
+    LOGD("MediaSession startSend");
     return 0;
 }
 
 JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStop(JNIEnv* env, jobject thiz, jlong sessionPtr) {
+Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv* env, jobject thiz, jlong sessionPtr) {
+    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+    assert(session && "Invalid session");
+
+    session->audioPlayback = audioPlaybackCreate();
+    ensureVideoDecoderForSession(session);
+
+    LOGD("MediaSession startRecv");
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv* env, jobject thiz, jlong sessionPtr) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
     assert(session && "Invalid session");
 
     session->running.store(false);
 
     if (session->audioCapture) { audioCaptureRelease(session->audioCapture); session->audioCapture = nullptr; }
-    if (session->audioPlayback) { audioPlaybackRelease(session->audioPlayback); session->audioPlayback = nullptr; }
-    if (session->videoDecoder) { videoDecoderRelease(session->videoDecoder); session->videoDecoder = nullptr; }
 
     if (session->videoEncoder) {
         auto* p = session->videoEncoder;
@@ -581,7 +576,18 @@ Java_cn_easyrtc_media_MediaSession_nativeStop(JNIEnv* env, jobject thiz, jlong s
         }
     }
 
-    LOGD("MediaSession stopped");
+    LOGD("MediaSession stopSend");
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv* env, jobject thiz, jlong sessionPtr) {
+    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+    assert(session && "Invalid session");
+
+    if (session->audioPlayback) { audioPlaybackRelease(session->audioPlayback); session->audioPlayback = nullptr; }
+    if (session->videoDecoder) { videoDecoderRelease(session->videoDecoder); session->videoDecoder = nullptr; }
+
+    LOGD("MediaSession stopRecv");
 }
 
 JNIEXPORT void JNICALL
@@ -649,7 +655,8 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
     if (!session) return;
 
-    Java_cn_easyrtc_media_MediaSession_nativeStop(env, thiz, sessionPtr);
+    Java_cn_easyrtc_media_MediaSession_nativeStopSend(env, thiz, sessionPtr);
+    Java_cn_easyrtc_media_MediaSession_nativeStopRecv(env, thiz, sessionPtr);
 
     closeCamera(session);
     if (session->previewWindow) { ANativeWindow_release(session->previewWindow); session->previewWindow = nullptr; }

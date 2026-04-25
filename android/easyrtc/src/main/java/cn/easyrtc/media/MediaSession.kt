@@ -37,20 +37,24 @@ class MediaSession {
             config.getIFrameInterval())
     }
 
-    fun setPreviewSurface(surface: Surface?) {
-        nativeSetPreviewSurface(nativePtr, surface)
-    }
-
-    fun setDecoderSurface(surface: Surface?) {
+fun setDecoderSurface(surface: Surface?) {
         nativeSetDecoderSurface(nativePtr, surface)
     }
 
-    fun start(): Int {
-        return nativeStart(nativePtr)
+    fun startSend(): Int {
+        return nativeStartSend(nativePtr)
     }
 
-    fun stop() {
-        nativeStop(nativePtr)
+    fun startRecv() {
+        nativeStartRecv(nativePtr)
+    }
+
+    fun stopSend() {
+        nativeStopSend(nativePtr)
+    }
+
+    fun stopRecv() {
+        nativeStopRecv(nativePtr)
     }
 
     fun switchCamera() {
@@ -87,10 +91,11 @@ class MediaSession {
     private external fun nativeSetPeerConnection(sessionPtr: Long, peerConnectionHandle: Long)
     private external fun nativeAddTransceivers(sessionPtr: Long, videoCodec: Int, audioCodec: Int): Int
     private external fun nativeSetupVideoEncoder(sessionPtr: Long, codec: Int, width: Int, height: Int, bitrate: Int, fps: Int, iframeInterval: Int): Int
-    private external fun nativeSetPreviewSurface(sessionPtr: Long, surface: Surface?)
-    private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
-    private external fun nativeStart(sessionPtr: Long): Int
-    private external fun nativeStop(sessionPtr: Long)
+private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
+    private external fun nativeStartSend(sessionPtr: Long): Int
+    private external fun nativeStartRecv(sessionPtr: Long)
+    private external fun nativeStopSend(sessionPtr: Long)
+    private external fun nativeStopRecv(sessionPtr: Long)
     private external fun nativeSwitchCamera(sessionPtr: Long)
     private external fun nativeRequestKeyFrame(sessionPtr: Long)
     private external fun nativeGetVideoTransceiver(sessionPtr: Long): Long
