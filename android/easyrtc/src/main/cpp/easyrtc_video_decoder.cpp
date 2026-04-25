@@ -60,7 +60,7 @@ static void* decodeThreadFunc(void* arg) {
     auto* pipeline = static_cast<VideoDecoderPipeline*>(arg);
     LOGD("Video decode thread started");
     AMediaCodecBufferInfo bufferInfo;
-
+    int enqueued{};
     while (pipeline->running.load() && !pipeline->destroyed.load()) {
         VideoDecoderPipeline::Packet packet;
         {
@@ -103,6 +103,7 @@ static void* decodeThreadFunc(void* arg) {
         AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet.data.size(), packet.ptsUs, flags);
         uint64_t q = gDecQueued.fetch_add(1) + 1;
         pipeline->enqueuedFrames.store(q);
+        enqueued++;
         if (q <= 8 || (q % 120) == 0) {
             LOGD("DEC_IN q=%llu size=%zu pts=%lld flags=0x%x queue_remain=%zu", 
                  static_cast<unsigned long long>(q),
@@ -120,12 +121,13 @@ static void* decodeThreadFunc(void* arg) {
                 pipeline->errorCount.store(0);
                 uint64_t r = gDecRendered.fetch_add(1) + 1;
                 pipeline->renderedFrames.store(r);
+                enqueued--;
                 if (r <= 8 || (r % 120) == 0) {
-                    LOGD("DEC_OUT r=%llu size=%d pts=%lld flags=0x%x", 
+                    LOGD("DEC_OUT r=%llu size=%d pts=%lld flags=0x%x, codec cached:%d",
                          static_cast<unsigned long long>(r),
                          bufferInfo.size,
                          static_cast<long long>(bufferInfo.presentationTimeUs),
-                         bufferInfo.flags);
+                         bufferInfo.flags, enqueued);
                 }
                 break;
             } else if (outputBufId == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
@@ -186,6 +188,10 @@ int videoDecoderStart(VideoDecoderPipeline* pipeline) {
 
     pipeline->running.store(true);
     pipeline->decodeThread = std::thread([pipeline]() { decodeThreadFunc(pipeline); });
+    pthread_t th = pipeline->decodeThread.native_handle();
+    sched_param sch_params;
+    sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
+    pthread_setschedparam(th, SCHED_FIFO, &sch_params);
     return 0;
 }
 
@@ -203,31 +209,6 @@ void videoDecoderEnqueueFrame(VideoDecoderPipeline* pipeline, const uint8_t* dat
         }
         pipeline->frameQueue.push(std::move(packet));
     }
-}
-
-void videoDecoderReinit(VideoDecoderPipeline* pipeline, int codecType) {
-    if (!pipeline) return;
-
-    std::string newCodec = (codecType == 6) ? "video/hevc" : "video/avc";
-    if (newCodec == pipeline->currentCodecType) return;
-
-    LOGD("Reinitializing video decoder: %s -> %s", pipeline->currentCodecType.c_str(), newCodec.c_str());
-
-    pipeline->running.store(false);
-    if (pipeline->decodeThread.joinable()) {
-        pipeline->decodeThread.join();
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(pipeline->queueMutex);
-        while (!pipeline->frameQueue.empty()) pipeline->frameQueue.pop();
-    }
-
-    pipeline->currentCodecType = newCodec;
-    initDecoder(pipeline);
-
-    pipeline->running.store(true);
-    pipeline->decodeThread = std::thread([pipeline]() { decodeThreadFunc(pipeline); });
 }
 
 void videoDecoderRelease(VideoDecoderPipeline* pipeline) {

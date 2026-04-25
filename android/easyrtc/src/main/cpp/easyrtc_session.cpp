@@ -172,9 +172,9 @@ static int mediaTransceiverCallback(void* userPtr,
             }
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_AUDIO_FRAME:
-            LOGD("mediaTransceiverCallback AUDIO codec=%d size=%u pts=%llu", codecID,
-                    frame ? frame->size : 0,
-                    static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
+//            LOGD("mediaTransceiverCallback AUDIO codec=%d size=%u pts=%llu", codecID,
+//                    frame ? frame->size : 0,
+//                    static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData, static_cast<int32_t>(frame->size));
             }
@@ -507,7 +507,10 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv* env, jobject thiz, jl
         p->outputThread = std::thread([p]() {
             outputThreadFunc(p);
         });
-
+        pthread_t th = p->outputThread.native_handle();
+        sched_param sch_params;
+        sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
+        pthread_setschedparam(th, SCHED_FIFO, &sch_params);
         if (session->cameraDevice) {
             std::lock_guard<std::mutex> lock(session->cameraMutex);
             releaseCaptureSession(session);
