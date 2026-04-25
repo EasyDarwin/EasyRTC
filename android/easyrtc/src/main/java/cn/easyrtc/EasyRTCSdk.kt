@@ -5,6 +5,7 @@ import android.os.Looper
 import android.util.Log
 import cn.easyrtc.media.MediaSession
 import cn.easyrtc.model.VideoEncodeConfig
+import androidx.annotation.Keep
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -69,6 +70,7 @@ object EasyRTCSdk {
         fun onSDPCallback(isOffer: Int, sdp: String)
         fun onTransceiverCallback(track: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long)
         fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int)
+        fun onRemoteVideoSize(width: Int, height: Int) {}
     }
 
     private var eventListener: EasyRTCEventListener? = null
@@ -80,6 +82,13 @@ object EasyRTCSdk {
     fun getInstance(): peerconnection {
         if (peerConnection == null) peerConnection = peerconnection()
         return peerConnection!!
+    }
+    
+    @JvmStatic
+    fun notifyRemoteVideoSize(width: Int, height: Int) {
+        mainHandler.post {
+            eventListener?.onRemoteVideoSize(width, height)
+        }
     }
 
     fun getPeerConnectionHandle(): Long = mPeerConnection
@@ -141,12 +150,14 @@ object EasyRTCSdk {
     }
 
 
+    @Keep
     @JvmStatic
     fun connectionStateChange(userPtr: Long, state: Int): Int {
         if (userPtr == this.mUserPtr) eventListener?.connectionStateChange(state)
         return 0
     }
 
+    @Keep
     @JvmStatic
     fun onSDPCallback(userPtr: Long, isOffer: Int, sdp: String): Int {
         executor.execute {
@@ -157,6 +168,7 @@ object EasyRTCSdk {
         return 0
     }
 
+    @Keep
     @JvmStatic
     fun onTransceiverCallback(userPtr: Long, type: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long, bandwidthEstimation: Int): Int {
         executor.execute {
@@ -167,6 +179,7 @@ object EasyRTCSdk {
         return 0
     }
 
+    @Keep
     @JvmStatic
     fun onDataChannelCallback(userPtr: Long, type: Int, binary: Int, data: ByteArray, size: Int): Int {
         executor.execute {

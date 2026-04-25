@@ -1,6 +1,7 @@
 package cn.easyrtc.media
 
 import android.view.Surface
+import androidx.annotation.Keep
 import cn.easyrtc.model.VideoEncodeConfig
 
 class MediaSession {
@@ -73,6 +74,11 @@ class MediaSession {
             nativeRelease(nativePtr)
             nativePtr = 0L
         }
+    }
+
+    @Keep
+    private fun onRemoteVideoSize(width: Int, height: Int) {
+        cn.easyrtc.EasyRTCSdk.notifyRemoteVideoSize(width, height)
     }
 
     private external fun nativeCreate(): Long

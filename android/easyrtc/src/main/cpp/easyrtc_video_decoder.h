@@ -20,6 +20,8 @@ struct VideoDecoderPipeline {
         uint32_t frameFlags = 0;
     };
 
+    using OnVideoSizeCallback = void(*)(void* userPtr, int width, int height);
+
     AMediaCodec* decoder = nullptr;
     ANativeWindow* surface = nullptr;
     std::queue<Packet> frameQueue;
@@ -36,6 +38,8 @@ struct VideoDecoderPipeline {
     int height = 0;
     int frameRate = 30;
     std::atomic<int> errorCount{0};
+    OnVideoSizeCallback onVideoSize = nullptr;
+    void* onVideoSizeUserPtr = nullptr;
 
     static constexpr int MAX_ERROR_COUNT = 5;
     static constexpr size_t MAX_QUEUE_SIZE = 30;

@@ -139,8 +139,17 @@ static void* decodeThreadFunc(void* arg) {
                 uint64_t f = gDecFormatChanged.fetch_add(1) + 1;
                 AMediaFormat* outFormat = AMediaCodec_getOutputFormat(decoder);
                 if (outFormat) {
-                    const char* fmt = AMediaFormat_toString(outFormat);
-                    LOGD("DEC_FMT_CHANGED count=%llu fmt=%s", static_cast<unsigned long long>(f), fmt ? fmt : "null");
+                    int32_t w = 0, h = 0;
+                    AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_WIDTH, &w);
+                    AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_HEIGHT, &h);
+                    LOGD("DEC_FMT_CHANGED count=%llu %dx%d", static_cast<unsigned long long>(f), w, h);
+                    if (w > 0 && h > 0 && (w != pipeline->width || h != pipeline->height)) {
+                        pipeline->width = w;
+                        pipeline->height = h;
+                        if (pipeline->onVideoSize) {
+                            pipeline->onVideoSize(pipeline->onVideoSizeUserPtr, w, h);
+                        }
+                    }
                     AMediaFormat_delete(outFormat);
                 } else {
                     LOGD("DEC_FMT_CHANGED count=%llu", static_cast<unsigned long long>(f));

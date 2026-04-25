@@ -429,7 +429,21 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     }
 
     override fun onTransceiverCallback(track: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long) {
-        // Native media session handles remote playback now.
+    }
+
+    override fun onRemoteVideoSize(width: Int, height: Int) {
+        activity?.runOnUiThread {
+            val density = resources.displayMetrics.density
+            val isPortrait = height > width
+            val desiredWidthDp = if (isPortrait) 144f else 160f
+            val desiredWidthPx = desiredWidthDp * density
+            val desiredHeightPx = desiredWidthPx * height / width
+            val lp = smallVideoContainer.layoutParams
+            lp.width = desiredWidthPx.toInt()
+            lp.height = desiredHeightPx.toInt()
+            smallVideoContainer.layoutParams = lp
+            Log.d(TAG, "Remote video size: ${width}x${height}, container: ${lp.width}x${lp.height}")
+        }
     }
 
     override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {

@@ -9,6 +9,8 @@
 #include <atomic>
 #include <mutex>
 
+#include <jni.h>
+
 struct MediaSession {
     EasyRTC_PeerConnection peerConnection = nullptr;
     EasyRTC_Transceiver videoTransceiver = nullptr;
@@ -31,6 +33,9 @@ struct MediaSession {
     struct AudioPlaybackPipeline* audioPlayback = nullptr;
     struct VideoDecoderPipeline* videoDecoder = nullptr;
     ANativeWindow* decoderSurface = nullptr;
+
+    JavaVM* jvm = nullptr;
+    jobject javaObj = nullptr;
 
     std::atomic<bool> running{false};
     std::atomic<bool> previewRunning{false};

@@ -1,4 +1,5 @@
 #include "easyrtc_session.h"
+#include "easyrtc_common.h"
 #include "easyrtc_media.h"
 #include "easyrtc_audio.h"
 #include "easyrtc_audio_playback.h"
@@ -197,6 +198,36 @@ static int mediaTransceiverCallback(void* userPtr,
     return 0;
 }
 
+static void onRemoteVideoSizeCallback(void* userPtr, int width, int height) {
+    auto* session = static_cast<MediaSession*>(userPtr);
+    if (!session || !session->jvm || !session->javaObj) {
+        LOGW("onRemoteVideoSizeCallback: invalid session or JVM");
+        return;
+    }
+
+    JNIEnv* env = nullptr;
+    bool attached = false;
+    int ret = session->jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    if (ret != JNI_OK) {
+        if (session->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+            attached = true;
+        } else {
+            LOGW("onRemoteVideoSizeCallback: failed to attach thread to JVM");
+            return;
+        }
+    }
+    if (attached) {
+        jclass clazz = env->GetObjectClass(session->javaObj);
+        if (clazz) {
+            jmethodID mid = env->GetMethodID(clazz, "onRemoteVideoSize", "(II)V");
+            if (mid) {
+                env->CallVoidMethod(session->javaObj, mid, width, height);
+            }
+        }
+        session->jvm->DetachCurrentThread();
+    }
+}
+
 static void ensureVideoDecoderForSession(MediaSession* session) {
     if (!session) return;
     if (session->videoDecoder) return;
@@ -209,6 +240,8 @@ static void ensureVideoDecoderForSession(MediaSession* session) {
         LOGE("ensureVideoDecoderForSession: videoDecoderCreate failed");
         return;
     }
+    session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
+    session->videoDecoder->onVideoSizeUserPtr = session;
     if (videoDecoderStart(session->videoDecoder) != 0) {
         LOGE("ensureVideoDecoderForSession: videoDecoderStart failed");
         videoDecoderRelease(session->videoDecoder);
@@ -225,6 +258,8 @@ extern "C" {
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeCreate(JNIEnv* env, jobject thiz) {
     auto* session = new MediaSession();
+    env->GetJavaVM(&session->jvm);
+    session->javaObj = env->NewGlobalRef(thiz);
     LOGD("MediaSession created");
     return reinterpret_cast<jlong>(session);
 }
@@ -625,6 +660,11 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
     session->transceiversAdded.store(false);
 
     if (session->decoderSurface) { ANativeWindow_release(session->decoderSurface); session->decoderSurface = nullptr; }
+
+    if (session->javaObj) {
+        env->DeleteGlobalRef(session->javaObj);
+        session->javaObj = nullptr;
+    }
 
     delete session;
     LOGD("MediaSession released");
