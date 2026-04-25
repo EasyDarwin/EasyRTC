@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <cstring>
 #include <string>
-
+#if 0
 void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec) {
     char cmdline[256] = {0};
     int fd = open("/proc/self/cmdline", O_RDONLY);
@@ -64,3 +64,14 @@ void frameDumpClose(FrameDumpWriter* writer) {
     }
     writer->enabled = false;
 }
+#else
+void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec) {
+
+}
+void frameDumpWrite(FrameDumpWriter* writer, uint32_t kind, const uint8_t* data, uint32_t size, int64_t ptsUs, uint32_t flags) {
+
+}
+void frameDumpClose(FrameDumpWriter* writer) {
+
+}
+#endif
