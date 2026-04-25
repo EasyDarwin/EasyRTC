@@ -39,6 +39,11 @@
             android:name="cn.easydarwin.easyrtc.service.WebSocketService"
             android:exported="false" />
 
+        <activity
+            android:name="cn.easydarwin.easyrtc.DecoderPlaybackActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
     </application>
 
 </manifest>

@@ -2,6 +2,7 @@
 #define EASYRTC_SESSION_H
 
 #include "easyrtc_common.h"
+#include "easyrtc_frame_dump.h"
 #include <android/native_window_jni.h>
 #include <camera/NdkCameraDevice.h>
 #include <camera/NdkCameraCaptureSession.h>
@@ -42,6 +43,7 @@ struct MediaSession {
     std::atomic<bool> transceiversAdded{false};
     int videoCodec = 1;
     int audioCodec = 5;
+    FrameDumpWriter frameDump;
 };
 
 #endif

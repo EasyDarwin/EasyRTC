@@ -4,6 +4,7 @@
 #include "easyrtc_audio.h"
 #include "easyrtc_audio_playback.h"
 #include "easyrtc_video_decoder.h"
+#include "easyrtc_frame_dump.h"
 #include <camera/NdkCameraManager.h>
 #include <camera/NdkCameraMetadataTags.h>
 #include <cassert>
@@ -157,6 +158,7 @@ static int mediaTransceiverCallback(void* userPtr,
                 }
 
                 const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
+                frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData, frame->size, ptsUs, frame->flags);
                 videoDecoderEnqueueFrame(session->videoDecoder,
                                          frame->frameData,
                                          static_cast<int32_t>(frame->size),
@@ -176,6 +178,8 @@ static int mediaTransceiverCallback(void* userPtr,
 //                    frame ? frame->size : 0,
 //                    static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
+                int64_t audioPtsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
+                frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData, frame->size, audioPtsUs, frame->flags);
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData, static_cast<int32_t>(frame->size));
             }
             break;
@@ -391,6 +395,8 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     LOGD("Audio transceiver added: %p", session->audioTransceiver);
 
     session->transceiversAdded.store(true);
+
+    frameDumpInit(&session->frameDump, session->videoCodec, session->audioCodec);
 
     if (session->videoEncoder && session->videoTransceiver) {
         session->videoEncoder->transceiver = session->videoTransceiver;
@@ -675,6 +681,8 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
         env->DeleteGlobalRef(session->javaObj);
         session->javaObj = nullptr;
     }
+
+    frameDumpClose(&session->frameDump);
 
     delete session;
     LOGD("MediaSession released");

@@ -10,6 +10,9 @@ add_library(easyrtc_media SHARED
     easyrtc_audio_playback.cpp
     easyrtc_video_decoder.cpp
     easyrtc_session.cpp
+    easyrtc_frame_dump.cpp
+    easyrtc_frame_reader.cpp
+    easyrtc_test_jni.cpp
 )
 
 target_include_directories(easyrtc_media PRIVATE

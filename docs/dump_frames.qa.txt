@@ -1,0 +1,16 @@
+How to use:
+adb shell touch /data/local/tmp/easyrtc_dump_enable
+2. adb pull /data/local/tmp/easyrtc_av.bin .
+3. adb push easyrtc_av.bin /data/local/tmp/
+4. ./gradlew :easyrtc:connectedDebugAndroidTest
+
+
+launch an emulator
+# List available AVDs
+adb devices
+# Or list AVD names
+$ANDROID_HOME/emulator/emulator -list-avds
+# Launch one
+$ANDROID_HOME/emulator/emulator -avd <name> &
+If no AVD exists, create one from Android Studio: Tools → Device Manager → Create Device, or:
+avdmanager create avd -n test -k "system-images;android-28;default;arm64-v8a"
