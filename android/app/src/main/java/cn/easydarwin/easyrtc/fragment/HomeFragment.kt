@@ -248,6 +248,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
             smallVideoView.surfaceTexture -> {
                 smallSurfaceTexture = surface
+                EasyRTCSdk.getMediaSession().setupVideoEncoder(getVideoEncodeConfig())
                 EasyRTCSdk.getMediaSession().setDecoderSurface(Surface(surface))
                 Log.d(TAG, "小窗口 SurfaceTexture 已创建")
             }

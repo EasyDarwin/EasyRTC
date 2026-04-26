@@ -58,7 +58,6 @@ object EasyRTCSdk {
     private var mPeerConnection: Long = 0L
     private var data_channel: Long = 0L
     private var mediaSession: MediaSession = MediaSession().also { it.create() }
-    private var encoderConfig: VideoEncodeConfig? = null
 
     private var peerConnection: peerconnection? = peerconnection()
 
@@ -95,16 +94,11 @@ object EasyRTCSdk {
 
     fun getMediaSession(): MediaSession = mediaSession
 
-    fun setEncoderConfig(config: VideoEncodeConfig) {
-        encoderConfig = config
-    }
-
     fun connection(stun: String, turn: String, username: String, credential: String, version: Int = 0, iceTransportPolicy: Int = 2, userPtr: Long = 0) {
         this.mUserPtr = userPtr
         this.mPeerConnection = peerConnection!!.create(version, iceTransportPolicy, stun, turn, username, credential, userPtr)
         Log.d(TAG, "初始化中... this.mPeerConnection = ${this.mPeerConnection}")
         mediaSession.setPeerConnection(mPeerConnection)
-        encoderConfig?.let { mediaSession.setupVideoEncoder(it) }
     }
 
     fun addDataChannel(name: String = "") {
