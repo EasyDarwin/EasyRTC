@@ -60,11 +60,6 @@ struct VideoDecoderPipeline {
             decoder = nullptr;
         }
     }
-
-    if (surface) {
-        ANativeWindow_release(surface);
-        surface = nullptr;
-    }
     LOGD("VideoDecoderPipeline released");
   };
   VideoDecoderPipeline(const VideoDecoderPipeline &) = delete;

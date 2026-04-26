@@ -1,5 +1,6 @@
 package cn.easyrtc.media
 
+import android.util.Log
 import android.view.Surface
 import androidx.annotation.Keep
 import cn.easyrtc.model.VideoEncodeConfig
@@ -26,7 +27,11 @@ class MediaSession {
     }
 
     fun addTransceivers(videoCodec: Int, audioCodec: Int): Int {
-        return nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
+        val i =  nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
+        val send = nativeStartSend(nativePtr)
+        val recv = nativeStartRecv(nativePtr)
+        Log.i("MS","addTrans:$i, startSend:$send, startRecv:$recv")
+        return i;
     }
 
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
@@ -41,13 +46,6 @@ fun setDecoderSurface(surface: Surface?) {
         nativeSetDecoderSurface(nativePtr, surface)
     }
 
-    fun startSend(): Int {
-        return nativeStartSend(nativePtr)
-    }
-
-    fun startRecv() {
-        nativeStartRecv(nativePtr)
-    }
 
     fun stopSend() {
         nativeStopSend(nativePtr)
@@ -63,14 +61,6 @@ fun setDecoderSurface(surface: Surface?) {
 
     fun requestKeyFrame() {
         nativeRequestKeyFrame(nativePtr)
-    }
-
-    fun getVideoTransceiverHandle(): Long {
-        return nativeGetVideoTransceiver(nativePtr)
-    }
-
-    fun getAudioTransceiverHandle(): Long {
-        return nativeGetAudioTransceiver(nativePtr)
     }
 
     fun release() {

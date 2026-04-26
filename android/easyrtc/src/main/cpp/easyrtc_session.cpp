@@ -112,7 +112,7 @@ static int mediaTransceiverCallback(void* userPtr,
 
     switch (type) {
         case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
-#if 1
+#if 0
             static auto f = frame->presentationTs;
             LOGD("VIDEO PTS:%llu, DELTA:%llu， size:%d， flag:%d, duration:%llu", frame->presentationTs, frame->presentationTs - f, frame->size, frame->flags, frame->duration);
             f = frame->presentationTs;
@@ -235,31 +235,6 @@ static void onRemoteVideoSizeCallback(void* userPtr, int width, int height) {
     }
         session->jvm->DetachCurrentThread();
     }
-}
-
-static void ensureVideoDecoderForSession(MediaSession* session) {
-    if (!session) return;
-    if (session->videoDecoder) return;
-    if (!session->decoderSurface) {
-        LOGW("ensureVideoDecoderForSession: decoderSurface is null");
-        return;
-    }
-    session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720, 1280);
-    if (!session->videoDecoder) {
-        LOGE("ensureVideoDecoderForSession: videoDecoderCreate failed");
-        return;
-    }
-    session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
-    session->videoDecoder->onVideoSizeUserPtr = session;
-    if (videoDecoderStart(session->videoDecoder) != 0) {
-        LOGE("ensureVideoDecoderForSession: videoDecoderStart failed");
-        videoDecoderRelease(session->videoDecoder);
-        session->videoDecoder = nullptr;
-        return;
-    }
-    // Ownership transferred to VideoDecoderPipeline (released in videoDecoderRelease).
-    session->decoderSurface = nullptr;
-    LOGD("ensureVideoDecoderForSession: decoder ready %p", session->videoDecoder.get());
 }
 
 extern "C" {
@@ -442,38 +417,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
     pipeline->fps = fps;
     pipeline->iframeInterval = iframeInterval;
     pipeline->format = format;
-
-    AMediaCodec* encoder = AMediaCodec_createEncoderByType(mime);
-    if (!encoder) {
-        LOGE("Failed to create encoder for mime: %s", mime);
-        AMediaFormat_delete(format);
-        delete pipeline;
-        return -1;
-    }
-
-    media_status_t status = AMediaCodec_configure(encoder, format, nullptr, nullptr,
-            AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
-    if (status != AMEDIA_OK) {
-        LOGE("Failed to configure encoder: %d", status);
-        AMediaCodec_delete(encoder);
-        AMediaFormat_delete(format);
-        delete pipeline;
-        return -1;
-    }
-
-    pipeline->encoder = encoder;
-
-    ANativeWindow* inputWindow = nullptr;
-    media_status_t surfStatus = AMediaCodec_createInputSurface(encoder, &inputWindow);
-    if (surfStatus != AMEDIA_OK || !inputWindow) {
-        LOGE("Failed to create input surface: %d", surfStatus);
-        AMediaCodec_delete(encoder);
-        AMediaFormat_delete(format);
-        delete pipeline;
-        return -1;
-    }
-    pipeline->window = inputWindow;
-
+    pipeline->mime = mime;
     session->videoEncoder = pipeline;
     LOGD("Video encoder setup: %dx%d @ %d bps, mime=%s", width, height, bitrate, mime);
     return 0;
@@ -494,12 +438,6 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
     if (surface) {
         session->decoderSurface = ANativeWindow_fromSurface(env, surface);
         LOGD("New decoder surface set: %p", session->decoderSurface);
-
-        if (session->videoDecoder) {
-            videoDecoderRelease(session->videoDecoder);
-            session->videoDecoder = nullptr;
-        }
-        ensureVideoDecoderForSession(session);
     }
 }
 
@@ -511,6 +449,10 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv* env, jobject thiz, jl
 
     if (session->videoEncoder) {
         auto* p = session->videoEncoder;
+        if (!p->initEncoder()) {
+            return -1;
+        }
+        assert(p->encoder);
         media_status_t status = AMediaCodec_start(p->encoder);
         if (status != AMEDIA_OK) { LOGE("Failed to start encoder: %d", status); return -1; }
 
@@ -548,8 +490,20 @@ Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv* env, jobject thiz, jl
     assert(session && "Invalid session");
 
     session->audioPlayback = audioPlaybackCreate(5);
-    ensureVideoDecoderForSession(session);
-
+    
+    session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720, 1280);
+    if (!session->videoDecoder) {
+        LOGE("nativeStartRecv: videoDecoderCreate failed");
+        return;
+    }
+    session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
+    session->videoDecoder->onVideoSizeUserPtr = session;
+    if (videoDecoderStart(session->videoDecoder) != 0) {
+        LOGE("nativeStartRecv: videoDecoderStart failed");
+        videoDecoderRelease(session->videoDecoder);
+        session->videoDecoder = nullptr;
+        return;
+    }
     LOGD("MediaSession startRecv");
 }
 

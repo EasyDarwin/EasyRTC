@@ -1,9 +1,11 @@
 #include "easyrtc_media.h"
 #include "EasyRTCAPI.h"
+#include <cassert>
 #include <cstring>
 #include <string>
 #include <camera/NdkCameraManager.h>
 #include <camera/NdkCameraMetadataTags.h>
+#include <media/NdkMediaCodec.h>
 
 std::string findCameraId(int facing) {
     ACameraManager* mgr = ACameraManager_create();
@@ -40,6 +42,41 @@ std::string findCameraId(int facing) {
 
     ACameraManager_delete(mgr);
     return result;
+}
+
+bool MediaPipeline::initEncoder()
+{
+    AMediaCodec* encoder = AMediaCodec_createEncoderByType(mime.c_str());
+    if (!encoder) {
+        LOGE("Failed to create encoder for mime: %s", mime.c_str());
+        AMediaFormat_delete(format);
+        assert(false);
+        return false;
+    }
+
+    media_status_t status = AMediaCodec_configure(encoder, format, nullptr, nullptr,
+            AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
+    if (status != AMEDIA_OK) {
+        LOGE("Failed to configure encoder: %d", status);
+        AMediaCodec_delete(encoder);
+        AMediaFormat_delete(format);
+        assert(false);
+        return false;
+    }
+
+
+    ANativeWindow* inputWindow = nullptr;
+    media_status_t surfStatus = AMediaCodec_createInputSurface(encoder, &inputWindow);
+    if (surfStatus != AMEDIA_OK || !inputWindow) {
+        LOGE("Failed to create input surface: %d", surfStatus);
+        AMediaCodec_delete(encoder);
+        AMediaFormat_delete(format);
+        assert(false);
+        return false;
+    }
+    this->window = inputWindow;
+    this->encoder = encoder;
+    return true;
 }
 
 void* outputThreadFunc(void* arg) {
@@ -104,7 +141,7 @@ void* outputThreadFunc(void* arg) {
             continue;
         }
 
-        LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
+        // LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
         int sendResult = EasyRTC_SendFrame(pipeline->transceiver, &frame);
         if (sendResult != 0) {
             LOGE("EasyRTC_SendFrame failed: %d, size=%u, flags=%u", sendResult, frame.size, frame.flags);

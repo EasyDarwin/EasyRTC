@@ -25,12 +25,16 @@ struct MediaPipeline {
     uint8_t* sps_pps_buffer = nullptr;
     size_t sps_pps_size = 0;
     std::recursive_mutex mutex;
+    std::string mime;
 
     MediaPipeline() = default;
     MediaPipeline(const MediaPipeline&) = delete;
     MediaPipeline& operator=(const MediaPipeline&) = delete;
     MediaPipeline(MediaPipeline&&) = delete;
     MediaPipeline& operator=(MediaPipeline&&) = delete;
+
+
+    bool initEncoder();
 };
 
 std::string findCameraId(int facing);
