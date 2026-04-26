@@ -32,6 +32,7 @@ struct MediaSession {
     struct MediaPipeline* videoEncoder = nullptr;
     struct AudioCapturePipeline* audioCapture = nullptr;
     struct AudioPlaybackPipeline* audioPlayback = nullptr;
+    struct AudioDecoderPipeline* audioDecoder = nullptr;
     struct VideoDecoderPipeline* videoDecoder = nullptr;
     ANativeWindow* decoderSurface = nullptr;
 

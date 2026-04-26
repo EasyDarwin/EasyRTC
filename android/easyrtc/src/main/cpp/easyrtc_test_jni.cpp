@@ -1,5 +1,6 @@
 #include "easyrtc_video_decoder.h"
 #include "easyrtc_audio_playback.h"
+#include "easyrtc_audio_decoder.h"
 #include "easyrtc_frame_reader.h"
 #include <jni.h>
 #include <android/native_window_jni.h>
@@ -31,7 +32,13 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
     videoDecoderStart(decoder);
 
     AudioPlaybackPipeline* audioPlayback = audioPlaybackCreate();
+    AudioDecoderPipeline* audioDecoder = audioDecoderCreate(header.audioCodec);
 
+    #if 0
+    auto pcm_f = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_av_pcm.pcm", "wb");
+    #else
+    FILE* pcm_f = nullptr;
+    #endif
     int64_t lastPts = 0;
     for (size_t i = 0; i < frames.size(); i++) {
         auto& f = frames[i];
@@ -48,12 +55,18 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
         if (f.kind == 0) {
             videoDecoderEnqueueFrame(decoder, f.data.data(), static_cast<int32_t>(f.data.size()), f.ptsUs, f.flags);
         } else if (f.kind == 1) {
-            audioPlaybackEnqueueFrame(audioPlayback, f.data.data(), static_cast<int32_t>(f.data.size()));
+            if (pcm_f) fwrite(f.data.data(), 1, f.data.size(), pcm_f);
+            auto pcm = audioDecoderDecode(audioDecoder, f.data.data(), static_cast<int32_t>(f.data.size()));
+            if (!pcm.empty()) {
+                audioPlaybackEnqueueFrame(audioPlayback, pcm.data(), static_cast<int32_t>(pcm.size()));
+            }
         }
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
+    audioDecoderRelease(audioDecoder);
     audioPlaybackRelease(audioPlayback);
     videoDecoderRelease(decoder);
+    if (pcm_f) fclose(pcm_f);
 }

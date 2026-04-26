@@ -8,6 +8,7 @@ add_library(easyrtc_media SHARED
     easyrtc_media.cpp
     easyrtc_audio.cpp
     easyrtc_audio_playback.cpp
+    easyrtc_audio_decoder.cpp
     easyrtc_video_decoder.cpp
     easyrtc_session.cpp
     easyrtc_frame_dump.cpp
