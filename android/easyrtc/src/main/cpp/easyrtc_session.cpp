@@ -112,6 +112,11 @@ static int mediaTransceiverCallback(void* userPtr,
 
     switch (type) {
         case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
+#if 0
+            static auto f = frame->presentationTs;
+            LOGD("VIDEO DELTA:%lld， size:%d， flag:%d, duration:%lld", frame->presentationTs - f, frame->size, frame->flags, frame->duration);
+            f = frame->presentationTs;
+#endif
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
                 const uint8_t* p = frame->frameData;
                 const uint32_t n = frame->size;
@@ -157,7 +162,7 @@ static int mediaTransceiverCallback(void* userPtr,
                          static_cast<unsigned long long>(avccCount));
                 }
 
-                const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
+                const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 1000);
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData, frame->size, ptsUs, frame->flags);
                 videoDecoderEnqueueFrame(session->videoDecoder,
                                          frame->frameData,
@@ -513,10 +518,10 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv* env, jobject thiz, jl
         p->outputThread = std::thread([p]() {
             outputThreadFunc(p);
         });
-        pthread_t th = p->outputThread.native_handle();
-        sched_param sch_params;
-        sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
-        pthread_setschedparam(th, SCHED_FIFO, &sch_params);
+        // pthread_t th = p->outputThread.native_handle();
+        // sched_param sch_params;
+        // sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
+        // pthread_setschedparam(th, SCHED_FIFO, &sch_params);
         if (session->cameraDevice) {
             std::lock_guard<std::mutex> lock(session->cameraMutex);
             releaseCaptureSession(session);

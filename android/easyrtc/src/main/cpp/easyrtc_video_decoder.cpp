@@ -1,7 +1,9 @@
 #include "easyrtc_video_decoder.h"
 #include <cstring>
+#include <thread>
 #include <unistd.h>
 #include <atomic>
+#include <chrono>
 
 namespace {
 std::atomic<uint64_t> gDecQueued{0};
@@ -56,11 +58,27 @@ static bool initDecoder(VideoDecoderPipeline* pipeline) {
     return true;
 }
 
+int64_t getMonoUs() {
+    using namespace std::chrono;
+    static uint64_t _start_us = 0;
+    if (_start_us == 0) {
+        _start_us = duration_cast<microseconds>(
+            steady_clock::now().time_since_epoch()
+        ).count();
+    }
+    return static_cast<int64_t>(duration_cast<microseconds>(
+        steady_clock::now().time_since_epoch()
+    ).count() - _start_us);
+}
+
 static void* decodeThreadFunc(void* arg) {
     auto* pipeline = static_cast<VideoDecoderPipeline*>(arg);
     LOGD("Video decode thread started");
     AMediaCodecBufferInfo bufferInfo;
     int enqueued{};
+    int64_t firstPtsUs = -1;
+    int64_t firstSystemUs = -1;
+
     while (pipeline->running.load() && !pipeline->destroyed.load()) {
         VideoDecoderPipeline::Packet packet;
         {
@@ -105,7 +123,7 @@ static void* decodeThreadFunc(void* arg) {
         pipeline->enqueuedFrames.store(q);
         enqueued++;
         if (q <= 8 || (q % 120) == 0) {
-            LOGD("DEC_IN q=%llu size=%zu pts=%lld flags=0x%x queue_remain=%zu", 
+            LOGD("DEC_IN q=%llu size=%zu pts=%lld flags=0x%x queue_remain=%zu",
                  static_cast<unsigned long long>(q),
                  packet.data.size(),
                  static_cast<long long>(packet.ptsUs),
@@ -117,16 +135,31 @@ static void* decodeThreadFunc(void* arg) {
             ssize_t outputBufId = AMediaCodec_dequeueOutputBuffer(decoder, &bufferInfo,
                     pipeline->DEQUEUE_TIMEOUT_US);
             if (outputBufId >= 0) {
+                if (firstPtsUs < 0) {
+                    firstPtsUs = bufferInfo.presentationTimeUs;
+                    firstSystemUs = getMonoUs();
+                }
+
+                int64_t ptsUs = bufferInfo.presentationTimeUs - firstPtsUs;
+                int64_t nowUs = getMonoUs();
+                int64_t elapsedUs = nowUs - firstSystemUs;
+                int64_t sleepUs = ptsUs - elapsedUs;
+
+                if (sleepUs > 0 ) {
+//                    std::this_thread::sleep_for(std::chrono::microseconds(sleepUs));
+                }
+
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
                 pipeline->errorCount.store(0);
                 uint64_t r = gDecRendered.fetch_add(1) + 1;
                 pipeline->renderedFrames.store(r);
                 enqueued--;
                 if (r <= 8 || (r % 120) == 0) {
-                    LOGD("DEC_OUT r=%llu size=%d pts=%lld flags=0x%x, codec cached:%d",
+                    LOGD("DEC_OUT r=%llu size=%d pts=%lld sleepUs=%lld flags=0x%x cached:%d",
                          static_cast<unsigned long long>(r),
                          bufferInfo.size,
                          static_cast<long long>(bufferInfo.presentationTimeUs),
+                         static_cast<long long>(sleepUs > 0 ? sleepUs : 0),
                          bufferInfo.flags, enqueued);
                 }
                 break;
@@ -205,6 +238,7 @@ void videoDecoderEnqueueFrame(VideoDecoderPipeline* pipeline, const uint8_t* dat
     {
         std::lock_guard<std::mutex> lock(pipeline->queueMutex);
         if (pipeline->frameQueue.size() >= pipeline->MAX_QUEUE_SIZE) {
+            LOGW("exceeds the MAX_QUEUE_SIZE");
             pipeline->frameQueue.pop();
         }
         pipeline->frameQueue.push(std::move(packet));
