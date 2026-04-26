@@ -35,6 +35,8 @@ class MediaSession {
     }
 
     fun removeTransceivers(){
+        nativeStopRecv(nativePtr)
+        nativeStopSend(nativePtr)
         nativeRemoveTransceivers(nativePtr);
     }
 
@@ -54,15 +56,6 @@ fun setDecoderSurface(surface: Surface?) {
         nativeSetDecoderSurface(nativePtr, surface)
     }
 
-
-    fun stopSend() {
-        nativeStopSend(nativePtr)
-    }
-
-    fun stopRecv() {
-        nativeStopRecv(nativePtr)
-    }
-
     fun switchCamera() {
         nativeSwitchCamera(nativePtr)
     }
@@ -73,6 +66,9 @@ fun setDecoderSurface(surface: Surface?) {
 
     fun release() {
         if (nativePtr != 0L) {
+            nativeStopRecv(nativePtr)
+            nativeStopSend(nativePtr)
+            nativeRemoveTransceivers(nativePtr);
             nativeRelease(nativePtr)
             nativePtr = 0L
         }

@@ -110,6 +110,8 @@ class WebSocketService : Service() {
         manager.handlerPeerConnection(event.data)
         val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
         val session = EasyRTCSdk.getMediaSession()
+//      try to clean old first
+        session.removeTransceivers()
         session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
         EasyRTCSdk.addDataChannel("123") //name 设备端随机字符串
         EasyRTCSdk.createOffer()  //创建  Offer  sdp

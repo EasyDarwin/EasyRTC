@@ -621,9 +621,6 @@ JNIEXPORT void JNICALL
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
     if (!session) return;
 
-    Java_cn_easyrtc_media_MediaSession_nativeStopSend(env, thiz, sessionPtr);
-    Java_cn_easyrtc_media_MediaSession_nativeStopRecv(env, thiz, sessionPtr);
-
     if (session->videoTransceiver) { EasyRTC_FreeTransceiver(&session->videoTransceiver); session->videoTransceiver = nullptr; }
     if (session->audioTransceiver) { EasyRTC_FreeTransceiver(&session->audioTransceiver); session->audioTransceiver = nullptr; }
     session->transceiversAdded.store(false);
@@ -634,8 +631,6 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
         JNIEnv* env, jobject thiz, jlong sessionPtr) {
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
     if (!session) return;
-
-    Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(env, thiz, sessionPtr);
 
     closeCamera(session);
     if (session->previewWindow) { ANativeWindow_release(session->previewWindow); session->previewWindow = nullptr; }

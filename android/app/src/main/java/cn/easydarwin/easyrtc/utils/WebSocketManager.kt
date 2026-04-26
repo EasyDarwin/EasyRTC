@@ -241,6 +241,8 @@ public class WebSocketManager(private val url: String, private val token: String
             if (audioCodec == 0) audioCodec = EasyRTCCodec.ALAW
 
             val session = EasyRTCSdk.getMediaSession()
+            //      try to clean old first
+            session.removeTransceivers()
             session.addTransceivers(videoCodec, audioCodec)
 
             if (sdp.contains("webrtc-datachannel", ignoreCase = true)) EasyRTCSdk.addDataChannel()
