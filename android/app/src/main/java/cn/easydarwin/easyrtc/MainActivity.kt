@@ -28,14 +28,14 @@ class MainActivity : AppCompatActivity() {
 
     var bottomNavigationView: BottomNavigationView? = null
     val webSocketServiceLiveData = MutableLiveData<WebSocketService?>()
-    val incomingCallLiveData = MutableLiveData<String?>()
+    val incomingCallLiveData = MutableLiveData<WebSocketService.Event.IncomingCall>()
     private var webSocketServiceConnection: ServiceConnection? = null
     var currentFragmentTag: String? = null
 
     var ws: WebSocketService? = null
     val observer = Observer<WebSocketService.Event> { event ->
         if (event is WebSocketService.Event.IncomingCall) {
-            incomingCallLiveData.postValue(event.uuid)
+            incomingCallLiveData.postValue(event)
             runOnUiThread {
                 if (bottomNavigationView?.selectedItemId != R.id.navigation_live)
                     bottomNavigationView?.selectedItemId = R.id.navigation_live

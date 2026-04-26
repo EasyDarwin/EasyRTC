@@ -102,11 +102,12 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
             }
         }
 
-        (activity as? MainActivity)?.incomingCallLiveData?.observe(viewLifecycleOwner) { uuid ->
-            if (uuid != null) {
-                activeSessionUser = uuid
-                tvFragmentUUID.text = "来电: $uuid"
-                appendLog("来电: $uuid")
+        (activity as? MainActivity)?.incomingCallLiveData?.observe(viewLifecycleOwner) { event ->
+            activeSessionUser = event.uuid
+            tvFragmentUUID.text = "来电: ${event.uuid}"
+            appendLog("来电: ${event.uuid}")
+            view.post{
+                webSocketService?.handleIncomingCall(event);
             }
         }
 
@@ -512,8 +513,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     private fun stopEasyRTC() {        
         val session = EasyRTCSdk.getMediaSession()
-        session.stopSend()
-        session.stopRecv()
+        session.removeTransceivers()
         pipelineController.stop()
     }
 

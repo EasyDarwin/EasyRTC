@@ -154,6 +154,7 @@ object EasyRTCSdk {
     @JvmStatic
     fun connectionStateChange(userPtr: Long, state: Int): Int {
         if (userPtr == this.mUserPtr) eventListener?.connectionStateChange(state)
+        getMediaSession().setConnectState(state);
         return 0
     }
 

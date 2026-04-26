@@ -86,6 +86,12 @@ static void* decodeThreadFunc(void* arg) {
             usleep(1000);
             continue;
         }
+        {
+            static int64_t __idx = 0;
+            if (__idx++ % 300 == 0) {
+                LOGD("VIDEO PKG OUT pts:%llums, in packet caches:%llu", packet.ptsUs/1000, pipeline->frameQueue.size());
+            }
+        }
         if (droppingPackets && packet.frameFlags == 0) {
             LOGW("Dropping packet pts=%lld", static_cast<long long>(packet.ptsUs));
             continue;
@@ -93,7 +99,7 @@ static void* decodeThreadFunc(void* arg) {
         droppingPackets = false;
         const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
         if (cached_packet_millis > 500) {
-            LOGW("Too many pending frames: %zu, %llu, start dropping non-key frames", pipeline->frameQueue.size(), cached_packet_millis);
+            LOGW("Too many pending frames: %zu(count), %llu(ms), start dropping non-key frames", pipeline->frameQueue.size(), cached_packet_millis);
             droppingPackets = true;
             continue;
         } 
@@ -240,6 +246,12 @@ void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, co
     while (!pipeline->frameQueue.push(packet)) {
         // LOGE("Failed to push frame into queue");
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    {
+        static int64_t __idx = 0;
+        if (__idx++ % 300 == 0) {
+            LOGD("VIDEO PKG IN pts:%llums, in packet caches:%llu", ptsUs/1000, pipeline->frameQueue.size());
+        }
     }
 }
 

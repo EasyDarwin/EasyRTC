@@ -1,5 +1,6 @@
 #include "easyrtc_media.h"
 #include "EasyRTCAPI.h"
+#include "easyrtc_common.h"
 #include <cassert>
 #include <cstring>
 #include <string>
@@ -125,6 +126,7 @@ void* outputThreadFunc(void* arg) {
         frame.trackId = 0;
 
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
+            LOGD("Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_size);
             std::lock_guard<std::recursive_mutex> lock(pipeline->mutex);
             if (pipeline->sps_pps_buffer && pipeline->sps_pps_size > 0) {
                 size_t totalSize = pipeline->sps_pps_size + dataSize;

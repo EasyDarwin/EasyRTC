@@ -54,6 +54,13 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
         }
         requestedBytes -= toCopy;
         output += toCopy;
+
+        {
+          static int64_t __idx = 0;
+          if (__idx++ % 300 == 0) {
+              LOGD("AUDIO PKG OUT, caches:%llu", pipeline->jitterBuffer.size());
+          }
+        }
       }
     }
     assert(requestedBytes >= 0);
@@ -150,11 +157,19 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
   // jitter buffer, because the buffer is defined as vector<uint8_t>
   auto frame = std::vector<uint8_t>(pcm.size() * sizeof(int16_t));
   memcpy(frame.data(), pcm.data(), frame.size());
-  while (!pipeline->jitterBuffer.push(frame)) {
+  while (!pipeline->jitterBuffer.push(std::move(frame))) {
     // static auto __tmp = 0;
     // if (__tmp ++ % 10 == 0)
     //     LOGW("Audio playback jitter buffer full, dropping frame");
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  {
+    static int64_t __idx = 0;
+    static int64_t frames = 0;
+    frames += pcm.size() / pipeline->CHANNEL_COUNT;
+    if (__idx++ % 300 == 0) {
+        LOGD("AUDIO PKG IN pts:%llums, in packet caches:%llu", frames, pipeline->jitterBuffer.size());
+    }
   }
 }
 

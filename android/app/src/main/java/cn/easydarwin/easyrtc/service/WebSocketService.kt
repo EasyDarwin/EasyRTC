@@ -6,7 +6,12 @@ import android.os.Binder
 import android.os.IBinder
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
+import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPNTIWEBRTCOFFERINFO2
+import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPREQGETWEBRTCOFFERINFO
+import cn.easyrtc.EasyRTCCodec
+import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCUser
 
 class WebSocketService : Service() {
@@ -18,7 +23,7 @@ class WebSocketService : Service() {
         data class Error(val throwable: Throwable) : Event()
         data class OnlineUsers(val users: List<EasyRTCUser>) : Event()
         data class Logs(val text: String) : Event()
-        data class IncomingCall(val uuid: String) : Event()
+        data class IncomingCall(val uuid: String, val data: ByteArray, val callout: Boolean = false) : Event()
     }
 
     inner class LocalBinder : Binder() {
@@ -59,7 +64,16 @@ class WebSocketService : Service() {
                 }
 
                 override fun onWSIncomingCall(uuid: String) {
-                    _events.postValue(Event.IncomingCall(uuid))
+//                    _events.postValue(Event.IncomingCall(uuid))
+                }
+
+                override fun onTypeAndData(type: Int, data: ByteArray) {
+                    if (HPREQGETWEBRTCOFFERINFO == type) {
+                        //device 设备端逻辑
+                        _events.postValue(Event.IncomingCall(manager.uuidClientB, data))
+                    } else if (HPNTIWEBRTCOFFERINFO2 == type) {
+                        _events.postValue(Event.IncomingCall(manager.uuidClientB, data, true))
+                    }
                 }
             }
         )
@@ -83,5 +97,21 @@ class WebSocketService : Service() {
 
     fun sendOfferSDP(sdp: String, isOffer: Boolean) {
         manager.sendOfferSDP(sdp, isOffer)
+    }
+
+    fun handleIncomingCall(event: Event.IncomingCall) {
+        if (event.callout)
+        {
+            val sdp = manager.handlerPeerConnection(event.data, true)
+            manager.handlerCallerSDP(sdp)
+            _events.postValue(Event.Logs(sdp))
+            return;
+        }
+        manager.handlerPeerConnection(event.data)
+        val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
+        val session = EasyRTCSdk.getMediaSession()
+        session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
+        EasyRTCSdk.addDataChannel("123") //name 设备端随机字符串
+        EasyRTCSdk.createOffer()  //创建  Offer  sdp
     }
 }

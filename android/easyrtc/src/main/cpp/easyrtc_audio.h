@@ -19,9 +19,9 @@ struct AudioCapturePipeline {
     AudioCapturePipeline& operator=(const AudioCapturePipeline&) = delete;
 };
 
-AudioCapturePipeline* audioCaptureCreate(EasyRTC_Transceiver audioTransceiver);
-int audioCaptureStart(AudioCapturePipeline* pipeline);
-void audioCaptureStop(AudioCapturePipeline* pipeline);
-void audioCaptureRelease(AudioCapturePipeline* pipeline);
+std::shared_ptr<AudioCapturePipeline> audioCaptureCreate(EasyRTC_Transceiver audioTransceiver);
+int audioCaptureStart(std::shared_ptr<AudioCapturePipeline> pipeline);
+void audioCaptureStop(std::shared_ptr<AudioCapturePipeline> pipeline);
+void audioCaptureRelease(std::shared_ptr<AudioCapturePipeline> pipeline);
 
 #endif

@@ -1,4 +1,5 @@
 #include "easyrtc_audio.h"
+#include <aaudio/AAudio.h>
 #include <cstring>
 #include <time.h>
 
@@ -43,6 +44,7 @@ static aaudio_data_callback_result_t dataCallback(
     frame.frameData = pcmData;
     frame.trackId = 0;
 
+    // LOGD("Audio capture callback: frames=%d, size=%d, pts=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts));
     int result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
     if (result != 0) {
         LOGE("EasyRTC_SendFrame (audio) failed: %d", result);
@@ -58,14 +60,14 @@ static void errorCallback(
     LOGE("AAudio capture error: %d", error);
 }
 
-AudioCapturePipeline* audioCaptureCreate(EasyRTC_Transceiver audioTransceiver) {
-    auto* pipeline = new AudioCapturePipeline();
+std::shared_ptr<AudioCapturePipeline> audioCaptureCreate(EasyRTC_Transceiver audioTransceiver) {
+    auto pipeline = std::make_shared<AudioCapturePipeline>();
     pipeline->audioTransceiver = audioTransceiver;
     LOGD("AudioCapturePipeline created, transceiver=%p", pipeline->audioTransceiver);
     return pipeline;
 }
 
-int audioCaptureStart(AudioCapturePipeline* pipeline) {
+int audioCaptureStart(std::shared_ptr<AudioCapturePipeline> pipeline) {
     if (!pipeline) return -1;
 
     AAudioStreamBuilder* builder = nullptr;
@@ -82,8 +84,8 @@ int audioCaptureStart(AudioCapturePipeline* pipeline) {
     AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
     AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
     AAudioStreamBuilder_setInputPreset(builder, AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION);
-    AAudioStreamBuilder_setDataCallback(builder, dataCallback, pipeline);
-    AAudioStreamBuilder_setErrorCallback(builder, errorCallback, pipeline);
+    AAudioStreamBuilder_setDataCallback(builder, dataCallback, pipeline.get());
+    AAudioStreamBuilder_setErrorCallback(builder, errorCallback, pipeline.get());
 
     AAudioStream* stream = nullptr;
     result = AAudioStreamBuilder_openStream(builder, &stream);
@@ -110,23 +112,55 @@ int audioCaptureStart(AudioCapturePipeline* pipeline) {
     return 0;
 }
 
-void audioCaptureStop(AudioCapturePipeline* pipeline) {
+void audioCaptureStop(std::shared_ptr<AudioCapturePipeline> pipeline) {
     if (!pipeline) return;
 
     pipeline->running.store(false);
 
     if (pipeline->stream) {
-        AAudioStream_requestStop(pipeline->stream);
-        AAudioStream_close(pipeline->stream);
+        // {
+        //     AAudioStream_requestFlush(pipeline->stream);
+        //     // AAudioStream_waitForStateChange(pipeline->stream, AAUDIO_STREAM_STATE_STARTED, AAUDIO_STREAM_STATE_STOPPED, nullptr, nullptr);
+        //     aaudio_result_t result = AAUDIO_OK;
+        //     aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
+        //     aaudio_stream_state_t inputState = currentState;
+        //     while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_FLUSHED) {
+        //         result = AAudioStream_waitForStateChange(
+        //                                     pipeline->stream, inputState, &currentState, 100000);
+        //         inputState = currentState;
+        //     }
+        // }
+        {
+            AAudioStream_requestStop(pipeline->stream);
+            // AAudioStream_waitForStateChange(pipeline->stream, AAUDIO_STREAM_STATE_STARTED, AAUDIO_STREAM_STATE_STOPPED, nullptr, nullptr);
+            aaudio_result_t result = AAUDIO_OK;
+            aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
+            aaudio_stream_state_t inputState = currentState;
+            while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
+                result = AAudioStream_waitForStateChange(
+                                            pipeline->stream, inputState, &currentState, 100000);
+                inputState = currentState;
+            }
+        }
+        {
+            AAudioStream_close(pipeline->stream);
+            aaudio_result_t result = AAUDIO_OK;
+            aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
+            aaudio_stream_state_t inputState = currentState;
+            while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_CLOSED) {
+                result = AAudioStream_waitForStateChange(
+                                            pipeline->stream, inputState, &currentState, 100000);
+                inputState = currentState;
+            }
+        }
         pipeline->stream = nullptr;
     }
 
     LOGD("Audio capture stopped");
 }
 
-void audioCaptureRelease(AudioCapturePipeline* pipeline) {
+void audioCaptureRelease(std::shared_ptr<AudioCapturePipeline> pipeline) {
     if (!pipeline) return;
     audioCaptureStop(pipeline);
-    delete pipeline;
     LOGD("AudioCapturePipeline released");
 }

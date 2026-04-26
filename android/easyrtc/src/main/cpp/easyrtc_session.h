@@ -13,6 +13,7 @@
 #include <jni.h>
 struct AudioPlaybackPipeline;
 struct VideoDecoderPipeline;
+struct AudioCapturePipeline;
 struct MediaSession {
     EasyRTC_PeerConnection peerConnection = nullptr;
     EasyRTC_Transceiver videoTransceiver = nullptr;
@@ -31,7 +32,7 @@ struct MediaSession {
     std::mutex cameraMutex;
 
     struct MediaPipeline* videoEncoder = nullptr;
-    struct AudioCapturePipeline* audioCapture = nullptr;
+    std::shared_ptr<AudioCapturePipeline> audioCapture = nullptr;
     std::shared_ptr<AudioPlaybackPipeline> audioPlayback = nullptr;
     struct AudioDecoderPipeline* audioDecoder = nullptr;
     std::shared_ptr<VideoDecoderPipeline> videoDecoder = nullptr;
@@ -40,12 +41,13 @@ struct MediaSession {
     JavaVM* jvm = nullptr;
     jobject javaObj = nullptr;
 
-    std::atomic<bool> running{false};
     std::atomic<bool> previewRunning{false};
     std::atomic<bool> transceiversAdded{false};
     int videoCodec = 1;
     int audioCodec = 5;
     FrameDumpWriter frameDump;
+
+    int connectState{};
 };
 
 #endif

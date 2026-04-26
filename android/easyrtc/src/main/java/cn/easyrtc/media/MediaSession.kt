@@ -34,12 +34,20 @@ class MediaSession {
         return i;
     }
 
+    fun removeTransceivers(){
+        nativeRemoveTransceivers(nativePtr);
+    }
+
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
         val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
         return nativeSetupVideoEncoder(nativePtr, codec,
             config.getWidth(), config.getHeight(),
             config.getBitRate(), config.getFrameRate(),
             config.getIFrameInterval())
+    }
+
+    fun setConnectState(state:Int){
+        nativeSetState(nativePtr, state);
     }
 
 fun setDecoderSurface(surface: Surface?) {
@@ -78,8 +86,12 @@ fun setDecoderSurface(surface: Surface?) {
     private external fun nativeCreate(): Long
     private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
     private external fun nativeStopPreview(sessionPtr: Long)
+
+    private external  fun nativeSetState(sessionPtr: Long, state:Int)
     private external fun nativeSetPeerConnection(sessionPtr: Long, peerConnectionHandle: Long)
     private external fun nativeAddTransceivers(sessionPtr: Long, videoCodec: Int, audioCodec: Int): Int
+
+    private external fun nativeRemoveTransceivers(sessionPtr: Long)
     private external fun nativeSetupVideoEncoder(sessionPtr: Long, codec: Int, width: Int, height: Int, bitrate: Int, fps: Int, iframeInterval: Int): Int
 private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeStartSend(sessionPtr: Long): Int
@@ -88,8 +100,7 @@ private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?
     private external fun nativeStopRecv(sessionPtr: Long)
     private external fun nativeSwitchCamera(sessionPtr: Long)
     private external fun nativeRequestKeyFrame(sessionPtr: Long)
-    private external fun nativeGetVideoTransceiver(sessionPtr: Long): Long
-    private external fun nativeGetAudioTransceiver(sessionPtr: Long): Long
+
     private external fun nativeRelease(sessionPtr: Long)
 
     companion object {

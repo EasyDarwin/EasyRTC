@@ -26,8 +26,8 @@ public class WebSocketManager(private val url: String, private val token: String
 
     private val client = OkHttpClient.Builder().pingInterval(0, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).build()
 
-    private var uuidClientA = ""
-    private var uuidClientB = ""
+    var uuidClientA = ""
+    var uuidClientB = ""
 
     private val handler = Handler(Looper.getMainLooper())
     private var onlineTask: Runnable? = null
@@ -76,6 +76,7 @@ public class WebSocketManager(private val url: String, private val token: String
         fun onWSOnlineUsers(users: List<EasyRTCUser>)
         fun onWSLogs(txt: String)
         fun onWSIncomingCall(uuid: String)
+        fun onTypeAndData(type: Int, data: ByteArray)
     }
 
     private val listener = object : WebSocketListener() {
@@ -270,21 +271,6 @@ public class WebSocketManager(private val url: String, private val token: String
             val extradatalen = bytesToIntLE(data.copyOfRange(44, 46))
             val extradata = String(data.copyOfRange(46, 46 + extradatalen), Charsets.UTF_8)
             Log.d(TAG, "播放 ack uuid=${this.uuidClientB} , play_uuid= ${this.uuidClientA} status=$status extradatalen=$extradatalen extradata=$extradata")
-        } else if (HPREQGETWEBRTCOFFERINFO == type) {
-            //device 设备端逻辑
-            handlerPeerConnection(data)
-            callback.onWSIncomingCall(uuidClientB)
-            val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-            val session = EasyRTCSdk.getMediaSession()
-            session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
-            EasyRTCSdk.addDataChannel("123") //name 设备端随机字符串
-            EasyRTCSdk.createOffer()  //创建  Offer  sdp
-
-        } else if (HPNTIWEBRTCOFFERINFO2 == type) {
-            //caller 逻辑
-            val sdp = handlerPeerConnection(data, true)
-            handlerCallerSDP(sdp)
-            callback.onWSLogs(sdp)
         } else if (HPNTIWEBRTCANSWERINFO == type) {
             this.uuidClientB = byteArrayToUuid(data.copyOfRange(8, 24))   //16字节
             val sdplen = bytesToIntLE(data.copyOfRange(24, 26))           //2字节
@@ -304,6 +290,8 @@ public class WebSocketManager(private val url: String, private val token: String
                 offset += 16
             }
             callback.onWSOnlineUsers(users)
+        }else {
+            callback.onTypeAndData(type, data)
         }
     }
 
