@@ -16,3 +16,6 @@ android/local.properties
 .settings
 .classpath
 .project
+
+.cache/
+android/easyrtc/src/main/cpp/toolchain-android.cmake

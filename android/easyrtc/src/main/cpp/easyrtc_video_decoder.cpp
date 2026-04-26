@@ -12,7 +12,7 @@ std::atomic<uint64_t> gDecTryLater{0};
 std::atomic<uint64_t> gDecFormatChanged{0};
 }
 
-static bool initDecoder(VideoDecoderPipeline* pipeline) {
+static bool initDecoder(std::shared_ptr<VideoDecoderPipeline> pipeline) {
     std::lock_guard<std::mutex> lock(pipeline->decoderMutex);
 
     if (pipeline->decoder) {
@@ -78,22 +78,25 @@ static void* decodeThreadFunc(void* arg) {
     int enqueued{};
     int64_t firstPtsUs = -1;
     int64_t firstSystemUs = -1;
+    bool droppingPackets = false;
 
     while (pipeline->running.load() && !pipeline->destroyed.load()) {
-        VideoDecoderPipeline::Packet packet;
-        {
-            std::lock_guard<std::mutex> lock(pipeline->queueMutex);
-            if (!pipeline->frameQueue.empty()) {
-                packet = std::move(pipeline->frameQueue.front());
-                pipeline->frameQueue.pop();
-            }
-        }
-
-        if (packet.data.empty()) {
+        Packet packet;
+        if (!pipeline->frameQueue.pop(packet)) {
             usleep(1000);
             continue;
         }
-
+        if (droppingPackets && packet.frameFlags == 0) {
+            LOGW("Dropping packet pts=%lld", static_cast<long long>(packet.ptsUs));
+            continue;
+        }
+        droppingPackets = false;
+        const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
+        if (cached_packet_millis > 500) {
+            LOGW("Too many pending frames: %zu, %llu, start dropping non-key frames", pipeline->frameQueue.size(), cached_packet_millis);
+            droppingPackets = true;
+            continue;
+        } 
         AMediaCodec* decoder = pipeline->decoder;
         if (!decoder) {
             usleep(5000);
@@ -197,8 +200,8 @@ static void* decodeThreadFunc(void* arg) {
     return nullptr;
 }
 
-VideoDecoderPipeline* videoDecoderCreate(ANativeWindow* surface, int codecType, int width, int height) {
-    auto* pipeline = new VideoDecoderPipeline();
+std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface, int codecType, int width, int height) {
+    auto pipeline = std::make_shared<VideoDecoderPipeline>();
     pipeline->width = width;
     pipeline->height = height;
     pipeline->currentCodecType = (codecType == 6) ? "video/hevc" : "video/avc";
@@ -208,7 +211,6 @@ VideoDecoderPipeline* videoDecoderCreate(ANativeWindow* surface, int codecType, 
     }
 
     if (!initDecoder(pipeline)) {
-        delete pipeline;
         return nullptr;
     }
 
@@ -216,11 +218,11 @@ VideoDecoderPipeline* videoDecoderCreate(ANativeWindow* surface, int codecType, 
     return pipeline;
 }
 
-int videoDecoderStart(VideoDecoderPipeline* pipeline) {
+int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
     if (!pipeline) return -1;
 
     pipeline->running.store(true);
-    pipeline->decodeThread = std::thread([pipeline]() { decodeThreadFunc(pipeline); });
+    pipeline->decodeThread = std::thread([pipeline]() { decodeThreadFunc(pipeline.get()); });
     pthread_t th = pipeline->decodeThread.native_handle();
     sched_param sch_params;
     sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
@@ -228,52 +230,23 @@ int videoDecoderStart(VideoDecoderPipeline* pipeline) {
     return 0;
 }
 
-void videoDecoderEnqueueFrame(VideoDecoderPipeline* pipeline, const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags) {
+void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags) {
     if (!pipeline || !pipeline->running.load() || pipeline->destroyed.load() || size <= 0) return;
 
-    VideoDecoderPipeline::Packet packet;
+    Packet packet;
     packet.data.assign(data, data + size);
     packet.ptsUs = ptsUs;
     packet.frameFlags = frameFlags;
-    {
-        std::lock_guard<std::mutex> lock(pipeline->queueMutex);
-        if (pipeline->frameQueue.size() >= pipeline->MAX_QUEUE_SIZE) {
-            LOGW("exceeds the MAX_QUEUE_SIZE");
-            pipeline->frameQueue.pop();
-        }
-        pipeline->frameQueue.push(std::move(packet));
+    while (!pipeline->frameQueue.push(packet)) {
+        // LOGE("Failed to push frame into queue");
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
-void videoDecoderRelease(VideoDecoderPipeline* pipeline) {
+void videoDecoderRelease(std::shared_ptr<VideoDecoderPipeline> pipeline) {
     if (!pipeline) return;
-
     pipeline->running.store(false);
-    pipeline->destroyed.store(true);
-
     if (pipeline->decodeThread.joinable()) {
         pipeline->decodeThread.join();
     }
-
-    {
-        std::lock_guard<std::mutex> lock(pipeline->queueMutex);
-        while (!pipeline->frameQueue.empty()) pipeline->frameQueue.pop();
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(pipeline->decoderMutex);
-        if (pipeline->decoder) {
-            AMediaCodec_stop(pipeline->decoder);
-            AMediaCodec_delete(pipeline->decoder);
-            pipeline->decoder = nullptr;
-        }
-    }
-
-    if (pipeline->surface) {
-        ANativeWindow_release(pipeline->surface);
-        pipeline->surface = nullptr;
-    }
-
-    delete pipeline;
-    LOGD("VideoDecoderPipeline released");
 }

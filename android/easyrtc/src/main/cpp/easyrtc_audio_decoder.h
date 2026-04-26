@@ -9,7 +9,7 @@ struct AudioDecoderPipeline {
 };
 
 AudioDecoderPipeline* audioDecoderCreate(int codec);
-std::vector<uint8_t> audioDecoderDecode(AudioDecoderPipeline* pipeline, const uint8_t* data, int32_t size);
+std::vector<int16_t> audioDecoderDecode(AudioDecoderPipeline* pipeline, const uint8_t* data, int32_t size);
 void audioDecoderRelease(AudioDecoderPipeline* pipeline);
 
 #endif

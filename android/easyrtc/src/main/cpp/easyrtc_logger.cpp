@@ -6,11 +6,28 @@
 #include <cstring>
 #include <ctime>
 #include <mutex>
+#include <string>
+#include <fcntl.h>
+#include <unistd.h>
 
 namespace {
 std::mutex gFileMutex;
-const char* kLogPath = "/data/local/tmp/easyrtc_native.log";
 const size_t kRotateBytes = 5 * 1024 * 1024;
+
+static std::string log_dir() {
+    static std::string dumpDir;
+    if (!dumpDir.empty()) {
+        return dumpDir;
+    }
+    char cmdline[256] = {0};
+    int fd = open("/proc/self/cmdline", O_RDONLY);
+    if (fd < 0) { return ""; }
+    read(fd, cmdline, sizeof(cmdline) - 1);
+    close(fd);
+    if (cmdline[0] == '\0') { return ""; }
+    dumpDir = std::string("/sdcard/Android/data/") + cmdline + "/files";
+    return dumpDir;
+}
 
 void rotate_if_needed_locked(FILE* fp) {
     if (!fp) return;
@@ -19,8 +36,8 @@ void rotate_if_needed_locked(FILE* fp) {
     if (pos < 0 || static_cast<size_t>(pos) < kRotateBytes) return;
 
     std::fclose(fp);
-    std::remove("/data/local/tmp/easyrtc_native.log.1");
-    std::rename(kLogPath, "/data/local/tmp/easyrtc_native.log.1");
+    std::remove((log_dir() + "/easyrtc_native.log.1").c_str());
+    std::rename((log_dir() + "/easyrtc_native.log").c_str(), (log_dir() + "/easyrtc_native.log.1").c_str());
 }
 
 const char* level_tag(int priority) {
@@ -35,11 +52,12 @@ const char* level_tag(int priority) {
 void write_file_line(int priority, const char* tag, const char* message) {
     std::lock_guard<std::mutex> lock(gFileMutex);
 
-    FILE* fp = std::fopen(kLogPath, "a+");
+    auto kLogPath = log_dir() + "/easyrtc_native.log";
+    FILE* fp = std::fopen(kLogPath.c_str(), "a+");
     if (!fp) return;
 
     rotate_if_needed_locked(fp);
-    fp = std::fopen(kLogPath, "a+");
+    fp = std::fopen(kLogPath.c_str(), "a+");
     if (!fp) return;
 
     std::time_t now = std::time(nullptr);

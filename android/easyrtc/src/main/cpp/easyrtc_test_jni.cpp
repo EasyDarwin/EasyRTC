@@ -24,18 +24,17 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
 
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
 
-    VideoDecoderPipeline* decoder = videoDecoderCreate(window, codec, 720, 1280);
+    auto decoder = videoDecoderCreate(window, codec, 720, 1280);
     if (!decoder) {
         ANativeWindow_release(window);
         return;
     }
     videoDecoderStart(decoder);
 
-    AudioPlaybackPipeline* audioPlayback = audioPlaybackCreate();
-    AudioDecoderPipeline* audioDecoder = audioDecoderCreate(header.audioCodec);
+    auto audioPlayback = audioPlaybackCreate(5);
 
-    #if 0
-    auto pcm_f = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_av_pcm.pcm", "wb");
+    #if 1
+    auto pcm_f = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_av_pcm2.pcm", "wb");
     #else
     FILE* pcm_f = nullptr;
     #endif
@@ -46,26 +45,21 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
         lastPts = f.ptsUs;
         if (i > 0) {
             int64_t deltaNs = f.callbackNs - frames[i - 1].callbackNs;
-            LOGD("pts delta:%ld, callback delta:%ld", ptsDeltaUS, deltaNs/1000);
+//            LOGD("pts delta:%ld, callback delta:%ld", ptsDeltaUS, deltaNs/1000);
             if (deltaNs > 0 ) {
-                std::this_thread::sleep_for(std::chrono::nanoseconds(deltaNs));
+               std::this_thread::sleep_for(std::chrono::nanoseconds(deltaNs));
             }
         }
         if (f.data.empty()) continue;
         if (f.kind == 0) {
             videoDecoderEnqueueFrame(decoder, f.data.data(), static_cast<int32_t>(f.data.size()), f.ptsUs, f.flags);
         } else if (f.kind == 1) {
-            if (pcm_f) fwrite(f.data.data(), 1, f.data.size(), pcm_f);
-            auto pcm = audioDecoderDecode(audioDecoder, f.data.data(), static_cast<int32_t>(f.data.size()));
-            if (!pcm.empty()) {
-                audioPlaybackEnqueueFrame(audioPlayback, pcm.data(), static_cast<int32_t>(pcm.size()));
-            }
+            audioPlaybackEnqueueFrame(audioPlayback, f.data.data(), static_cast<int32_t>(f.data.size()));
         }
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    audioDecoderRelease(audioDecoder);
     audioPlaybackRelease(audioPlayback);
     videoDecoderRelease(decoder);
     if (pcm_f) fclose(pcm_f);

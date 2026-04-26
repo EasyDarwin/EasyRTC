@@ -11,7 +11,8 @@
 #include <mutex>
 
 #include <jni.h>
-
+struct AudioPlaybackPipeline;
+struct VideoDecoderPipeline;
 struct MediaSession {
     EasyRTC_PeerConnection peerConnection = nullptr;
     EasyRTC_Transceiver videoTransceiver = nullptr;
@@ -31,9 +32,9 @@ struct MediaSession {
 
     struct MediaPipeline* videoEncoder = nullptr;
     struct AudioCapturePipeline* audioCapture = nullptr;
-    struct AudioPlaybackPipeline* audioPlayback = nullptr;
+    std::shared_ptr<AudioPlaybackPipeline> audioPlayback = nullptr;
     struct AudioDecoderPipeline* audioDecoder = nullptr;
-    struct VideoDecoderPipeline* videoDecoder = nullptr;
+    std::shared_ptr<VideoDecoderPipeline> videoDecoder = nullptr;
     ANativeWindow* decoderSurface = nullptr;
 
     JavaVM* jvm = nullptr;

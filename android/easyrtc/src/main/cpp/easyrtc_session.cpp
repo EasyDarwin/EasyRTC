@@ -112,9 +112,9 @@ static int mediaTransceiverCallback(void* userPtr,
 
     switch (type) {
         case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
-#if 0
+#if 1
             static auto f = frame->presentationTs;
-            LOGD("VIDEO DELTA:%lld， size:%d， flag:%d, duration:%lld", frame->presentationTs - f, frame->size, frame->flags, frame->duration);
+            LOGD("VIDEO PTS:%llu, DELTA:%llu， size:%d， flag:%d, duration:%llu", frame->presentationTs, frame->presentationTs - f, frame->size, frame->flags, frame->duration);
             f = frame->presentationTs;
 #endif
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
@@ -152,7 +152,7 @@ static int mediaTransceiverCallback(void* userPtr,
                          nalType,
                          annexB ? "annexb" : (avcc ? "avcc" : "unknown"),
                          static_cast<unsigned long long>(frame->presentationTs),
-                         session->videoDecoder,
+                         session->videoDecoder ? session->videoDecoder.get() : nullptr,
                          n > 0 ? p[0] : 0,
                          n > 1 ? p[1] : 0,
                          n > 2 ? p[2] : 0,
@@ -171,7 +171,7 @@ static int mediaTransceiverCallback(void* userPtr,
                                          static_cast<uint32_t>(frame->flags));
             } else {
                 LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d", 
-                     session->videoDecoder,
+                     session->videoDecoder ? session->videoDecoder.get() : nullptr,
                      frame,
                      frame ? frame->frameData : nullptr,
                      frame ? frame->size : 0,
@@ -259,7 +259,7 @@ static void ensureVideoDecoderForSession(MediaSession* session) {
     }
     // Ownership transferred to VideoDecoderPipeline (released in videoDecoderRelease).
     session->decoderSurface = nullptr;
-    LOGD("ensureVideoDecoderForSession: decoder ready %p", session->videoDecoder);
+    LOGD("ensureVideoDecoderForSession: decoder ready %p", session->videoDecoder.get());
 }
 
 extern "C" {
@@ -547,7 +547,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv* env, jobject thiz, jl
     auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
     assert(session && "Invalid session");
 
-    session->audioPlayback = audioPlaybackCreate();
+    session->audioPlayback = audioPlaybackCreate(5);
     ensureVideoDecoderForSession(session);
 
     LOGD("MediaSession startRecv");

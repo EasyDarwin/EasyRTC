@@ -78,23 +78,46 @@ AudioDecoderPipeline* audioDecoderCreate(int codec) {
     LOGD("AudioDecoderPipeline created codec=%d", codec);
     return pipeline;
 }
+// A-law → PCM16
+int16_t alaw2linear(uint8_t a_val) {
+    a_val ^= 0x55;
 
-std::vector<uint8_t> audioDecoderDecode(AudioDecoderPipeline* pipeline, const uint8_t* data, int32_t size) {
-    std::vector<uint8_t> pcm;
+    int t = (a_val & 0x0F) << 4;
+    int seg = (a_val & 0x70) >> 4;
 
+    switch (seg) {
+        case 0: t += 8; break;
+        case 1: t += 0x108; break;
+        default:
+            t += 0x108;
+            t <<= (seg - 1);
+    }
+
+    return (a_val & 0x80) ? t : -t;
+}
+
+
+int16_t ulaw2linear(uint8_t u_val) {
+    u_val = ~u_val;
+
+    int t = ((u_val & 0x0F) << 3) + 0x84;
+    t <<= ((unsigned)u_val & 0x70) >> 4;
+
+    return (u_val & 0x80) ? (0x84 - t) : (t - 0x84);
+}
+std::vector<int16_t> audioDecoderDecode(AudioDecoderPipeline* pipeline, const uint8_t* data, int32_t size) {
+    std::vector<int16_t> pcm;
     if (!pipeline || !data || size <= 0) return pcm;
 
     if (pipeline->codec == 5) {
-        pcm.resize(size * 2);
+        pcm.resize(size);
         for (int32_t i = 0; i < size; i++) {
-            int16_t sample = alawDecodeTable[data[i]];
-            memcpy(pcm.data() + i * 2, &sample, 2);
+            pcm[i] = alaw2linear(data[i]);
         }
     } else if (pipeline->codec == 4) {
-        pcm.resize(size * 2);
+        pcm.resize(size);
         for (int32_t i = 0; i < size; i++) {
-            int16_t sample = mulawDecodeTable[data[i]];
-            memcpy(pcm.data() + i * 2, &sample, 2);
+            pcm[i] = ulaw2linear(data[i]);
         }
     } else {
         LOGW("AudioDecoderPipeline: unsupported codec %d, passing through", pipeline->codec);
