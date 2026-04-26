@@ -15,84 +15,140 @@
 #include <atomic>
 
 namespace {
-std::atomic<uint64_t> gVideoCbCount{0};
-std::atomic<uint64_t> gVideoCbBytes{0};
-std::atomic<uint64_t> gVideoCbAnnexB{0};
-std::atomic<uint64_t> gVideoCbAvcc{0};
+    std::atomic<uint64_t> gVideoCbCount{0};
+    std::atomic<uint64_t> gVideoCbBytes{0};
+    std::atomic<uint64_t> gVideoCbAnnexB{0};
+    std::atomic<uint64_t> gVideoCbAvcc{0};
 }
 
-static void releaseCaptureSession(MediaSession* s) {
+static void releaseCaptureSession(MediaSession *s) {
     if (s->captureSession) {
         ACameraCaptureSession_stopRepeating(s->captureSession);
         ACameraCaptureSession_close(s->captureSession);
         s->captureSession = nullptr;
     }
-    if (s->captureRequest) { ACaptureRequest_free(s->captureRequest); s->captureRequest = nullptr; }
-    if (s->encoderTarget) { ACameraOutputTarget_free(s->encoderTarget); s->encoderTarget = nullptr; }
-    if (s->previewTarget) { ACameraOutputTarget_free(s->previewTarget); s->previewTarget = nullptr; }
-    if (s->encoderOutput) { ACaptureSessionOutput_free(s->encoderOutput); s->encoderOutput = nullptr; }
-    if (s->previewOutput) { ACaptureSessionOutput_free(s->previewOutput); s->previewOutput = nullptr; }
-    if (s->outputContainer) { ACaptureSessionOutputContainer_free(s->outputContainer); s->outputContainer = nullptr; }
+    if (s->captureRequest) {
+        ACaptureRequest_free(s->captureRequest);
+        s->captureRequest = nullptr;
+    }
+    if (s->encoderTarget) {
+        ACameraOutputTarget_free(s->encoderTarget);
+        s->encoderTarget = nullptr;
+    }
+    if (s->previewTarget) {
+        ACameraOutputTarget_free(s->previewTarget);
+        s->previewTarget = nullptr;
+    }
+    if (s->encoderOutput) {
+        ACaptureSessionOutput_free(s->encoderOutput);
+        s->encoderOutput = nullptr;
+    }
+    if (s->previewOutput) {
+        ACaptureSessionOutput_free(s->previewOutput);
+        s->previewOutput = nullptr;
+    }
+    if (s->outputContainer) {
+        ACaptureSessionOutputContainer_free(s->outputContainer);
+        s->outputContainer = nullptr;
+    }
 }
 
-static bool createCaptureSession(MediaSession* s, bool withEncoder) {
+static bool createCaptureSession(MediaSession *s, bool withEncoder) {
     camera_status_t camStatus;
 
     camStatus = ACaptureSessionOutputContainer_create(&s->outputContainer);
-    if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+    if (camStatus != ACAMERA_OK) {
+        releaseCaptureSession(s);
+        return false;
+    }
 
     if (s->videoEncoder && s->videoEncoder->running.load()) {
         camStatus = ACaptureSessionOutput_create(
-                reinterpret_cast<ACameraWindowType*>(s->videoEncoder->window), &s->encoderOutput);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+                reinterpret_cast<ACameraWindowType *>(s->videoEncoder->window), &s->encoderOutput);
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
         camStatus = ACaptureSessionOutputContainer_add(s->outputContainer, s->encoderOutput);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
     }
 
     if (s->previewWindow) {
         camStatus = ACaptureSessionOutput_create(
-                reinterpret_cast<ACameraWindowType*>(s->previewWindow), &s->previewOutput);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+                reinterpret_cast<ACameraWindowType *>(s->previewWindow), &s->previewOutput);
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
         camStatus = ACaptureSessionOutputContainer_add(s->outputContainer, s->previewOutput);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
     }
 
     camStatus = ACameraDevice_createCaptureRequest(s->cameraDevice,
-            withEncoder ? TEMPLATE_RECORD : TEMPLATE_PREVIEW, &s->captureRequest);
-    if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+                                                   withEncoder ? TEMPLATE_RECORD : TEMPLATE_PREVIEW,
+                                                   &s->captureRequest);
+    if (camStatus != ACAMERA_OK) {
+        releaseCaptureSession(s);
+        return false;
+    }
 
     if (withEncoder && s->videoEncoder && s->videoEncoder->window) {
         camStatus = ACameraOutputTarget_create(
-                reinterpret_cast<ACameraWindowType*>(s->videoEncoder->window), &s->encoderTarget);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+                reinterpret_cast<ACameraWindowType *>(s->videoEncoder->window), &s->encoderTarget);
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
         camStatus = ACaptureRequest_addTarget(s->captureRequest, s->encoderTarget);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
     }
 
     if (s->previewWindow) {
         camStatus = ACameraOutputTarget_create(
-                reinterpret_cast<ACameraWindowType*>(s->previewWindow), &s->previewTarget);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+                reinterpret_cast<ACameraWindowType *>(s->previewWindow), &s->previewTarget);
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
         camStatus = ACaptureRequest_addTarget(s->captureRequest, s->previewTarget);
-        if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
     }
 
     uint8_t afMode = ACAMERA_CONTROL_AF_MODE_CONTINUOUS_VIDEO;
     ACaptureRequest_setEntry_u8(s->captureRequest, ACAMERA_CONTROL_AF_MODE, 1, &afMode);
 
-    static const ACameraCaptureSession_stateCallbacks sessionCallbacks = { nullptr, nullptr, nullptr, nullptr };
+    static const ACameraCaptureSession_stateCallbacks sessionCallbacks = {nullptr, nullptr, nullptr,
+                                                                          nullptr};
     camStatus = ACameraDevice_createCaptureSession(s->cameraDevice, s->outputContainer,
-            &sessionCallbacks, &s->captureSession);
-    if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+                                                   &sessionCallbacks, &s->captureSession);
+    if (camStatus != ACAMERA_OK) {
+        releaseCaptureSession(s);
+        return false;
+    }
 
     camStatus = ACameraCaptureSession_setRepeatingRequest(s->captureSession, nullptr, 1,
-            &s->captureRequest, nullptr);
-    if (camStatus != ACAMERA_OK) { releaseCaptureSession(s); return false; }
+                                                          &s->captureRequest, nullptr);
+    if (camStatus != ACAMERA_OK) {
+        releaseCaptureSession(s);
+        return false;
+    }
 
     return true;
 }
 
-static void closeCamera(MediaSession* s) {
+static void closeCamera(MediaSession *s) {
     std::lock_guard<std::mutex> lock(s->cameraMutex);
     releaseCaptureSession(s);
     if (s->cameraDevice) {
@@ -101,13 +157,13 @@ static void closeCamera(MediaSession* s) {
     }
 }
 
-static int mediaTransceiverCallback(void* userPtr,
-        EASYRTC_TRANSCEIVER_CALLBACK_TYPE_E type,
-        EasyRTC_CODEC codecID,
-        EasyRTC_Frame* frame,
-        double bandwidthEstimation) {
+static int mediaTransceiverCallback(void *userPtr,
+                                    EASYRTC_TRANSCEIVER_CALLBACK_TYPE_E type,
+                                    EasyRTC_CODEC codecID,
+                                    EasyRTC_Frame *frame,
+                                    double bandwidthEstimation) {
 
-    auto* session = static_cast<MediaSession*>(userPtr);
+    auto *session = static_cast<MediaSession *>(userPtr);
     assert(session && "Invalid session in transceiver callback");
 
     switch (type) {
@@ -118,7 +174,7 @@ static int mediaTransceiverCallback(void* userPtr,
             f = frame->presentationTs;
 #endif
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
-                const uint8_t* p = frame->frameData;
+                const uint8_t *p = frame->frameData;
                 const uint32_t n = frame->size;
                 bool annexB = false;
                 bool avcc = false;
@@ -163,14 +219,15 @@ static int mediaTransceiverCallback(void* userPtr,
                 }
 
                 const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 1000);
-                frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData, frame->size, ptsUs, frame->flags);
+                frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
+                               frame->size, ptsUs, frame->flags);
                 videoDecoderEnqueueFrame(session->videoDecoder,
                                          frame->frameData,
                                          static_cast<int32_t>(frame->size),
                                          ptsUs,
                                          static_cast<uint32_t>(frame->flags));
             } else {
-                LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d", 
+                LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d",
                      session->videoDecoder ? session->videoDecoder.get() : nullptr,
                      frame,
                      frame ? frame->frameData : nullptr,
@@ -184,14 +241,16 @@ static int mediaTransceiverCallback(void* userPtr,
 //                    static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
                 int64_t audioPtsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
-                frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData, frame->size, audioPtsUs, frame->flags);
-                audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData, static_cast<int32_t>(frame->size));
+                frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData,
+                               frame->size, audioPtsUs, frame->flags);
+                audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData,
+                                          static_cast<int32_t>(frame->size));
             }
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_KEY_FRAME_REQ:
             LOGD("mediaTransceiverCallback KEY_FRAME_REQ bw=%.2f", bandwidthEstimation);
             if (session->videoEncoder && session->videoEncoder->encoder) {
-                AMediaFormat* params = AMediaFormat_new();
+                AMediaFormat *params = AMediaFormat_new();
                 AMediaFormat_setInt32(params, "request-sync", 0);
                 AMediaCodec_setParameters(session->videoEncoder->encoder, params);
                 AMediaFormat_delete(params);
@@ -207,16 +266,16 @@ static int mediaTransceiverCallback(void* userPtr,
     return 0;
 }
 
-static void onRemoteVideoSizeCallback(void* userPtr, int width, int height) {
-    auto* session = static_cast<MediaSession*>(userPtr);
+static void onRemoteVideoSizeCallback(void *userPtr, int width, int height) {
+    auto *session = static_cast<MediaSession *>(userPtr);
     if (!session || !session->jvm || !session->javaObj) {
         LOGW("onRemoteVideoSizeCallback: invalid session or JVM");
         return;
     }
 
-    JNIEnv* env = nullptr;
+    JNIEnv *env = nullptr;
     bool attached = false;
-    int ret = session->jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    int ret = session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
     if (ret != JNI_OK) {
         if (session->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) {
             attached = true;
@@ -226,13 +285,13 @@ static void onRemoteVideoSizeCallback(void* userPtr, int width, int height) {
         }
     }
     if (attached) {
-    jclass clazz = env->GetObjectClass(session->javaObj);
-    if (clazz) {
-        jmethodID mid = env->GetMethodID(clazz, "onRemoteVideoSize", "(II)V");
-        if (mid) {
-            env->CallVoidMethod(session->javaObj, mid, width, height);
+        jclass clazz = env->GetObjectClass(session->javaObj);
+        if (clazz) {
+            jmethodID mid = env->GetMethodID(clazz, "onRemoteVideoSize", "(II)V");
+            if (mid) {
+                env->CallVoidMethod(session->javaObj, mid, width, height);
+            }
         }
-    }
         session->jvm->DetachCurrentThread();
     }
 }
@@ -240,8 +299,8 @@ static void onRemoteVideoSizeCallback(void* userPtr, int width, int height) {
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeCreate(JNIEnv* env, jobject thiz) {
-    auto* session = new MediaSession();
+Java_cn_easyrtc_media_MediaSession_nativeCreate(JNIEnv *env, jobject thiz) {
+    auto *session = new MediaSession();
     env->GetJavaVM(&session->jvm);
     session->javaObj = env->NewGlobalRef(thiz);
     LOGD("MediaSession created");
@@ -250,20 +309,25 @@ Java_cn_easyrtc_media_MediaSession_nativeCreate(JNIEnv* env, jobject thiz) {
 
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
-        JNIEnv* env, jobject thiz, jlong sessionPtr, jobject surface) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jobject surface) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(!session->previewRunning.load() && "Preview already running");
     assert(surface && "Invalid session");
 
     session->previewWindow = ANativeWindow_fromSurface(env, surface);
 
-    ACameraManager* cameraMgr = ACameraManager_create();
-    if (!cameraMgr) { ANativeWindow_release(session->previewWindow); session->previewWindow = nullptr; return -1; }
+    ACameraManager *cameraMgr = ACameraManager_create();
+    if (!cameraMgr) {
+        ANativeWindow_release(session->previewWindow);
+        session->previewWindow = nullptr;
+        return -1;
+    }
 
     std::string cameraId = findCameraId(session->cameraFacing);
     if (cameraId.empty()) {
-        ANativeWindow_release(session->previewWindow); session->previewWindow = nullptr;
+        ANativeWindow_release(session->previewWindow);
+        session->previewWindow = nullptr;
         ACameraManager_delete(cameraMgr);
         return -1;
     }
@@ -272,19 +336,22 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     cb.context = session;
     cb.onDisconnected = nullptr;
     cb.onError = nullptr;
-    ACameraDevice* device = nullptr;
-    camera_status_t camStatus = ACameraManager_openCamera(cameraMgr, cameraId.c_str(), &cb, &device);
+    ACameraDevice *device = nullptr;
+    camera_status_t camStatus = ACameraManager_openCamera(cameraMgr, cameraId.c_str(), &cb,
+                                                          &device);
     ACameraManager_delete(cameraMgr);
 
     if (camStatus != ACAMERA_OK || !device) {
-        ANativeWindow_release(session->previewWindow); session->previewWindow = nullptr;
+        ANativeWindow_release(session->previewWindow);
+        session->previewWindow = nullptr;
         return -1;
     }
 
     session->cameraDevice = device;
     if (!createCaptureSession(session, false)) {
         closeCamera(session);
-        ANativeWindow_release(session->previewWindow); session->previewWindow = nullptr;
+        ANativeWindow_release(session->previewWindow);
+        session->previewWindow = nullptr;
         return -1;
     }
 
@@ -296,18 +363,17 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetState(
-        JNIEnv* env, jobject thiz, jlong sessionPtr,
-jint state)
-{
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr,
+        jint state) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     session->connectState = state;
 }
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStopPreview(
-        JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
     closeCamera(session);
@@ -321,8 +387,8 @@ Java_cn_easyrtc_media_MediaSession_nativeStopPreview(
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetPeerConnection(
-        JNIEnv* env, jobject thiz, jlong sessionPtr, jlong peerConnectionHandle) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jlong peerConnectionHandle) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
 
@@ -333,8 +399,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSetPeerConnection(
 
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
-        JNIEnv* env, jobject thiz, jlong sessionPtr, jint videoCodec, jint audioCodec) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jint videoCodec, jint audioCodec) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(session->peerConnection && "Invalid peerConnection");
     assert(videoCodec > 0 && audioCodec > 0 && "Invalid codec IDs");
@@ -353,8 +419,8 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     videoInit.direction = EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
 
     int result = EasyRTC_AddTransceiver(&session->videoTransceiver,
-            session->peerConnection, &videoTrack, &videoInit,
-            mediaTransceiverCallback, session);
+                                        session->peerConnection, &videoTrack, &videoInit,
+                                        mediaTransceiverCallback, session);
     if (result != 0 || !session->videoTransceiver) {
         LOGE("Failed to add video transceiver: %d", result);
         assert(false && "Failed to add video transceiver");
@@ -372,8 +438,8 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     audioInit.direction = EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
 
     result = EasyRTC_AddTransceiver(&session->audioTransceiver,
-            session->peerConnection, &audioTrack, &audioInit,
-            mediaTransceiverCallback, session);
+                                    session->peerConnection, &audioTrack, &audioInit,
+                                    mediaTransceiverCallback, session);
     if (result != 0 || !session->audioTransceiver) {
         LOGE("Failed to add audio transceiver: %d", result);
         assert(false && "Failed to add audio transceiver");
@@ -395,13 +461,13 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
 
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
-        JNIEnv* env, jobject thiz, jlong sessionPtr,
+        JNIEnv *env, jobject thiz, jlong sessionPtr,
         jint codec, jint width, jint height, jint bitrate, jint fps, jint iframeInterval) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
-    const char* mime = (codec == 6) ? "video/hevc" : "video/avc";
-    AMediaFormat* format = AMediaFormat_new();
+    const char *mime = (codec == 6) ? "video/hevc" : "video/avc";
+    AMediaFormat *format = AMediaFormat_new();
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, mime);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, width);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, height);
@@ -410,14 +476,14 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, iframeInterval);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, COLOR_FormatSurface);
 
-    auto* pipeline = new MediaPipeline();
+    auto pipeline = std::make_shared<MediaPipeline>();
     pipeline->transceiver = session->videoTransceiver;
     pipeline->width = width;
     pipeline->height = height;
     pipeline->bitrate = bitrate;
     pipeline->fps = fps;
     pipeline->iframeInterval = iframeInterval;
-    pipeline->format = format;
+    pipeline->format = std::shared_ptr<AMediaFormat>(format, AMediaFormat_delete);
     pipeline->mime = mime;
     session->videoEncoder = pipeline;
     LOGD("Video encoder setup: %dx%d @ %d bps, mime=%s", width, height, bitrate, mime);
@@ -426,8 +492,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
-        JNIEnv* env, jobject thiz, jlong sessionPtr, jobject surface) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jobject surface) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
     if (session->decoderSurface) {
@@ -443,35 +509,38 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
 }
 
 JNIEXPORT jint JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(session->videoEncoder);
     assert(!session->videoEncoder->running.load() && "videoEncoder already running");
-    auto* p = session->videoEncoder;
-        if (!p->initEncoder()) {
-            return -1;
-        }
-        assert(p->encoder);
-        media_status_t status = AMediaCodec_start(p->encoder);
-        if (status != AMEDIA_OK) { LOGE("Failed to start encoder: %d", status); return -1; }
+    auto p = session->videoEncoder;
+    if (!p->initEncoder()) {
+        return -1;
+    }
+    assert(p->encoder);
+    media_status_t status = AMediaCodec_start(p->encoder);
+    if (status != AMEDIA_OK) {
+        LOGE("Failed to start encoder: %d", status);
+        return -1;
+    }
 
-        p->running.store(true);
-        p->outputThread = std::thread([p]() {
-            outputThreadFunc(p);
-        });
-        // pthread_t th = p->outputThread.native_handle();
-        // sched_param sch_params;
-        // sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
-        // pthread_setschedparam(th, SCHED_FIFO, &sch_params);
-        if (session->cameraDevice) {
-            std::lock_guard<std::mutex> lock(session->cameraMutex);
-            releaseCaptureSession(session);
-            if (!createCaptureSession(session, true)) {
-                LOGE("Failed to recreate capture session with encoder");
-            }
+    p->running.store(true);
+    p->outputThread = std::thread([p]() {
+        outputThreadFunc(p.get());
+    });
+    // pthread_t th = p->outputThread.native_handle();
+    // sched_param sch_params;
+    // sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
+    // pthread_setschedparam(th, SCHED_FIFO, &sch_params);
+    if (session->cameraDevice) {
+        std::lock_guard<std::mutex> lock(session->cameraMutex);
+        releaseCaptureSession(session);
+        if (!createCaptureSession(session, true)) {
+            LOGE("Failed to recreate capture session with encoder");
         }
-        LOGD("Video encoder started");
+    }
+    LOGD("Video encoder started");
 
     if (session->audioTransceiver) {
         assert(!session->audioCapture && "audioCapture already exists");
@@ -483,13 +552,14 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv* env, jobject thiz, jl
 }
 
 JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
     session->audioPlayback = audioPlaybackCreate(5);
-    
-    session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720, 1280);
+
+    session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720,
+                                               1280);
     if (!session->videoDecoder) {
         LOGE("nativeStartRecv: videoDecoderCreate failed");
         return;
@@ -506,30 +576,36 @@ Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv* env, jobject thiz, jl
 }
 
 JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
-    if (session->audioCapture) { audioCaptureRelease(session->audioCapture); session->audioCapture = nullptr; }
+    if (session->audioCapture) {
+        audioCaptureRelease(session->audioCapture);
+        session->audioCapture = nullptr;
+    }
 
     if (session->videoEncoder) {
-        auto* p = session->videoEncoder;
+        auto p = session->videoEncoder;
         if (p->running.exchange(false)) {
             if (p->encoder) { AMediaCodec_signalEndOfInputStream(p->encoder); }
             if (p->outputThread.joinable()) { p->outputThread.join(); }
             if (p->encoder) { AMediaCodec_stop(p->encoder); }
         }
-        if (p->encoder) { AMediaCodec_delete(p->encoder); p->encoder = nullptr; }
-        if (p->format) { AMediaFormat_delete(p->format); p->format = nullptr; }
-        if (p->window) { ANativeWindow_release(p->window); p->window = nullptr; }
+        if (p->encoder) {
+            AMediaCodec_delete(p->encoder);
+            p->encoder = nullptr;
+        }
+        if (p->window) {
+            ANativeWindow_release(p->window);
+            p->window = nullptr;
+        }
         {
             std::lock_guard<std::recursive_mutex> lock(p->mutex);
             delete[] p->sps_pps_buffer;
             p->sps_pps_buffer = nullptr;
             p->sps_pps_size = 0;
         }
-        delete p;
-        session->videoEncoder = nullptr;
     }
 
     if (session->cameraDevice) {
@@ -544,20 +620,26 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv* env, jobject thiz, jlo
 }
 
 JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
-    if (session->audioPlayback) { audioPlaybackRelease(session->audioPlayback); session->audioPlayback = nullptr; }
-    if (session->videoDecoder) { videoDecoderRelease(session->videoDecoder); session->videoDecoder = nullptr; }
+    if (session->audioPlayback) {
+        audioPlaybackRelease(session->audioPlayback);
+        session->audioPlayback = nullptr;
+    }
+    if (session->videoDecoder) {
+        videoDecoderRelease(session->videoDecoder);
+        session->videoDecoder = nullptr;
+    }
 
     LOGD("MediaSession stopRecv");
 }
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
-        JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
     std::lock_guard<std::mutex> lock(session->cameraMutex);
@@ -569,7 +651,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
 
     session->cameraFacing = (session->cameraFacing == 0) ? 1 : 0;
 
-    ACameraManager* cameraMgr = ACameraManager_create();
+    ACameraManager *cameraMgr = ACameraManager_create();
     if (!cameraMgr) { return; }
 
     std::string cameraId = findCameraId(session->cameraFacing);
@@ -578,11 +660,13 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
         cb.context = session;
         cb.onDisconnected = nullptr;
         cb.onError = nullptr;
-        ACameraDevice* device = nullptr;
-        camera_status_t camStatus = ACameraManager_openCamera(cameraMgr, cameraId.c_str(), &cb, &device);
+        ACameraDevice *device = nullptr;
+        camera_status_t camStatus = ACameraManager_openCamera(cameraMgr, cameraId.c_str(), &cb,
+                                                              &device);
         if (camStatus == ACAMERA_OK && device) {
             session->cameraDevice = device;
-            createCaptureSession(session, session->videoEncoder && session->videoEncoder->running.load());
+            createCaptureSession(session,
+                                 session->videoEncoder && session->videoEncoder->running.load());
         }
     }
     ACameraManager_delete(cameraMgr);
@@ -590,10 +674,10 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeRequestKeyFrame(
-        JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session || !session->videoEncoder || !session->videoEncoder->encoder) return;
-    AMediaFormat* params = AMediaFormat_new();
+    AMediaFormat *params = AMediaFormat_new();
     AMediaFormat_setInt32(params, "request-sync", 0);
     AMediaCodec_setParameters(session->videoEncoder->encoder, params);
     AMediaFormat_delete(params);
@@ -601,42 +685,53 @@ Java_cn_easyrtc_media_MediaSession_nativeRequestKeyFrame(
 
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeGetVideoTransceiver(
-        JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     return session ? reinterpret_cast<jlong>(session->videoTransceiver) : 0;
 }
 
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeGetAudioTransceiver(
-        JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     return session ? reinterpret_cast<jlong>(session->audioTransceiver) : 0;
 }
 
 JNIEXPORT void JNICALL
-        Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
-                JNIEnv* env, jobject thiz, jlong sessionPtr)
-{
+Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
 
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return;
 
-    if (session->videoTransceiver) { EasyRTC_FreeTransceiver(&session->videoTransceiver); session->videoTransceiver = nullptr; }
-    if (session->audioTransceiver) { EasyRTC_FreeTransceiver(&session->audioTransceiver); session->audioTransceiver = nullptr; }
+    if (session->videoTransceiver) {
+        EasyRTC_FreeTransceiver(&session->videoTransceiver);
+        session->videoTransceiver = nullptr;
+    }
+    if (session->audioTransceiver) {
+        EasyRTC_FreeTransceiver(&session->audioTransceiver);
+        session->audioTransceiver = nullptr;
+    }
     session->transceiversAdded.store(false);
 }
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeRelease(
-        JNIEnv* env, jobject thiz, jlong sessionPtr) {
-    auto* session = reinterpret_cast<MediaSession*>(sessionPtr);
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return;
 
     closeCamera(session);
-    if (session->previewWindow) { ANativeWindow_release(session->previewWindow); session->previewWindow = nullptr; }
+    if (session->previewWindow) {
+        ANativeWindow_release(session->previewWindow);
+        session->previewWindow = nullptr;
+    }
     session->previewRunning.store(false);
 
-    if (session->decoderSurface) { ANativeWindow_release(session->decoderSurface); session->decoderSurface = nullptr; }
+    if (session->decoderSurface) {
+        ANativeWindow_release(session->decoderSurface);
+        session->decoderSurface = nullptr;
+    }
 
     if (session->javaObj) {
         env->DeleteGlobalRef(session->javaObj);

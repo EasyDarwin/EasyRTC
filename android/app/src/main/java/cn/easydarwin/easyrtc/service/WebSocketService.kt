@@ -23,7 +23,7 @@ class WebSocketService : Service() {
         data class Error(val throwable: Throwable) : Event()
         data class OnlineUsers(val users: List<EasyRTCUser>) : Event()
         data class Logs(val text: String) : Event()
-        data class IncomingCall(val uuid: String, val data: ByteArray, val callout: Boolean = false) : Event()
+        data class IncomingCall(val uuid: String, val data: ByteArray, val callout: Boolean = false, var handled: Boolean = false) : Event()
     }
 
     inner class LocalBinder : Binder() {
@@ -100,6 +100,7 @@ class WebSocketService : Service() {
     }
 
     fun handleIncomingCall(event: Event.IncomingCall) {
+        event.handled = true
         if (event.callout)
         {
             val sdp = manager.handlerPeerConnection(event.data, true)

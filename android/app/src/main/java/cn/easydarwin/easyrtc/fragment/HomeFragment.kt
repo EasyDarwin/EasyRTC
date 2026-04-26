@@ -103,6 +103,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         }
 
         (activity as? MainActivity)?.incomingCallLiveData?.observe(viewLifecycleOwner) { event ->
+            if (event.handled) return@observe
             activeSessionUser = event.uuid
             tvFragmentUUID.text = "来电: ${event.uuid}"
             appendLog("来电: ${event.uuid}")

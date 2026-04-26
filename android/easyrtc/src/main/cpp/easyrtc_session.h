@@ -11,34 +11,36 @@
 #include <mutex>
 
 #include <jni.h>
+
 struct AudioPlaybackPipeline;
 struct VideoDecoderPipeline;
 struct AudioCapturePipeline;
+struct MediaPipeline;
 struct MediaSession {
     EasyRTC_PeerConnection peerConnection = nullptr;
     EasyRTC_Transceiver videoTransceiver = nullptr;
     EasyRTC_Transceiver audioTransceiver = nullptr;
 
-    ACameraDevice* cameraDevice = nullptr;
+    ACameraDevice *cameraDevice = nullptr;
     int cameraFacing = 0;
-    ANativeWindow* previewWindow = nullptr;
-    ACameraCaptureSession* captureSession = nullptr;
-    ACaptureSessionOutputContainer* outputContainer = nullptr;
-    ACaptureSessionOutput* encoderOutput = nullptr;
-    ACaptureSessionOutput* previewOutput = nullptr;
-    ACameraOutputTarget* encoderTarget = nullptr;
-    ACameraOutputTarget* previewTarget = nullptr;
-    ACaptureRequest* captureRequest = nullptr;
+    ANativeWindow *previewWindow = nullptr;
+    ACameraCaptureSession *captureSession = nullptr;
+    ACaptureSessionOutputContainer *outputContainer = nullptr;
+    ACaptureSessionOutput *encoderOutput = nullptr;
+    ACaptureSessionOutput *previewOutput = nullptr;
+    ACameraOutputTarget *encoderTarget = nullptr;
+    ACameraOutputTarget *previewTarget = nullptr;
+    ACaptureRequest *captureRequest = nullptr;
     std::mutex cameraMutex;
 
-    struct MediaPipeline* videoEncoder = nullptr;
+    std::shared_ptr<MediaPipeline> videoEncoder = nullptr;
     std::shared_ptr<AudioCapturePipeline> audioCapture = nullptr;
     std::shared_ptr<AudioPlaybackPipeline> audioPlayback = nullptr;
-    struct AudioDecoderPipeline* audioDecoder = nullptr;
+    struct AudioDecoderPipeline *audioDecoder = nullptr;
     std::shared_ptr<VideoDecoderPipeline> videoDecoder = nullptr;
-    ANativeWindow* decoderSurface = nullptr;
+    ANativeWindow *decoderSurface = nullptr;
 
-    JavaVM* jvm = nullptr;
+    JavaVM *jvm = nullptr;
     jobject javaObj = nullptr;
 
     std::atomic<bool> previewRunning{false};

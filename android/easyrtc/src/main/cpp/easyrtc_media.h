@@ -12,7 +12,7 @@
 
 struct MediaPipeline {
     AMediaCodec* encoder = nullptr;
-    AMediaFormat* format = nullptr;
+    std::shared_ptr<AMediaFormat> format = nullptr;
     ANativeWindow* window = nullptr;
     EasyRTC_Transceiver transceiver = nullptr;
     int width = 0;

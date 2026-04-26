@@ -50,17 +50,15 @@ bool MediaPipeline::initEncoder()
     AMediaCodec* encoder = AMediaCodec_createEncoderByType(mime.c_str());
     if (!encoder) {
         LOGE("Failed to create encoder for mime: %s", mime.c_str());
-        AMediaFormat_delete(format);
         assert(false);
         return false;
     }
-
-    media_status_t status = AMediaCodec_configure(encoder, format, nullptr, nullptr,
+    assert(format);
+    media_status_t status = AMediaCodec_configure(encoder, format.get(), nullptr, nullptr,
             AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
     if (status != AMEDIA_OK) {
         LOGE("Failed to configure encoder: %d", status);
         AMediaCodec_delete(encoder);
-        AMediaFormat_delete(format);
         assert(false);
         return false;
     }
@@ -71,7 +69,6 @@ bool MediaPipeline::initEncoder()
     if (surfStatus != AMEDIA_OK || !inputWindow) {
         LOGE("Failed to create input surface: %d", surfStatus);
         AMediaCodec_delete(encoder);
-        AMediaFormat_delete(format);
         assert(false);
         return false;
     }

@@ -27,14 +27,14 @@ class MediaSession {
     }
 
     fun addTransceivers(videoCodec: Int, audioCodec: Int): Int {
-        val i =  nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
+        val i = nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
         val send = nativeStartSend(nativePtr)
         val recv = nativeStartRecv(nativePtr)
-        Log.i("MS","addTrans:$i, startSend:$send, startRecv:$recv")
+        Log.i("MS", "addTrans:$i, startSend:$send, startRecv:$recv")
         return i;
     }
 
-    fun removeTransceivers(){
+    fun removeTransceivers() {
         nativeStopRecv(nativePtr)
         nativeStopSend(nativePtr)
         nativeRemoveTransceivers(nativePtr);
@@ -42,17 +42,19 @@ class MediaSession {
 
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
         val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
-        return nativeSetupVideoEncoder(nativePtr, codec,
+        return nativeSetupVideoEncoder(
+            nativePtr, codec,
             config.getWidth(), config.getHeight(),
             config.getBitRate(), config.getFrameRate(),
-            config.getIFrameInterval())
+            config.getIFrameInterval()
+        )
     }
 
-    fun setConnectState(state:Int){
+    fun setConnectState(state: Int) {
         nativeSetState(nativePtr, state);
     }
 
-fun setDecoderSurface(surface: Surface?) {
+    fun setDecoderSurface(surface: Surface?) {
         nativeSetDecoderSurface(nativePtr, surface)
     }
 
@@ -83,13 +85,26 @@ fun setDecoderSurface(surface: Surface?) {
     private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
     private external fun nativeStopPreview(sessionPtr: Long)
 
-    private external  fun nativeSetState(sessionPtr: Long, state:Int)
+    private external fun nativeSetState(sessionPtr: Long, state: Int)
     private external fun nativeSetPeerConnection(sessionPtr: Long, peerConnectionHandle: Long)
-    private external fun nativeAddTransceivers(sessionPtr: Long, videoCodec: Int, audioCodec: Int): Int
+    private external fun nativeAddTransceivers(
+        sessionPtr: Long,
+        videoCodec: Int,
+        audioCodec: Int
+    ): Int
 
     private external fun nativeRemoveTransceivers(sessionPtr: Long)
-    private external fun nativeSetupVideoEncoder(sessionPtr: Long, codec: Int, width: Int, height: Int, bitrate: Int, fps: Int, iframeInterval: Int): Int
-private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
+    private external fun nativeSetupVideoEncoder(
+        sessionPtr: Long,
+        codec: Int,
+        width: Int,
+        height: Int,
+        bitrate: Int,
+        fps: Int,
+        iframeInterval: Int
+    ): Int
+
+    private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeStartSend(sessionPtr: Long): Int
     private external fun nativeStartRecv(sessionPtr: Long)
     private external fun nativeStopSend(sessionPtr: Long)
