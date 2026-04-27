@@ -37,6 +37,7 @@ import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
 import cn.easyrtc.helper.MagicFileHelper
+import cn.easyrtc.media.MediaSession
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -78,6 +79,19 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     private val liveSessionController = LiveSessionController()
     private var activeSessionUser: String? = null
 
+    private lateinit var session: MediaSession
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        session = MediaSession().apply{
+            create()
+        }
+    }
+
+    override fun onDestroy() {
+        session.release()
+        super.onDestroy()
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         mMagicFileHelper = MagicFileHelper.getInstance()
@@ -108,7 +122,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
             tvFragmentUUID.text = "来电: ${event.uuid}"
             appendLog("来电: ${event.uuid}")
             view.post{
-                webSocketService?.handleIncomingCall(event);
+                webSocketService?.handleIncomingCall(event, session);
             }
         }
 
@@ -249,8 +263,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
             smallVideoView.surfaceTexture -> {
                 smallSurfaceTexture = surface
-                EasyRTCSdk.getMediaSession().setupVideoEncoder(getVideoEncodeConfig())
-                EasyRTCSdk.getMediaSession().setDecoderSurface(Surface(surface))
+                session.setupVideoEncoder(getVideoEncodeConfig())
+                session.setDecoderSurface(Surface(surface))
                 Log.d(TAG, "小窗口 SurfaceTexture 已创建")
             }
         }
@@ -274,7 +288,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
             surface == mainVideoView.surfaceTexture -> mainSurfaceTexture = null
             surface == smallVideoView.surfaceTexture -> {
                 smallSurfaceTexture = null
-                EasyRTCSdk.getMediaSession().setDecoderSurface(null)
+                session.setDecoderSurface(null)
             }
         }
         return true
@@ -290,7 +304,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         }
 
         try {
-            val session = EasyRTCSdk.getMediaSession()
 
             if (mainVideoView.isAvailable) {
                 val result = session.startPreview(Surface(mainVideoView.surfaceTexture))
@@ -315,7 +328,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
             Log.w(TAG, "Cannot switch camera: pipeline not running")
             return
         }
-        EasyRTCSdk.getMediaSession().switchCamera()
+        session.switchCamera()
         pipelineController.switchCamera()
         Log.d(TAG, "Camera switched")
     }
@@ -335,7 +348,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         super.onDestroyView()
         Log.d(TAG, "onDestroyView")
         stopEasyRTC()
-        val session = EasyRTCSdk.getMediaSession()
         session.stopPreview()
         EasyRTCSdk.release()
     }
@@ -409,9 +421,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     override fun connectionStateChange(state: Int) {
         Log.d(TAG, "connectionStateChange state =$state  ${state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED}")
+        session.setConnectState(state);
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
             activity?.runOnUiThread {
-                val session = EasyRTCSdk.getMediaSession()
                 session.requestKeyFrame()
                 liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
             }
@@ -514,7 +526,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun stopEasyRTC() {        
-        val session = EasyRTCSdk.getMediaSession()
         session.removeTransceivers()
         pipelineController.stop()
     }

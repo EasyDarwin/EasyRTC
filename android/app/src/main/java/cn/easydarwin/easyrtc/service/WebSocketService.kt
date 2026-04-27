@@ -4,6 +4,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import cn.easydarwin.easyrtc.utils.SPUtil
@@ -13,6 +14,7 @@ import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPREQGETWEBRTCOFFE
 import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCUser
+import cn.easyrtc.media.MediaSession
 
 class WebSocketService : Service() {
 
@@ -99,18 +101,63 @@ class WebSocketService : Service() {
         manager.sendOfferSDP(sdp, isOffer)
     }
 
-    fun handleIncomingCall(event: Event.IncomingCall) {
+    fun handleIncomingCall(event: Event.IncomingCall, session: MediaSession) {
         event.handled = true
         if (event.callout)
         {
             val sdp = manager.handlerPeerConnection(event.data, true)
-            manager.handlerCallerSDP(sdp)
+            if (sdp.isEmpty()) {
+                Log.w("WebSocketService", "sdp is empty")
+                return
+            };
+            var videoCodec = 0
+            var audioCodec = 0
+
+            if (sdp.contains("m=video", ignoreCase = true)) {
+//                Log.d(TAG, "handlerSDP sdp=${SPUtil.Companion.getInstance().hevaddDataChannelcCodec}")
+                var codeID = 0;
+                if (sdp.contains("H264/90000")) {
+                    codeID = EasyRTCCodec.H264
+//                    remoteRTCHelper?.reinitVideoDecoder(RemoteRTCHelper.CODEC_H264)
+                } else if (sdp.contains("H265/90000")) {
+//                    remoteRTCHelper?.reinitVideoDecoder(RemoteRTCHelper.CODEC_H265)
+                    codeID = EasyRTCCodec.H265
+                } else if (sdp.contains("VP8/90000")) {
+                    codeID = EasyRTCCodec.VP8
+                }
+                if (codeID != 0) videoCodec = codeID
+            }
+
+            if (sdp.contains("m=audio", ignoreCase = true)) {
+                var codeID = 0;
+                if (sdp.contains("PCMA/8000", ignoreCase = true)) {
+                    codeID = EasyRTCCodec.ALAW
+                } else if (sdp.contains("PCMU/8000", ignoreCase = true)) {
+                    codeID = EasyRTCCodec.MULAW
+                } else if (sdp.contains("opus/48000", ignoreCase = true)) {
+                    codeID = EasyRTCCodec.OPUS
+                }
+                if (codeID != 0) audioCodec = codeID
+
+            }
+
+            if (videoCodec == 0) videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
+            if (audioCodec == 0) audioCodec = EasyRTCCodec.ALAW
+
+
+            if (sdp.contains("webrtc-datachannel", ignoreCase = true)) EasyRTCSdk.addDataChannel()
+            EasyRTCSdk.createAnswer(sdp)  //创建 Answer 的 SDP
+
             _events.postValue(Event.Logs(sdp))
+            EasyRTCSdk.bindMediaSession(session)
+            //      try to clean old first
+            session.removeTransceivers()
+            session.addTransceivers(videoCodec, audioCodec)
             return;
         }
         manager.handlerPeerConnection(event.data)
+        EasyRTCSdk.bindMediaSession(session)
         val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-        val session = EasyRTCSdk.getMediaSession()
 //      try to clean old first
         session.removeTransceivers()
         session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)

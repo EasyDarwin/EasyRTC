@@ -1,6 +1,7 @@
 #include "easyrtc_media.h"
 #include "EasyRTCAPI.h"
 #include "easyrtc_common.h"
+#include "easyrtc_session.h"
 #include <cassert>
 #include <cstring>
 #include <string>
@@ -78,12 +79,18 @@ bool MediaPipeline::initEncoder()
 }
 
 void* outputThreadFunc(void* arg) {
-    auto* pipeline = static_cast<MediaPipeline*>(arg);
+    auto *session = reinterpret_cast<MediaSession *>(arg);
+    assert(session && "Invalid session");
+    assert(session->videoEncoder);
+    auto* pipeline = session->videoEncoder.get();
     LOGD("Output thread started");
 
     while (pipeline->running.load()) {
         if (!pipeline->encoder) {
             break;
+        }
+        if (session->connectState != 3) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         AMediaCodecBufferInfo info;
         ssize_t bufIdx = AMediaCodec_dequeueOutputBuffer(pipeline->encoder, &info, 10000);
@@ -103,10 +110,8 @@ void* outputThreadFunc(void* arg) {
 
         if (info.flags & BUFFER_FLAG_CODEC_CONFIG) {
             std::lock_guard<std::recursive_mutex> lock(pipeline->mutex);
-            delete[] pipeline->sps_pps_buffer;
-            pipeline->sps_pps_buffer = new uint8_t[dataSize];
-            memcpy(pipeline->sps_pps_buffer, data, dataSize);
-            pipeline->sps_pps_size = dataSize;
+            pipeline->sps_pps_buffer.resize(dataSize);
+            pipeline->sps_pps_buffer.assign(data, data + dataSize);
             AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
             continue;
         }
@@ -123,13 +128,13 @@ void* outputThreadFunc(void* arg) {
         frame.trackId = 0;
 
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            LOGD("Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_size);
+            LOGD("Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
             std::lock_guard<std::recursive_mutex> lock(pipeline->mutex);
-            if (pipeline->sps_pps_buffer && pipeline->sps_pps_size > 0) {
-                size_t totalSize = pipeline->sps_pps_size + dataSize;
+            if (!pipeline->sps_pps_buffer.empty()) {
+                size_t totalSize = pipeline->sps_pps_buffer.size() + dataSize;
                 auto* combined = new uint8_t[totalSize];
-                memcpy(combined, pipeline->sps_pps_buffer, pipeline->sps_pps_size);
-                memcpy(combined + pipeline->sps_pps_size, data, dataSize);
+                memcpy(combined, pipeline->sps_pps_buffer.data(), pipeline->sps_pps_buffer.size());
+                memcpy(combined + pipeline->sps_pps_buffer.size(), data, dataSize);
                 frame.frameData = combined;
                 frame.size = static_cast<UINT32>(totalSize);
             }

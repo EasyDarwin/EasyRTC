@@ -57,7 +57,6 @@ object EasyRTCSdk {
     private var mUserPtr: Long = 0
     private var mPeerConnection: Long = 0L
     private var data_channel: Long = 0L
-    private var mediaSession: MediaSession = MediaSession().also { it.create() }
 
     private var peerConnection: peerconnection? = peerconnection()
 
@@ -90,15 +89,11 @@ object EasyRTCSdk {
         }
     }
 
-    fun getPeerConnectionHandle(): Long = mPeerConnection
-
-    fun getMediaSession(): MediaSession = mediaSession
 
     fun connection(stun: String, turn: String, username: String, credential: String, version: Int = 0, iceTransportPolicy: Int = 2, userPtr: Long = 0) {
         this.mUserPtr = userPtr
         this.mPeerConnection = peerConnection!!.create(version, iceTransportPolicy, stun, turn, username, credential, userPtr)
         Log.d(TAG, "初始化中... this.mPeerConnection = ${this.mPeerConnection}")
-        mediaSession.setPeerConnection(mPeerConnection)
     }
 
     fun addDataChannel(name: String = "") {
@@ -128,13 +123,12 @@ object EasyRTCSdk {
         peerConnection?.DataChannelSend(this.data_channel!!, isBinary, data, data.size)
     }
 
-    private fun releaseMediaSession() {
-        mediaSession.release()
+    fun bindMediaSession(session:MediaSession) {
+        assert(mPeerConnection != 0L);
+        session.setPeerConnection(mPeerConnection)
     }
 
     fun release() {
-        releaseMediaSession()
-        mediaSession = MediaSession().also { it.create() }
 
         if (this.data_channel != 0L) peerConnection?.FreeDataChannel(this.data_channel)
         if (this.mPeerConnection != 0L) peerConnection?.release(this.mPeerConnection)
@@ -148,7 +142,7 @@ object EasyRTCSdk {
     @JvmStatic
     fun connectionStateChange(userPtr: Long, state: Int): Int {
         if (userPtr == this.mUserPtr) eventListener?.connectionStateChange(state)
-        getMediaSession().setConnectState(state);
+
         return 0
     }
 

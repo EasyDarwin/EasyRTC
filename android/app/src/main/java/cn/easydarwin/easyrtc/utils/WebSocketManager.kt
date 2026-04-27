@@ -193,54 +193,6 @@ public class WebSocketManager(private val url: String, private val token: String
         return ""
     }
 
-
-    fun handlerCallerSDP(sdp: String) {
-        if (sdp.isNotEmpty()) {
-            var videoCodec = 0
-            var audioCodec = 0
-
-            if (sdp.contains("m=video", ignoreCase = true)) {
-//                Log.d(TAG, "handlerSDP sdp=${SPUtil.Companion.getInstance().hevaddDataChannelcCodec}")
-                var codeID = 0;
-                if (sdp.contains("H264/90000")) {
-                    codeID = EasyRTCCodec.H264
-//                    remoteRTCHelper?.reinitVideoDecoder(RemoteRTCHelper.CODEC_H264)
-                } else if (sdp.contains("H265/90000")) {
-//                    remoteRTCHelper?.reinitVideoDecoder(RemoteRTCHelper.CODEC_H265)
-                    codeID = EasyRTCCodec.H265
-                } else if (sdp.contains("VP8/90000")) {
-                    codeID = EasyRTCCodec.VP8
-                }
-                if (codeID != 0) videoCodec = codeID
-            }
-
-            if (sdp.contains("m=audio", ignoreCase = true)) {
-                var codeID = 0;
-                if (sdp.contains("PCMA/8000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.ALAW
-                } else if (sdp.contains("PCMU/8000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.MULAW
-                } else if (sdp.contains("opus/48000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.OPUS
-                }
-                if (codeID != 0) audioCodec = codeID
-
-            }
-
-            if (videoCodec == 0) videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-            if (audioCodec == 0) audioCodec = EasyRTCCodec.ALAW
-
-            val session = EasyRTCSdk.getMediaSession()
-            //      try to clean old first
-            session.removeTransceivers()
-            session.addTransceivers(videoCodec, audioCodec)
-
-            if (sdp.contains("webrtc-datachannel", ignoreCase = true)) EasyRTCSdk.addDataChannel()
-            EasyRTCSdk.createAnswer(sdp)  //创建 Answer 的 SDP
-        }
-
-    }
-
     fun handlerEventByteArray(data: ByteArray) {
         val length = bytesToIntLE(data.copyOfRange(0, 4))
         val type = bytesToIntLE(data.copyOfRange(4, 8))

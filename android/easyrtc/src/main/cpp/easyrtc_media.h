@@ -22,8 +22,7 @@ struct MediaPipeline {
     int iframeInterval = 0;
     std::atomic<bool> running{false};
     std::thread outputThread;
-    uint8_t* sps_pps_buffer = nullptr;
-    size_t sps_pps_size = 0;
+    std::vector<uint8_t> sps_pps_buffer;
     std::recursive_mutex mutex;
     std::string mime;
 

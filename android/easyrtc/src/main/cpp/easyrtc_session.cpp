@@ -526,9 +526,9 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     }
 
     p->running.store(true);
-    p->outputThread = std::thread([p]() {
-        outputThreadFunc(p.get());
-    });
+    p->outputThread = std::thread([](void *sessionPtr) {
+        outputThreadFunc(sessionPtr);
+    }, session);
     // pthread_t th = p->outputThread.native_handle();
     // sched_param sch_params;
     // sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
@@ -599,12 +599,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
         if (p->window) {
             ANativeWindow_release(p->window);
             p->window = nullptr;
-        }
-        {
-            std::lock_guard<std::recursive_mutex> lock(p->mutex);
-            delete[] p->sps_pps_buffer;
-            p->sps_pps_buffer = nullptr;
-            p->sps_pps_size = 0;
         }
     }
 
