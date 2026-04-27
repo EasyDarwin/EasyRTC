@@ -85,6 +85,8 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   if (pipeline->stream)
     return 0;
 
+  LOGI("[CRITICAL] AudioPlaybackOpen: %dHz %dch", pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT);
+
   AAudioStreamBuilder *builder = nullptr;
   aaudio_result_t result = AAudio_createStreamBuilder(&builder);
   if (result != AAUDIO_OK || !builder) {
@@ -127,8 +129,8 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   }
 
   pipeline->playing.store(true);
-  LOGD("Audio playback started: %dHz, %dch", pipeline->SAMPLE_RATE,
-       pipeline->CHANNEL_COUNT);
+  LOGI("[CRITICAL] AudioPlaybackOpen: SUCCESS stream=%p %dHz %dch",
+       stream, pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT);
   return 0;
 }
 
@@ -176,6 +178,8 @@ void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   if (!pipeline)
     return;
 
+  LOGI("[CRITICAL] AudioPlaybackClose: stream=%p", pipeline->stream);
+
   pipeline->stopped.store(true);
   pipeline->playing.store(false);
 
@@ -184,5 +188,5 @@ void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
     AAudioStream_close(pipeline->stream);
     pipeline->stream = nullptr;
   }
-  LOGD("AudioPlaybackPipeline released");
+  LOGI("[CRITICAL] AudioPlaybackClose: DONE");
 }

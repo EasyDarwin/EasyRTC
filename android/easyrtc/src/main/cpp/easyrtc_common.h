@@ -6,6 +6,7 @@
 
 #define LOG_TAG "EasyRTCMedia"
 #define LOGD(...) easyrtc_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGI(...) easyrtc_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) easyrtc_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) easyrtc_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 

@@ -367,6 +367,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSetState(
         jint state) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
+    LOGI("[CRITICAL] SetState: %d -> %d", session->connectState, state);
     session->connectState = state;
 }
 
@@ -405,6 +406,9 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     assert(session->peerConnection && "Invalid peerConnection");
     assert(videoCodec > 0 && audioCodec > 0 && "Invalid codec IDs");
     assert(!session->transceiversAdded.load() && "Transceivers already added");
+
+    LOGI("[CRITICAL] AddTransceivers: videoCodec=%d audioCodec=%d pc=%p",
+         videoCodec, audioCodec, session->peerConnection);
 
     session->videoCodec = videoCodec;
     session->audioCodec = audioCodec;
@@ -448,6 +452,8 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     LOGD("Audio transceiver added: %p", session->audioTransceiver);
 
     session->transceiversAdded.store(true);
+    LOGI("[CRITICAL] AddTransceivers: SUCCESS video=%p audio=%p",
+         session->videoTransceiver, session->audioTransceiver);
 
     frameDumpInit(&session->frameDump, session->videoCodec, session->audioCodec);
 
@@ -514,8 +520,10 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     assert(session && "Invalid session");
     assert(session->videoEncoder);
     assert(!session->videoEncoder->running.load() && "videoEncoder already running");
+    LOGI("[CRITICAL] StartSend: initializing video encoder");
     auto p = session->videoEncoder;
     if (!p->initEncoder()) {
+        LOGE("[CRITICAL] StartSend: initEncoder FAILED");
         return -1;
     }
     assert(p->encoder);
@@ -546,9 +554,11 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
         assert(!session->audioCapture && "audioCapture already exists");
         session->audioCapture = std::make_shared<AudioCapturePipeline>();
         session->audioCapture->audioTransceiver = session->audioTransceiver;
+        LOGI("[CRITICAL] StartSend: starting audio capture");
         audioCaptureStart(session);
     }
-    LOGD("MediaSession startSend");
+    LOGI("[CRITICAL] StartSend: DONE encoder=%p audioCapture=%p",
+         p->encoder, session->audioCapture.get());
     return 0;
 }
 
@@ -557,23 +567,26 @@ Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv *env, jobject thiz, jl
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
+    LOGI("[CRITICAL] StartRecv: creating audio playback and video decoder codec=%d", session->videoCodec);
+
     session->audioPlayback = audioPlaybackCreate(5);
 
     session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720,
                                                1280);
     if (!session->videoDecoder) {
-        LOGE("nativeStartRecv: videoDecoderCreate failed");
+        LOGE("[CRITICAL] StartRecv: videoDecoderCreate FAILED");
         return;
     }
     session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
     session->videoDecoder->onVideoSizeUserPtr = session;
     if (videoDecoderStart(session->videoDecoder) != 0) {
-        LOGE("nativeStartRecv: videoDecoderStart failed");
+        LOGE("[CRITICAL] StartRecv: videoDecoderStart FAILED");
         videoDecoderRelease(session->videoDecoder);
         session->videoDecoder = nullptr;
         return;
     }
-    LOGD("MediaSession startRecv");
+    LOGI("[CRITICAL] StartRecv: DONE playback=%p decoder=%p",
+         session->audioPlayback.get(), session->videoDecoder.get());
 }
 
 JNIEXPORT void JNICALL
@@ -581,11 +594,14 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
+    LOGI("[CRITICAL] StopSend: stopping audio capture and video encoder");
+
     audioCaptureStop(session);
 
     if (session->videoEncoder) {
         auto p = session->videoEncoder;
         if (p->running.exchange(false)) {
+            LOGI("[CRITICAL] StopSend: signaling EOS and stopping encoder");
             if (p->encoder) { AMediaCodec_signalEndOfInputStream(p->encoder); }
             if (p->outputThread.joinable()) { p->outputThread.join(); }
             if (p->encoder) { AMediaCodec_stop(p->encoder); }
@@ -608,13 +624,15 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
         }
     }
 
-    LOGD("MediaSession stopSend");
+    LOGI("[CRITICAL] StopSend: DONE");
 }
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
+
+    LOGI("[CRITICAL] StopRecv: releasing audio playback and video decoder");
 
     if (session->audioPlayback) {
         audioPlaybackRelease(session->audioPlayback);
@@ -625,7 +643,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv *env, jobject thiz, jlo
         session->videoDecoder = nullptr;
     }
 
-    LOGD("MediaSession stopRecv");
+    LOGI("[CRITICAL] StopRecv: DONE");
 }
 
 JNIEXPORT void JNICALL
@@ -696,6 +714,9 @@ Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return;
 
+    LOGI("[CRITICAL] RemoveTransceivers: video=%p audio=%p",
+         session->videoTransceiver, session->audioTransceiver);
+
     if (session->videoTransceiver) {
         EasyRTC_FreeTransceiver(&session->videoTransceiver);
         session->videoTransceiver = nullptr;
@@ -705,6 +726,7 @@ Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
         session->audioTransceiver = nullptr;
     }
     session->transceiversAdded.store(false);
+    LOGI("[CRITICAL] RemoveTransceivers: DONE");
 }
 
 JNIEXPORT void JNICALL
@@ -712,6 +734,8 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return;
+
+    LOGI("[CRITICAL] Release: cleaning up session");
 
     closeCamera(session);
     if (session->previewWindow) {

@@ -68,6 +68,8 @@ int audioCaptureStart(MediaSession* session) {
     auto pipeline = session->audioCapture;
     if (!pipeline) return -1;
 
+    LOGI("[CRITICAL] AudioCaptureStart: %dHz %dch", SAMPLE_RATE, CHANNEL_COUNT);
+
     AAudioStreamBuilder* builder = nullptr;
     aaudio_result_t result = AAudio_createStreamBuilder(&builder);
     if (result != AAUDIO_OK || !builder) {
@@ -106,7 +108,7 @@ int audioCaptureStart(MediaSession* session) {
         return -1;
     }
 
-    LOGD("Audio capture started: %dHz, %dch", SAMPLE_RATE, CHANNEL_COUNT);
+    LOGI("[CRITICAL] AudioCaptureStart: SUCCESS stream=%p", stream);
     return 0;
 }
 
@@ -114,6 +116,8 @@ void audioCaptureStop(MediaSession *session) {
     assert(session);
     auto pipeline = session->audioCapture;
     if (!pipeline) return;
+
+    LOGI("[CRITICAL] AudioCaptureStop: stream=%p", pipeline->stream);
     pipeline->running.store(false);
 
     if (pipeline->stream) {
@@ -155,5 +159,5 @@ void audioCaptureStop(MediaSession *session) {
         pipeline->stream = nullptr;
     }
 
-    LOGD("Audio capture stopped");
+    LOGI("[CRITICAL] AudioCaptureStop: DONE");
 }

@@ -48,9 +48,11 @@ std::string findCameraId(int facing) {
 
 bool MediaPipeline::initEncoder()
 {
+    LOGI("[CRITICAL] initEncoder: mime=%s %dx%d @ %dbps fps=%d",
+         mime.c_str(), width, height, bitrate, fps);
     AMediaCodec* encoder = AMediaCodec_createEncoderByType(mime.c_str());
     if (!encoder) {
-        LOGE("Failed to create encoder for mime: %s", mime.c_str());
+        LOGE("[CRITICAL] initEncoder: createEncoderByType FAILED for %s", mime.c_str());
         assert(false);
         return false;
     }
@@ -58,7 +60,7 @@ bool MediaPipeline::initEncoder()
     media_status_t status = AMediaCodec_configure(encoder, format.get(), nullptr, nullptr,
             AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
     if (status != AMEDIA_OK) {
-        LOGE("Failed to configure encoder: %d", status);
+        LOGE("[CRITICAL] initEncoder: configure FAILED status=%d", status);
         AMediaCodec_delete(encoder);
         assert(false);
         return false;
@@ -68,13 +70,14 @@ bool MediaPipeline::initEncoder()
     ANativeWindow* inputWindow = nullptr;
     media_status_t surfStatus = AMediaCodec_createInputSurface(encoder, &inputWindow);
     if (surfStatus != AMEDIA_OK || !inputWindow) {
-        LOGE("Failed to create input surface: %d", surfStatus);
+        LOGE("[CRITICAL] initEncoder: createInputSurface FAILED status=%d", surfStatus);
         AMediaCodec_delete(encoder);
         assert(false);
         return false;
     }
     this->window = inputWindow;
     this->encoder = encoder;
+    LOGI("[CRITICAL] initEncoder: SUCCESS encoder=%p window=%p", encoder, inputWindow);
     return true;
 }
 
