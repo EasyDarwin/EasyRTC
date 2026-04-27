@@ -2,6 +2,8 @@
 #include <aaudio/AAudio.h>
 #include <cstring>
 #include <time.h>
+#include <assert.h>
+#include "easyrtc_session.h"
 
 static constexpr int32_t SAMPLE_RATE = 8000;
 static constexpr int32_t CHANNEL_COUNT = 1;
@@ -11,12 +13,13 @@ static aaudio_data_callback_result_t dataCallback(
         void* userData,
         void* audioData,
         int32_t numFrames) {
-    auto* pipeline = static_cast<AudioCapturePipeline*>(userData);
+    auto session = static_cast<MediaSession*>(userData);
+    auto* pipeline = session->audioCapture.get();
     if (!pipeline || !pipeline->running.load()) {
         return AAUDIO_CALLBACK_RESULT_STOP;
     }
 
-    if (!pipeline->audioTransceiver) {
+    if (!pipeline->audioTransceiver || session->connectState != 3) {
         return AAUDIO_CALLBACK_RESULT_CONTINUE;
     }
 
@@ -60,14 +63,9 @@ static void errorCallback(
     LOGE("AAudio capture error: %d", error);
 }
 
-std::shared_ptr<AudioCapturePipeline> audioCaptureCreate(EasyRTC_Transceiver audioTransceiver) {
-    auto pipeline = std::make_shared<AudioCapturePipeline>();
-    pipeline->audioTransceiver = audioTransceiver;
-    LOGD("AudioCapturePipeline created, transceiver=%p", pipeline->audioTransceiver);
-    return pipeline;
-}
-
-int audioCaptureStart(std::shared_ptr<AudioCapturePipeline> pipeline) {
+int audioCaptureStart(MediaSession* session) {
+    assert(session);
+    auto pipeline = session->audioCapture;
     if (!pipeline) return -1;
 
     AAudioStreamBuilder* builder = nullptr;
@@ -84,8 +82,8 @@ int audioCaptureStart(std::shared_ptr<AudioCapturePipeline> pipeline) {
     AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
     AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
     AAudioStreamBuilder_setInputPreset(builder, AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION);
-    AAudioStreamBuilder_setDataCallback(builder, dataCallback, pipeline.get());
-    AAudioStreamBuilder_setErrorCallback(builder, errorCallback, pipeline.get());
+    AAudioStreamBuilder_setDataCallback(builder, dataCallback, session);
+    AAudioStreamBuilder_setErrorCallback(builder, errorCallback, session);
 
     AAudioStream* stream = nullptr;
     result = AAudioStreamBuilder_openStream(builder, &stream);
@@ -112,9 +110,10 @@ int audioCaptureStart(std::shared_ptr<AudioCapturePipeline> pipeline) {
     return 0;
 }
 
-void audioCaptureStop(std::shared_ptr<AudioCapturePipeline> pipeline) {
+void audioCaptureStop(MediaSession *session) {
+    assert(session);
+    auto pipeline = session->audioCapture;
     if (!pipeline) return;
-
     pipeline->running.store(false);
 
     if (pipeline->stream) {
@@ -157,10 +156,4 @@ void audioCaptureStop(std::shared_ptr<AudioCapturePipeline> pipeline) {
     }
 
     LOGD("Audio capture stopped");
-}
-
-void audioCaptureRelease(std::shared_ptr<AudioCapturePipeline> pipeline) {
-    if (!pipeline) return;
-    audioCaptureStop(pipeline);
-    LOGD("AudioCapturePipeline released");
 }

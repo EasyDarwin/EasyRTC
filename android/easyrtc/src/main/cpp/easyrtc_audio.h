@@ -7,11 +7,13 @@
 #include <cstdint>
 #include <mutex>
 
+struct MediaSession;
 struct AudioCapturePipeline {
     AAudioStream* stream = nullptr;
     EasyRTC_Transceiver audioTransceiver = nullptr;
     std::atomic<bool> running{false};
     std::mutex mutex;
+    bool connectionReady = false;
 
     AudioCapturePipeline() = default;
     ~AudioCapturePipeline() = default;
@@ -19,9 +21,7 @@ struct AudioCapturePipeline {
     AudioCapturePipeline& operator=(const AudioCapturePipeline&) = delete;
 };
 
-std::shared_ptr<AudioCapturePipeline> audioCaptureCreate(EasyRTC_Transceiver audioTransceiver);
-int audioCaptureStart(std::shared_ptr<AudioCapturePipeline> pipeline);
-void audioCaptureStop(std::shared_ptr<AudioCapturePipeline> pipeline);
-void audioCaptureRelease(std::shared_ptr<AudioCapturePipeline> pipeline);
+int audioCaptureStart(MediaSession* session);
+void audioCaptureStop(MediaSession* session);
 
 #endif

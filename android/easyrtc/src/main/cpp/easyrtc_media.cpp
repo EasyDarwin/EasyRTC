@@ -91,6 +91,7 @@ void* outputThreadFunc(void* arg) {
         }
         if (session->connectState != 3) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
         }
         AMediaCodecBufferInfo info;
         ssize_t bufIdx = AMediaCodec_dequeueOutputBuffer(pipeline->encoder, &info, 10000);

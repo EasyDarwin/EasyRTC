@@ -544,8 +544,9 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
 
     if (session->audioTransceiver) {
         assert(!session->audioCapture && "audioCapture already exists");
-        session->audioCapture = audioCaptureCreate(session->audioTransceiver);
-        audioCaptureStart(session->audioCapture);
+        session->audioCapture = std::make_shared<AudioCapturePipeline>();
+        session->audioCapture->audioTransceiver = session->audioTransceiver;
+        audioCaptureStart(session);
     }
     LOGD("MediaSession startSend");
     return 0;
@@ -580,10 +581,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
-    if (session->audioCapture) {
-        audioCaptureRelease(session->audioCapture);
-        session->audioCapture = nullptr;
-    }
+    audioCaptureStop(session);
 
     if (session->videoEncoder) {
         auto p = session->videoEncoder;
