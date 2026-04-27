@@ -28,8 +28,6 @@ import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easyrtc.EasyRTCPeerConnectionState
 import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCStreamTrack
-import cn.easyrtc.EasyRTCUser
-import cn.easydarwin.easyrtc.modal.DrawerManager
 import cn.easydarwin.easyrtc.ui.live.LiveSessionController
 import cn.easydarwin.easyrtc.ui.live.LiveUiState
 import cn.easydarwin.easyrtc.ui.live.NativePipelineController
@@ -62,7 +60,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     private var mainSurfaceTexture: SurfaceTexture? = null
     private var smallSurfaceTexture: SurfaceTexture? = null
 
-    private lateinit var drawerManager: DrawerManager
     private lateinit var mMagicFileHelper: MagicFileHelper
 
     private var webSocketService: WebSocketService? = null
@@ -109,9 +106,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
                     is WebSocketService.Event.Message -> onWSMessage(event.text)
                     is WebSocketService.Event.Disconnected -> onWSDisconnected(event.code, event.reason)
                     is WebSocketService.Event.Error -> onWSError(event.throwable)
-                    is WebSocketService.Event.OnlineUsers -> onWSOnlineUsers(event.users)
                     is WebSocketService.Event.Logs -> onWSLogs(event.text)
                     is WebSocketService.Event.IncomingCall -> {}
+                    is WebSocketService.Event.OnlineUsers -> {}
                 }
             }
         }
@@ -124,12 +121,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
             view.post{
                 webSocketService?.handleIncomingCall(event, session);
             }
-        }
-
-        drawerManager = DrawerManager(requireContext(), view) { user ->
-            activeSessionUser = user.username
-            Toast.makeText(requireContext(), "正在连接 ${user.username}", Toast.LENGTH_LONG).show()
-            webSocketService?.call(user.uuid)
         }
 
         EasyRTCSdk.getInstance()
@@ -400,13 +391,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     private fun onWSError(error: Throwable) {
         Log.d(TAG, "onWSError state =${error.message} ")
-    }
-
-    private fun onWSOnlineUsers(users: List<EasyRTCUser>) {
-        Log.d(TAG, "现在用户 = ${users.size}")
-        requireActivity().runOnUiThread {
-            drawerManager.updateUserListUI(users)
-        }
     }
 
     private fun onWSLogs(txt: String) {

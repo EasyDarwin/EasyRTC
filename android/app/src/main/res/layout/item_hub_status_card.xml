@@ -27,7 +27,7 @@
             android:textStyle="bold"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            tools:text="DEVICE" />
+            tools:text="USER" />
 
         <TextView
             android:id="@+id/tvHubItemStatus"
@@ -49,10 +49,10 @@
             android:textColor="?attr/colorOnSurface"
             android:textSize="16sp"
             android:textStyle="bold"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/buttonCall"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/tvHubItemType"
-            tools:text="Hub Item Name" />
+            tools:text="Username" />
 
         <TextView
             android:id="@+id/tvHubItemSubtitle"
@@ -61,22 +61,21 @@
             android:layout_marginTop="4dp"
             android:textColor="@color/color_4d4d4d"
             android:textSize="13sp"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/buttonCall"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/tvHubItemName"
-            tools:text="IP: 192.168.1.20 · Channels: 2" />
+            tools:text="UUID" />
 
-        <TextView
-            android:id="@+id/tvHubItemMeta"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="@color/color_666666"
-            android:textSize="12sp"
+        <ImageButton
+            android:id="@+id/buttonCall"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/close_rtc_label"
+            android:src="@android:drawable/ic_menu_call"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/tvHubItemSubtitle"
-            tools:text="EasyDarwin · ER-Edge-200" />
+            app:layout_constraintTop_toTopOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

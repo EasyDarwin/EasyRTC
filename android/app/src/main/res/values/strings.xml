@@ -25,12 +25,7 @@
     <string name="hub_retry">Retry</string>
     <string name="hub_status_online">Online</string>
     <string name="hub_status_offline">Offline</string>
-    <string name="hub_type_device">DEVICE</string>
-    <string name="hub_type_channel">CHANNEL</string>
-    <string name="hub_device_subtitle">IP %1$s  •  Channels %2$d</string>
-    <string name="hub_device_meta">%1$s / %2$s</string>
-    <string name="hub_channel_subtitle">Device %1$s  •  %2$s</string>
-    <string name="hub_channel_meta">Created %1$s</string>
+    <string name="hub_type_user">USER</string>
 
 
     <string name="rtc_device_id_label">设备ID</string>
