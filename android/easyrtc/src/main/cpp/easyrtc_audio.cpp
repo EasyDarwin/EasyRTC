@@ -136,25 +136,25 @@ void audioCaptureStop(MediaSession *session) {
         {
             AAudioStream_requestStop(pipeline->stream);
             // AAudioStream_waitForStateChange(pipeline->stream, AAUDIO_STREAM_STATE_STARTED, AAUDIO_STREAM_STATE_STOPPED, nullptr, nullptr);
-            aaudio_result_t result = AAUDIO_OK;
-            aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
-            aaudio_stream_state_t inputState = currentState;
-            while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
-                result = AAudioStream_waitForStateChange(
-                                            pipeline->stream, inputState, &currentState, 100000);
-                inputState = currentState;
-            }
+            // aaudio_result_t result = AAUDIO_OK;
+            // aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
+            // aaudio_stream_state_t inputState = currentState;
+            // while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
+            //     result = AAudioStream_waitForStateChange(
+            //                                 pipeline->stream, inputState, &currentState, 100000);
+            //     inputState = currentState;
+            // }
         }
         {
             AAudioStream_close(pipeline->stream);
-            aaudio_result_t result = AAUDIO_OK;
-            aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
-            aaudio_stream_state_t inputState = currentState;
-            while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_CLOSED) {
-                result = AAudioStream_waitForStateChange(
-                                            pipeline->stream, inputState, &currentState, 100000);
-                inputState = currentState;
-            }
+            // aaudio_result_t result = AAUDIO_OK;
+            // aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
+            // aaudio_stream_state_t inputState = currentState;
+            // while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_CLOSED) {
+            //     result = AAudioStream_waitForStateChange(
+            //                                 pipeline->stream, inputState, &currentState, 100000);
+            //     inputState = currentState;
+            // }
         }
         pipeline->stream = nullptr;
     }
