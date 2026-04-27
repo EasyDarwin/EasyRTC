@@ -89,7 +89,7 @@ static void* decodeThreadFunc(void* arg) {
         {
             static int64_t __idx = 0;
             if (__idx++ % 300 == 0) {
-                LOGD("VIDEO PKG OUT pts:%llums, in packet caches:%llu", packet.ptsUs/1000, pipeline->frameQueue.size());
+                LOGD("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet.ptsUs/1000, pipeline->frameQueue.size());
             }
         }
         if (droppingPackets && packet.frameFlags == 0) {
@@ -132,7 +132,7 @@ static void* decodeThreadFunc(void* arg) {
         pipeline->enqueuedFrames.store(q);
         enqueued++;
         if (q <= 8 || (q % 120) == 0) {
-            LOGD("DEC_IN q=%llu size=%zu pts=%lld flags=0x%x queue_remain=%zu",
+            LOGD("DEC_IN q=%llu size=%zu pts=%lld flags=0x%x PKT queue cached=%zu",
                  static_cast<unsigned long long>(q),
                  packet.data.size(),
                  static_cast<long long>(packet.ptsUs),
@@ -164,7 +164,7 @@ static void* decodeThreadFunc(void* arg) {
                 pipeline->renderedFrames.store(r);
                 enqueued--;
                 if (r <= 8 || (r % 120) == 0) {
-                    LOGD("DEC_OUT r=%llu size=%d pts=%lld sleepUs=%lld flags=0x%x cached:%d",
+                    LOGD("DEC_OUT r=%llu size=%d pts=%lld sleepUs=%lld flags=0x%x codec queue cached:%d",
                          static_cast<unsigned long long>(r),
                          bufferInfo.size,
                          static_cast<long long>(bufferInfo.presentationTimeUs),

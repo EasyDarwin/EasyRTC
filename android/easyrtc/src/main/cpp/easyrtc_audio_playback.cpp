@@ -58,7 +58,7 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
         {
           static int64_t __idx = 0;
           if (__idx++ % 300 == 0) {
-              LOGD("AUDIO PKG OUT, caches:%llu", pipeline->jitterBuffer.size());
+              LOGD("AUDIO OUT, PKT cached:%llu", pipeline->jitterBuffer.size());
           }
         }
       }
@@ -149,8 +149,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
   if (pcm.empty()) {
     return;
   }
-  if (!pipeline->playing.load() &&
-      pipeline->jitterBuffer.size() >= pipeline->MIN_QUEUE_SIZE) {
+  if (!pipeline->playing.load()) {
     ensureStreamCreated(pipeline);
   }
   // we need to convert the int16_t PCM data to uint8_t before pushing to the
@@ -168,7 +167,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
     static int64_t frames = 0;
     frames += pcm.size() / pipeline->CHANNEL_COUNT;
     if (__idx++ % 300 == 0) {
-        LOGD("AUDIO PKG IN pts:%llums, in packet caches:%llu", frames, pipeline->jitterBuffer.size());
+        LOGD("AUDIO PKG IN pts:%llums, in PKT cached:%llu", frames, pipeline->jitterBuffer.size());
     }
   }
 }
