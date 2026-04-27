@@ -113,9 +113,9 @@ void* outputThreadFunc(void* arg) {
         size_t dataSize = static_cast<size_t>(info.size);
 
         if (info.flags & BUFFER_FLAG_CODEC_CONFIG) {
-            std::lock_guard<std::recursive_mutex> lock(pipeline->mutex);
             pipeline->sps_pps_buffer.resize(dataSize);
             pipeline->sps_pps_buffer.assign(data, data + dataSize);
+            pipeline->sps_pps_size = dataSize;
             AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
             continue;
         }
@@ -133,14 +133,13 @@ void* outputThreadFunc(void* arg) {
 
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
             LOGD("Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
-            std::lock_guard<std::recursive_mutex> lock(pipeline->mutex);
-            if (!pipeline->sps_pps_buffer.empty()) {
-                size_t totalSize = pipeline->sps_pps_buffer.size() + dataSize;
-                auto* combined = new uint8_t[totalSize];
-                memcpy(combined, pipeline->sps_pps_buffer.data(), pipeline->sps_pps_buffer.size());
-                memcpy(combined + pipeline->sps_pps_buffer.size(), data, dataSize);
-                frame.frameData = combined;
-                frame.size = static_cast<UINT32>(totalSize);
+            if (pipeline->sps_pps_size > 0) {
+                pipeline->sps_pps_buffer.resize(pipeline->sps_pps_size);
+                // let's expand the sps_pps_buffer, and append the current frame data after it, then send the combined buffer to the peer, so that the decoder on the peer side can get the sps/pps before decoding the key frame
+                pipeline->sps_pps_buffer.insert(pipeline->sps_pps_buffer.end(), data, data + dataSize);
+                assert(pipeline->sps_pps_buffer.size() == pipeline->sps_pps_size + dataSize);
+                frame.frameData = pipeline->sps_pps_buffer.data();
+                frame.size = static_cast<UINT32>(pipeline->sps_pps_buffer.size());
             }
         }
 
@@ -153,10 +152,6 @@ void* outputThreadFunc(void* arg) {
         int sendResult = EasyRTC_SendFrame(pipeline->transceiver, &frame);
         if (sendResult != 0) {
             LOGE("EasyRTC_SendFrame failed: %d, size=%u, flags=%u", sendResult, frame.size, frame.flags);
-        }
-
-        if (frame.frameData != data) {
-            delete[] frame.frameData;
         }
 
         AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);

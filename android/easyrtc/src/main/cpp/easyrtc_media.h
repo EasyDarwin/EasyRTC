@@ -23,6 +23,7 @@ struct MediaPipeline {
     std::atomic<bool> running{false};
     std::thread outputThread;
     std::vector<uint8_t> sps_pps_buffer;
+    int sps_pps_size{0};
     std::recursive_mutex mutex;
     std::string mime;
 
