@@ -81,19 +81,20 @@ static void* decodeThreadFunc(void* arg) {
     bool droppingPackets = false;
 
     while (pipeline->running.load() && !pipeline->destroyed.load()) {
-        Packet packet;
-        if (!pipeline->frameQueue.pop(packet)) {
+        Packet *packet = pipeline->frameQueue.acquirePop();
+        if (!packet) {
             usleep(1000);
             continue;
         }
         {
             static int64_t __idx = 0;
             if (__idx++ % 300 == 0) {
-                LOGD("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet.ptsUs/1000, pipeline->frameQueue.size());
+                LOGD("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
             }
         }
-        if (droppingPackets && packet.frameFlags == 0) {
-            LOGW("Dropping packet pts=%lld", static_cast<long long>(packet.ptsUs));
+        if (droppingPackets && packet->frameFlags == 0) {
+            LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
+            pipeline->frameQueue.commitPop();
             continue;
         }
         droppingPackets = false;
@@ -101,43 +102,14 @@ static void* decodeThreadFunc(void* arg) {
         if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
             LOGW("Too many pending frames: %zu(count), %llu(ms), start dropping non-key frames", pipeline->frameQueue.size(), cached_packet_millis);
             droppingPackets = true;
+            pipeline->frameQueue.commitPop();
             continue;
         } 
         AMediaCodec* decoder = pipeline->decoder;
         if (!decoder) {
+            pipeline->frameQueue.commitPop();
             usleep(5000);
             continue;
-        }
-
-        ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
-        if (inputBufId < 0) {
-            continue;
-        }
-
-        size_t outSize = 0;
-        uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
-        if (!inputBuf || packet.data.size() > outSize) {
-            LOGW("Invalid decoder input buffer: inputBuf=%p frame=%zu cap=%zu",
-                 inputBuf, packet.data.size(), outSize);
-            continue;
-        }
-
-        memcpy(inputBuf, packet.data.data(), packet.data.size());
-        int flags = 0;
-        if (packet.frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
-        }
-        AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet.data.size(), packet.ptsUs, flags);
-        uint64_t q = gDecQueued.fetch_add(1) + 1;
-        pipeline->enqueuedFrames.store(q);
-        enqueued++;
-        if (q <= 8 || (q % 120) == 0) {
-            LOGD("DEC_IN q=%llu size=%zu pts=%lld flags=0x%x PKT queue cached=%zu",
-                 static_cast<unsigned long long>(q),
-                 packet.data.size(),
-                 static_cast<long long>(packet.ptsUs),
-                 packet.frameFlags,
-                 pipeline->frameQueue.size());
         }
 
         while (pipeline->running.load() && !pipeline->destroyed.load()) {
@@ -171,7 +143,7 @@ static void* decodeThreadFunc(void* arg) {
                          static_cast<long long>(sleepUs > 0 ? sleepUs : 0),
                          bufferInfo.flags, enqueued);
                 }
-                break;
+                continue;
             } else if (outputBufId == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
                 uint64_t t = gDecTryLater.fetch_add(1) + 1;
                 pipeline->tryLaterCount.store(t);
@@ -200,6 +172,41 @@ static void* decodeThreadFunc(void* arg) {
                 }
             }
         }
+
+        ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
+        if (inputBufId < 0) {
+            pipeline->frameQueue.commitPop();
+            continue;
+        }
+
+        size_t outSize = 0;
+        uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
+        if (!inputBuf || packet->size > outSize) {
+            LOGW("Invalid decoder input buffer: inputBuf=%p frame=%u cap=%zu",
+                 inputBuf, packet->size, outSize);
+            pipeline->frameQueue.commitPop();
+            continue;
+        }
+
+        memcpy(inputBuf, packet->data(), packet->size);
+        int flags = 0;
+        if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
+            flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
+        }
+        AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet->size, packet->ptsUs, flags);
+        uint64_t q = gDecQueued.fetch_add(1) + 1;
+        pipeline->enqueuedFrames.store(q);
+        enqueued++;
+        if (q <= 8 || (q % 120) == 0) {
+            LOGD("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
+                 static_cast<unsigned long long>(q),
+                 packet->size,
+                 static_cast<long long>(packet->ptsUs),
+                 packet->frameFlags,
+                 pipeline->frameQueue.size());
+        }
+
+        pipeline->frameQueue.commitPop();
     }
 
     LOGD("Video decode thread exiting");
@@ -239,14 +246,17 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
 void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags) {
     if (!pipeline || !pipeline->running.load() || pipeline->destroyed.load() || size <= 0) return;
 
-    Packet packet;
-    packet.data.assign(data, data + size);
-    packet.ptsUs = ptsUs;
-    packet.frameFlags = frameFlags;
-    while (!pipeline->frameQueue.push(packet)) {
-        // LOGE("Failed to push frame into queue");
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    Packet *slot = pipeline->frameQueue.acquirePush();
+    if (!slot) {
+        do {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            slot = pipeline->frameQueue.acquirePush();
+        } while (!slot);
     }
+    slot->setData(data, static_cast<uint32_t>(size));
+    slot->ptsUs = ptsUs;
+    slot->frameFlags = frameFlags;
+    pipeline->frameQueue.commitPush();
     {
         static int64_t __idx = 0;
         if (__idx++ % 300 == 0) {

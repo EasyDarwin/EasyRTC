@@ -44,22 +44,22 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
     // then we fill the rest of the output buffer with new PCM data from the
     // jitter buffer
     while (requestedBytes > 0 && !pipeline->jitterBuffer.empty()) {
-      std::vector<uint8_t> frame;
-      if (pipeline->jitterBuffer.pop(frame)) {
-        int32_t toCopy =
-            std::min(static_cast<int32_t>(frame.size()), requestedBytes);
-        memcpy(output, frame.data(), toCopy);
-        if (toCopy < static_cast<int32_t>(frame.size())) {
-          pipeline->remaining_pcm_.assign(frame.begin() + toCopy, frame.end());
-        }
-        requestedBytes -= toCopy;
-        output += toCopy;
+      easyrtc::AudioSlot *slot = pipeline->jitterBuffer.acquirePop();
+      if (!slot) break;
+      int32_t toCopy =
+          std::min(static_cast<int32_t>(slot->size), requestedBytes);
+      memcpy(output, slot->data(), toCopy);
+      if (toCopy < static_cast<int32_t>(slot->size)) {
+        pipeline->remaining_pcm_.assign(slot->data() + toCopy, slot->data() + slot->size);
+      }
+      pipeline->jitterBuffer.commitPop();
+      requestedBytes -= toCopy;
+      output += toCopy;
 
-        {
-          static int64_t __idx = 0;
-          if (__idx++ % 300 == 0) {
-              LOGD("AUDIO OUT, PKT cached:%llu", pipeline->jitterBuffer.size());
-          }
+      {
+        static int64_t __idx = 0;
+        if (__idx++ % 300 == 0) {
+            LOGD("AUDIO OUT, PKT cached:%llu", pipeline->jitterBuffer.size());
         }
       }
     }
@@ -154,16 +154,17 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
   if (!pipeline->playing.load()) {
     ensureStreamCreated(pipeline);
   }
-  // we need to convert the int16_t PCM data to uint8_t before pushing to the
-  // jitter buffer, because the buffer is defined as vector<uint8_t>
-  auto frame = std::vector<uint8_t>(pcm.size() * sizeof(int16_t));
-  memcpy(frame.data(), pcm.data(), frame.size());
-  while (!pipeline->jitterBuffer.push(std::move(frame))) {
-    // static auto __tmp = 0;
-    // if (__tmp ++ % 10 == 0)
-    //     LOGW("Audio playback jitter buffer full, dropping frame");
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  auto pcmBytes = static_cast<uint32_t>(pcm.size() * sizeof(int16_t));
+  auto *pcmData = reinterpret_cast<const uint8_t *>(pcm.data());
+  easyrtc::AudioSlot *slot = pipeline->jitterBuffer.acquirePush();
+  if (!slot) {
+    do {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      slot = pipeline->jitterBuffer.acquirePush();
+    } while (!slot);
   }
+  slot->setData(pcmData, pcmBytes);
+  pipeline->jitterBuffer.commitPush();
   {
     static int64_t __idx = 0;
     static int64_t frames = 0;

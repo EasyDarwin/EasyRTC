@@ -3,8 +3,10 @@
 #include <atomic>
 #include <cassert>
 #include <cstddef>
+#include <cstring>
 #include <vector>
 namespace easyrtc {
+
 template <typename T> class SpscRingBuffer {
 public:
   explicit SpscRingBuffer(size_t capacity)
@@ -15,33 +17,35 @@ public:
     tail_.store(0, std::memory_order_relaxed);
   }
 
-  // Producer thread
-  //   let's push be std::forwarded with move semantics, and the caller can
-  //   decide whether to move or copy
-  template <typename U> bool push(U &&item) {
+  // Zero-copy push: acquire slot, write into it, then commit
+  T *acquirePush() {
     size_t head = head_.load(std::memory_order_relaxed);
     size_t next = (head + 1) & mask_;
-
     if (next == tail_.load(std::memory_order_acquire)) {
-      return false; // full
+      return nullptr;
     }
-
-    buffer_[head] = std::forward<U>(item);
-    head_.store(next, std::memory_order_release);
-    return true;
+    return &buffer_[head];
   }
 
-  // Consumer thread
-  bool pop(T &item) {
+  void commitPush() {
+    size_t head = head_.load(std::memory_order_relaxed);
+    head_.store((head + 1) & mask_, std::memory_order_release);
+  }
+
+  // Zero-copy pop: acquire slot, read from it, then release
+  T *acquirePop() {
     size_t tail = tail_.load(std::memory_order_relaxed);
-
     if (tail == head_.load(std::memory_order_acquire)) {
-      return false; // empty
+      return nullptr;
     }
+    return &buffer_[tail];
+  }
 
-    item = buffer_[tail];
+  void commitPop() {
+    size_t tail = tail_.load(std::memory_order_relaxed);
+    auto &slot = buffer_[tail];
+    slot.release();
     tail_.store((tail + 1) & mask_, std::memory_order_release);
-    return true;
   }
 
   bool empty() const {
@@ -79,10 +83,40 @@ protected:
 
   alignas(64) std::atomic<size_t> head_;
   alignas(64) std::atomic<size_t> tail_;
-
 };
 
-class vector_rb : public SpscRingBuffer<std::vector<uint8_t>> {
+struct AudioSlot {
+  static constexpr size_t FIXED_SIZE = 1024;
+  alignas(16) uint8_t fixedBuf[FIXED_SIZE] = {};
+  std::vector<uint8_t> heapBuf;
+  uint32_t size = 0;
+
+  void setData(const uint8_t *src, uint32_t len) {
+    size = len;
+    if (len <= FIXED_SIZE) {
+      if (!heapBuf.empty()) {
+        heapBuf.clear();
+        heapBuf.shrink_to_fit();
+      }
+      memcpy(fixedBuf, src, len);
+    } else {
+      heapBuf.assign(src, src + len);
+    }
+  }
+
+  const uint8_t *data() const {
+    return heapBuf.empty() ? fixedBuf : heapBuf.data();
+  }
+
+  void release() {
+    if (!heapBuf.empty()) {
+      heapBuf.clear();
+      heapBuf.shrink_to_fit();
+    }
+  }
+};
+
+class vector_rb : public SpscRingBuffer<AudioSlot> {
 public:
   explicit vector_rb(size_t capacity) : SpscRingBuffer(capacity) {}
 };

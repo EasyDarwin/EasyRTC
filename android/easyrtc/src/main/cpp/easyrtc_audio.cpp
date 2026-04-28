@@ -158,6 +158,7 @@ void audioCaptureStop(MediaSession *session) {
         }
         pipeline->stream = nullptr;
     }
+    session->audioCapture = nullptr;
 
     LOGI("[CRITICAL] AudioCaptureStop: DONE");
 }
