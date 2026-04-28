@@ -14,10 +14,12 @@ add_library(easyrtc_media SHARED
     easyrtc_frame_dump.cpp
     easyrtc_frame_reader.cpp
     easyrtc_test_jni.cpp
+    third_party/sonic.c
 )
 
 target_include_directories(easyrtc_media PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${REPO_INCLUDE_DIR}
 )
 

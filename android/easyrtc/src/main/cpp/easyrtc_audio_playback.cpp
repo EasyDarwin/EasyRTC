@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <thread>
 #include <unistd.h>
 
@@ -41,8 +42,51 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
           LOGW("pcm data is back from insufficient");
           pipeline->lack_of_pcm_ = false;
       }
-    // then we fill the rest of the output buffer with new PCM data from the
-    // jitter buffer
+
+    size_t queueSize = pipeline->jitterBuffer.size();
+    bool speedUp = queueSize > pipeline->SPEED_UP_THRESHOLD && pipeline->sonicStream;
+
+    if (speedUp) {
+      float speed = 1.0f + static_cast<float>(queueSize - pipeline->SPEED_UP_THRESHOLD) /
+                             static_cast<float>(pipeline->MAX_QUEUE_SIZE - pipeline->SPEED_UP_THRESHOLD);
+      speed = speed > 2.0f ? 2.0f : speed;
+      sonicSetSpeed(pipeline->sonicStream.get(), speed);
+
+      int32_t totalInputFrames = requestedBytes / sizeof(int16_t);
+      int32_t collectedBytes = 0;
+
+      auto *pcmBuf = static_cast<int16_t*>(static_cast<void*>(output));
+
+      while (collectedBytes < requestedBytes * 2 && !pipeline->jitterBuffer.empty()) {
+        easyrtc::AudioSlot *slot = pipeline->jitterBuffer.acquirePop();
+        if (!slot) break;
+        int32_t avail = static_cast<int32_t>(slot->size);
+        int32_t samples = avail / static_cast<int32_t>(sizeof(int16_t));
+        sonicWriteShortToStream(pipeline->sonicStream.get(),
+                                reinterpret_cast<const int16_t*>(slot->data()), samples);
+        pipeline->jitterBuffer.commitPop();
+        collectedBytes += avail;
+      }
+
+      int availableSamples = sonicSamplesAvailable(pipeline->sonicStream.get());
+      int requestedSamples = requestedBytes / static_cast<int32_t>(sizeof(int16_t));
+      if (availableSamples > 0) {
+        int toRead = availableSamples > requestedSamples ? requestedSamples : availableSamples;
+        sonicReadShortFromStream(pipeline->sonicStream.get(), pcmBuf, toRead);
+        requestedBytes -= toRead * static_cast<int32_t>(sizeof(int16_t));
+        output += toRead * static_cast<int32_t>(sizeof(int16_t));
+      }
+
+      {
+        static int64_t __idx = 0;
+        if (__idx++ % 100 == 0) {
+            LOGW("AUDIO SPEEDUP speed=%.2f queue=%zu", speed, pipeline->jitterBuffer.size());
+        }
+      }
+    } else {
+      if (pipeline->sonicStream) {
+        sonicSetSpeed(pipeline->sonicStream.get(), 1.0f);
+      }
     while (requestedBytes > 0 && !pipeline->jitterBuffer.empty()) {
       easyrtc::AudioSlot *slot = pipeline->jitterBuffer.acquirePop();
       if (!slot) break;
@@ -62,6 +106,7 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
             LOGD("AUDIO OUT, PKT cached:%llu", pipeline->jitterBuffer.size());
         }
       }
+    }
     }
     assert(requestedBytes >= 0);
     if (requestedBytes > 0) {
@@ -138,6 +183,10 @@ std::shared_ptr<AudioPlaybackPipeline> audioPlaybackCreate(int audioCodec) {
   auto pipeline = std::make_shared<AudioPlaybackPipeline>();
   LOGD("AudioPlaybackPipeline created");
   pipeline->audioDecoder = audioDecoderCreate(audioCodec);
+   pipeline->sonicStream = std::shared_ptr<sonicStreamStruct>(sonicCreateStream(pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT), sonicDestroyStream);
+   LOGD("AudioPlaybackPipeline created sonic=%p", pipeline->sonicStream.get());
+   return pipeline;
+
   return pipeline;
 }
 
