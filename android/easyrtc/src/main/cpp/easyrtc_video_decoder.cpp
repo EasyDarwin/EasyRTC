@@ -98,7 +98,7 @@ static void* decodeThreadFunc(void* arg) {
         }
         droppingPackets = false;
         const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
-        if (cached_packet_millis > 500) {
+        if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
             LOGW("Too many pending frames: %zu(count), %llu(ms), start dropping non-key frames", pipeline->frameQueue.size(), cached_packet_millis);
             droppingPackets = true;
             continue;
