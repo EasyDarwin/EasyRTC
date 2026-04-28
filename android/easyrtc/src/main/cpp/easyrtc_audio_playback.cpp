@@ -17,10 +17,8 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
   int32_t requestedBytes =
       numFrames * pipeline->CHANNEL_COUNT * sizeof(int16_t);
   auto *output = static_cast<uint8_t *>(audioData);
-  // first we consume the remaining PCM data from the previous callback if any
+
   if (!pipeline->remaining_pcm_.empty()) {
-//    LOGW("remaining pcm cached in pipeline, bytes:%llu",
-//         pipeline->remaining_pcm_.size());
     int32_t toCopy = std::min(
         static_cast<int32_t>(pipeline->remaining_pcm_.size()), requestedBytes);
     memcpy(output, pipeline->remaining_pcm_.data(), toCopy);
@@ -33,15 +31,16 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
     requestedBytes -= toCopy;
     output += toCopy;
   }
+
   if (pipeline->lack_of_pcm_ &&
       pipeline->jitterBuffer.size() < pipeline->MIN_QUEUE_SIZE) {
     memset(output, 0, requestedBytes);
     requestedBytes = 0;
   } else {
-      if (pipeline->lack_of_pcm_) {
-          LOGW("pcm data is back from insufficient");
-          pipeline->lack_of_pcm_ = false;
-      }
+    if (pipeline->lack_of_pcm_) {
+      LOGW("pcm data is back from insufficient");
+      pipeline->lack_of_pcm_ = false;
+    }
 
     size_t queueSize = pipeline->jitterBuffer.size();
     bool speedUp = queueSize > pipeline->SPEED_UP_THRESHOLD && pipeline->sonicStream;
@@ -183,10 +182,10 @@ std::shared_ptr<AudioPlaybackPipeline> audioPlaybackCreate(int audioCodec) {
   auto pipeline = std::make_shared<AudioPlaybackPipeline>();
   LOGD("AudioPlaybackPipeline created");
   pipeline->audioDecoder = audioDecoderCreate(audioCodec);
-   pipeline->sonicStream = std::shared_ptr<sonicStreamStruct>(sonicCreateStream(pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT), sonicDestroyStream);
-   LOGD("AudioPlaybackPipeline created sonic=%p", pipeline->sonicStream.get());
-   return pipeline;
-
+  pipeline->sonicStream = std::shared_ptr<sonicStreamStruct>(
+      sonicCreateStream(pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT),
+      sonicDestroyStream);
+  LOGD("AudioPlaybackPipeline created sonic=%p", pipeline->sonicStream.get());
   return pipeline;
 }
 
@@ -219,7 +218,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
     static int64_t frames = 0;
     frames += pcm.size() / pipeline->CHANNEL_COUNT;
     if (__idx++ % 300 == 0) {
-        LOGD("AUDIO PKG IN pts:%llums, in PKT cached:%llu", frames, pipeline->jitterBuffer.size());
+      LOGD("AUDIO PKG IN pts:%llums, in PKT cached:%llu", frames, pipeline->jitterBuffer.size());
     }
   }
 }
