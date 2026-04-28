@@ -1,10 +1,22 @@
 #include "easyrtc_audio_playback.h"
-#include <chrono>
-#include <cstdint>
+#include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <thread>
-#include <unistd.h>
+
+static float computePlaybackSpeed(int bufferedSamples) {
+  float bufferedMs = static_cast<float>(bufferedSamples) * 1000.0f /
+                     static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
+                                        AudioPlaybackPipeline::CHANNEL_COUNT);
+  if (bufferedMs > AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS) {
+    float excess = bufferedMs - AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS;
+    float speed = 1.0f + excess / AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS;
+    return std::min(speed, AudioPlaybackPipeline::MAX_SPEED);
+  }
+  return 1.0f;
+}
 
 static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
                                                       void *userData,
@@ -14,107 +26,89 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
   if (!pipeline || pipeline->stopped.load()) {
     return AAUDIO_CALLBACK_RESULT_STOP;
   }
+
   int32_t requestedBytes =
       numFrames * pipeline->CHANNEL_COUNT * sizeof(int16_t);
   auto *output = static_cast<uint8_t *>(audioData);
 
-  if (!pipeline->remaining_pcm_.empty()) {
-    int32_t toCopy = std::min(
-        static_cast<int32_t>(pipeline->remaining_pcm_.size()), requestedBytes);
-    memcpy(output, pipeline->remaining_pcm_.data(), toCopy);
-    if (toCopy < static_cast<int32_t>(pipeline->remaining_pcm_.size())) {
-      pipeline->remaining_pcm_.erase(pipeline->remaining_pcm_.begin(),
-                                     pipeline->remaining_pcm_.begin() + toCopy);
-    } else {
-      pipeline->remaining_pcm_.clear();
-    }
-    requestedBytes -= toCopy;
-    output += toCopy;
-  }
-
-  if (pipeline->lack_of_pcm_ &&
-      pipeline->jitterBuffer.size() < pipeline->MIN_QUEUE_SIZE) {
+  std::lock_guard<std::mutex> lock(pipeline->mutex_);
+  int32_t avail = sonicSamplesAvailable(pipeline->sonicStream.get());
+  auto millis = avail * 1000.0f /
+                static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
+                                   AudioPlaybackPipeline::CHANNEL_COUNT);
+  if (pipeline->lack_of_pcm_ && (avail < numFrames * pipeline->CHANNEL_COUNT || millis < 80.0f)) { // we need at least 80ms data to recover from underrun
     memset(output, 0, requestedBytes);
     requestedBytes = 0;
-  } else {
+  }
+
+  if (requestedBytes > 0) {
+    int32_t requestedSamples =
+        requestedBytes / static_cast<int32_t>(sizeof(int16_t));
+    int32_t totalReadSamples = 0;
+    while (totalReadSamples < requestedSamples) {
+      int32_t availNow = sonicSamplesAvailable(pipeline->sonicStream.get());
+      if (availNow == 0)
+        break;
+
+      int32_t toRead = std::min(availNow, requestedSamples - totalReadSamples);
+      int32_t read = sonicReadShortFromStream(
+          pipeline->sonicStream.get(),
+          reinterpret_cast<int16_t *>(output) + totalReadSamples, toRead);
+      if (read <= 0)
+        break;
+      totalReadSamples += read;
+    }
+
+    int32_t consumedBytes =
+        totalReadSamples * static_cast<int32_t>(sizeof(int16_t));
+    requestedBytes -= consumedBytes;
+    output += consumedBytes;
+
     if (pipeline->lack_of_pcm_) {
-      LOGW("pcm data is back from insufficient");
-      pipeline->lack_of_pcm_ = false;
-    }
-
-    size_t queueSize = pipeline->jitterBuffer.size();
-    bool speedUp = queueSize > pipeline->SPEED_UP_THRESHOLD && pipeline->sonicStream;
-
-    if (speedUp) {
-      float speed = 1.0f + static_cast<float>(queueSize - pipeline->SPEED_UP_THRESHOLD) /
-                             static_cast<float>(pipeline->MAX_QUEUE_SIZE - pipeline->SPEED_UP_THRESHOLD);
-      speed = speed > 2.0f ? 2.0f : speed;
-      sonicSetSpeed(pipeline->sonicStream.get(), speed);
-
-      int32_t totalInputFrames = requestedBytes / sizeof(int16_t);
-      int32_t collectedBytes = 0;
-
-      auto *pcmBuf = static_cast<int16_t*>(static_cast<void*>(output));
-
-      while (collectedBytes < requestedBytes * 2 && !pipeline->jitterBuffer.empty()) {
-        easyrtc::AudioSlot *slot = pipeline->jitterBuffer.acquirePop();
-        if (!slot) break;
-        int32_t avail = static_cast<int32_t>(slot->size);
-        int32_t samples = avail / static_cast<int32_t>(sizeof(int16_t));
-        sonicWriteShortToStream(pipeline->sonicStream.get(),
-                                reinterpret_cast<const int16_t*>(slot->data()), samples);
-        pipeline->jitterBuffer.commitPop();
-        collectedBytes += avail;
+      if (requestedBytes == 0) {
+        LOGW("[AUDIO] SonicRecovery: data is back");
+        pipeline->lack_of_pcm_ = false;
       }
+      // do fade in for the first 10ms to avoid audio crackle
+      int32_t fadeInBytes = std::min(static_cast<int32_t>(totalReadSamples * sizeof(int16_t)),
+                                     static_cast<int32_t>(AudioPlaybackPipeline::SAMPLE_RATE * pipeline->CHANNEL_COUNT *
+                                                        sizeof(int16_t) / 100)); // 10ms fade in
+      assert(fadeInBytes % 2 == 0);
+      auto fadeInSamples = fadeInBytes / sizeof(int16_t);
+      auto _pcm = static_cast<uint8_t *>(audioData);
+      auto fadeInStart = reinterpret_cast<int16_t *>(_pcm);
 
-      int availableSamples = sonicSamplesAvailable(pipeline->sonicStream.get());
-      int requestedSamples = requestedBytes / static_cast<int32_t>(sizeof(int16_t));
-      if (availableSamples > 0) {
-        int toRead = availableSamples > requestedSamples ? requestedSamples : availableSamples;
-        sonicReadShortFromStream(pipeline->sonicStream.get(), pcmBuf, toRead);
-        requestedBytes -= toRead * static_cast<int32_t>(sizeof(int16_t));
-        output += toRead * static_cast<int32_t>(sizeof(int16_t));
-      }
-
-      {
-        static int64_t __idx = 0;
-        if (__idx++ % 100 == 0) {
-            LOGW("AUDIO SPEEDUP speed=%.2f queue=%zu", speed, pipeline->jitterBuffer.size());
-        }
-      }
-    } else {
-      if (pipeline->sonicStream) {
-        sonicSetSpeed(pipeline->sonicStream.get(), 1.0f);
-      }
-    while (requestedBytes > 0 && !pipeline->jitterBuffer.empty()) {
-      easyrtc::AudioSlot *slot = pipeline->jitterBuffer.acquirePop();
-      if (!slot) break;
-      int32_t toCopy =
-          std::min(static_cast<int32_t>(slot->size), requestedBytes);
-      memcpy(output, slot->data(), toCopy);
-      if (toCopy < static_cast<int32_t>(slot->size)) {
-        pipeline->remaining_pcm_.assign(slot->data() + toCopy, slot->data() + slot->size);
-      }
-      pipeline->jitterBuffer.commitPop();
-      requestedBytes -= toCopy;
-      output += toCopy;
-
-      {
-        static int64_t __idx = 0;
-        if (__idx++ % 300 == 0) {
-            LOGD("AUDIO OUT, PKT cached:%llu", pipeline->jitterBuffer.size());
-        }
+      LOGW("[AUDIO] SonicUnderrun: recver from lack of pcm with %d samples, fade in %d samples", requestedBytes/sizeof(int16_t), fadeInBytes/sizeof(int16_t));
+      for (int32_t i = 0; i < fadeInSamples; i++) {
+        float ratio = static_cast<float>(i) / fadeInSamples;
+        fadeInStart[i] = static_cast<int16_t>(fadeInStart[i] * ratio);
       }
     }
+  }
+
+  if (requestedBytes > 0) {
+    pipeline->lack_of_pcm_ = true;
+    auto _pcm = static_cast<uint8_t *>(audioData);
+    // fade out the last 10ms to avoid audio crackle and then, fill the rest with silence
+    int32_t fadeOutBytes = std::min(static_cast<int32_t>(output - _pcm), static_cast<int32_t>(
+        AudioPlaybackPipeline::SAMPLE_RATE * pipeline->CHANNEL_COUNT *
+        sizeof(int16_t) / 100)); // 10ms fade out
+    assert(fadeOutBytes % 2 == 0);
+    auto fadeOutStart = output - fadeOutBytes;
+    assert(fadeOutStart - _pcm >= 0l);
+    if (fadeOutStart - _pcm > 0) {
+      LOGW("[AUDIO] SonicUnderrun: filling silence %d samples, fade out %d samples", requestedBytes/sizeof(int16_t), fadeOutBytes/sizeof(int16_t));
+      
+      assert((fadeOutStart - _pcm) % 2 == 0);
+      const auto fadeOutSamples = fadeOutBytes / sizeof(int16_t);
+      auto fadeOutStartSamples = reinterpret_cast<int16_t *>(fadeOutStart);
+      
+      for (int32_t i = 0; i < fadeOutSamples; i++) {
+        float ratio = 1.0f - static_cast<float>(i) / fadeOutSamples;
+        fadeOutStartSamples[i] = static_cast<int16_t>(fadeOutStartSamples[i] * ratio);
+      }
     }
-    assert(requestedBytes >= 0);
-    if (requestedBytes > 0) {
-      LOGW("insufficient audio data in jitter buffer, filling silence for %d "
-           "bytes",
-           requestedBytes);
-      memset(output, 0, requestedBytes);
-      pipeline->lack_of_pcm_ = true;
-    }
+    memset(output, 0, requestedBytes);
   }
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
@@ -129,7 +123,9 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   if (pipeline->stream)
     return 0;
 
-  LOGI("[CRITICAL] AudioPlaybackOpen: %dHz %dch", pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT);
+  LOGI("[AUDIO] AudioPlaybackOpen: %dHz %dch",
+       AudioPlaybackPipeline::SAMPLE_RATE,
+       AudioPlaybackPipeline::CHANNEL_COUNT);
 
   AAudioStreamBuilder *builder = nullptr;
   aaudio_result_t result = AAudio_createStreamBuilder(&builder);
@@ -139,8 +135,10 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   }
 
   AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
-  AAudioStreamBuilder_setSampleRate(builder, pipeline->SAMPLE_RATE);
-  AAudioStreamBuilder_setChannelCount(builder, pipeline->CHANNEL_COUNT);
+  AAudioStreamBuilder_setSampleRate(builder,
+                                    AudioPlaybackPipeline::SAMPLE_RATE);
+  AAudioStreamBuilder_setChannelCount(builder,
+                                      AudioPlaybackPipeline::CHANNEL_COUNT);
   AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
   AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
   AAudioStreamBuilder_setPerformanceMode(builder,
@@ -173,19 +171,18 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   }
 
   pipeline->playing.store(true);
-  LOGI("[CRITICAL] AudioPlaybackOpen: SUCCESS stream=%p %dHz %dch",
-       stream, pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT);
+  LOGI("[AUDIO] AudioPlaybackOpen: SUCCESS stream=%p", stream);
   return 0;
 }
 
 std::shared_ptr<AudioPlaybackPipeline> audioPlaybackCreate(int audioCodec) {
   auto pipeline = std::make_shared<AudioPlaybackPipeline>();
-  LOGD("AudioPlaybackPipeline created");
   pipeline->audioDecoder = audioDecoderCreate(audioCodec);
   pipeline->sonicStream = std::shared_ptr<sonicStreamStruct>(
-      sonicCreateStream(pipeline->SAMPLE_RATE, pipeline->CHANNEL_COUNT),
+      sonicCreateStream(AudioPlaybackPipeline::SAMPLE_RATE,
+                        AudioPlaybackPipeline::CHANNEL_COUNT),
       sonicDestroyStream);
-  LOGD("AudioPlaybackPipeline created sonic=%p", pipeline->sonicStream.get());
+  LOGI("[AUDIO] AudioPlaybackCreate: sonic=%p", pipeline->sonicStream.get());
   return pipeline;
 }
 
@@ -196,29 +193,49 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
 
   std::vector<int16_t> pcm =
       audioDecoderDecode(pipeline->audioDecoder, data, size);
-  if (pcm.empty()) {
+  if (pcm.empty())
     return;
-  }
+
   if (!pipeline->playing.load()) {
     ensureStreamCreated(pipeline);
   }
-  auto pcmBytes = static_cast<uint32_t>(pcm.size() * sizeof(int16_t));
-  auto *pcmData = reinterpret_cast<const uint8_t *>(pcm.data());
-  easyrtc::AudioSlot *slot = pipeline->jitterBuffer.acquirePush();
-  if (!slot) {
-    do {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      slot = pipeline->jitterBuffer.acquirePush();
-    } while (!slot);
-  }
-  slot->setData(pcmData, pcmBytes);
-  pipeline->jitterBuffer.commitPush();
+
+  #if 0
   {
+    // test sleep to simulate slow decoding and see if sonic can speed up the playback
+    static int64_t _idx = 0;
+    if (_idx++ % 500 == 0) {
+      LOGI("[AUDIO] Simulating slow decoding...");
+      std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    }
+  }
+  #endif
+
+  std::lock_guard<std::mutex> lock(pipeline->mutex_);
+  int32_t avail = sonicSamplesAvailable(pipeline->sonicStream.get());
+  auto millis = avail * 1000.0f /
+                static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
+                                   AudioPlaybackPipeline::CHANNEL_COUNT);
+  if (millis > AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS) {
+    float speed = computePlaybackSpeed(avail);
+    if (speed != pipeline->currentSpeed) {
+      LOGI("[AUDIO] SonicSpeedChange: %.2f -> %.2f, bufferedSamples=%d",
+           pipeline->currentSpeed, speed, avail);
+      pipeline->currentSpeed = speed;
+      sonicSetSpeed(pipeline->sonicStream.get(), speed);
+    }
+  }
+  int samples = static_cast<int>(pcm.size());
+  int written =
+      sonicWriteShortToStream(pipeline->sonicStream.get(), pcm.data(), samples);
+  {
+    // loging every 500 frames to avoid flooding the logcat
     static int64_t __idx = 0;
-    static int64_t frames = 0;
-    frames += pcm.size() / pipeline->CHANNEL_COUNT;
-    if (__idx++ % 300 == 0) {
-      LOGD("AUDIO PKG IN pts:%llums, in PKT cached:%llu", frames, pipeline->jitterBuffer.size());
+    if (__idx++ % 500 == 0) {
+      int buffered = sonicSamplesAvailable(pipeline->sonicStream.get());
+      LOGI("[AUDIO] SonicEnqueue: wrote samples=%d buffered samples=%d "
+           "speed=%.2f",
+           written, buffered, pipeline->currentSpeed);
     }
   }
 }
@@ -227,7 +244,7 @@ void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   if (!pipeline)
     return;
 
-  LOGI("[CRITICAL] AudioPlaybackClose: stream=%p", pipeline->stream);
+  LOGI("[AUDIO] AudioPlaybackClose: stream=%p", pipeline->stream);
 
   pipeline->stopped.store(true);
   pipeline->playing.store(false);
@@ -237,5 +254,5 @@ void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
     AAudioStream_close(pipeline->stream);
     pipeline->stream = nullptr;
   }
-  LOGI("[CRITICAL] AudioPlaybackClose: DONE");
+  LOGI("[AUDIO] AudioPlaybackClose: DONE");
 }
