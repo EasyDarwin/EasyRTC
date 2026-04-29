@@ -18,7 +18,8 @@ struct AudioPlaybackPipeline {
 
     static constexpr int32_t SAMPLE_RATE = 8000;
     static constexpr int32_t CHANNEL_COUNT = 1;
-    static constexpr float SPEED_UP_THRESHOLD_MS = 200.0f;
+    static constexpr float SPEED_UP_THRESHOLD_MS = 2000.0f;
+    static constexpr float CACHE_BUFFER_MS = 60.0f;
     static constexpr float MAX_SPEED = 2.0f;
 
     AudioPlaybackPipeline() = default;
@@ -32,6 +33,7 @@ struct AudioPlaybackPipeline {
     // std::vector<uint8_t> remaining_pcm_;
     bool lack_of_pcm_ = false;
     float currentSpeed = 1.0f;
+    int64_t playedFrames = 0;
     std::mutex mutex_;
 };
 
