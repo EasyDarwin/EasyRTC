@@ -17,6 +17,7 @@ import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.media.AudioManager
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
@@ -51,6 +52,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     private lateinit var endCallButton: ImageButton
     private lateinit var switchCameraButton: ImageButton
+    private lateinit var speakerButton: ImageButton
+    private var isSpeakerOn = true
+    private val audioManager by lazy { requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     private lateinit var mainVideoView: TextureView
     private lateinit var tvFragmentUUID: TextView
@@ -181,6 +185,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         smallVideoContainer = view.findViewById(R.id.smallVideoContainer)
         endCallButton = view.findViewById(R.id.endCallButton)
         switchCameraButton = view.findViewById(R.id.switchCameraButton)
+        speakerButton = view.findViewById(R.id.speakerButton)
 
         endCallButton.visibility = View.GONE
 
@@ -216,6 +221,13 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
         switchCameraButton.setOnClickListener {
             switchCamera()
+        }
+
+        speakerButton.setOnClickListener {
+            isSpeakerOn = !isSpeakerOn
+            speakerButton.setImageResource(if (isSpeakerOn) R.drawable.ic_speaker_on else R.drawable.ic_speaker_off)
+            audioManager.isSpeakerphoneOn = isSpeakerOn
+            appendLog(if (isSpeakerOn) "扬声器已开启" else "扬声器已关闭")
         }
 
         Log.d(TAG, "视图初始化完成")
