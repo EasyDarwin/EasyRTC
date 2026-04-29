@@ -4,22 +4,13 @@
 #include <aaudio/AAudio.h>
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <thread>
 
-static float computePlaybackSpeed(int bufferedSamples) {
-  float bufferedMs = static_cast<float>(bufferedSamples) * 1000.0f /
-                     static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
-                                        AudioPlaybackPipeline::CHANNEL_COUNT);
-  if (bufferedMs > AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS) {
-    float excess = bufferedMs - AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS;
-    float speed = 1.0f + excess / AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS;
-    return std::min(speed, AudioPlaybackPipeline::MAX_SPEED);
-  }
-  return 1.0f;
-}
+#define OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS 200.0f
 
 static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
                                                       void *userData,
@@ -27,12 +18,12 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
                                                       int32_t numFrames) {
   auto *pipeline = static_cast<AudioPlaybackPipeline *>(userData);
   if (!pipeline || pipeline->stopped.load()) {
-    LOGW("[AUDIO] play callback with pipeline stopped or null, stopping playback");
+    LOGW("[AUDIO] play callback with pipeline stopped or null, stopping "
+         "playback");
     return AAUDIO_CALLBACK_RESULT_STOP;
   }
-  int32_t requestedBytes =
-      numFrames * pipeline->CHANNEL_COUNT * sizeof(int16_t);
-  const auto requestBytesTotal = requestedBytes;
+  const int32_t numSamples = numFrames * pipeline->CHANNEL_COUNT;
+  int32_t requestedBytes = numSamples * sizeof(int16_t);
   auto *output = static_cast<uint8_t *>(audioData);
 
   std::lock_guard<std::mutex> lock(pipeline->mutex_);
@@ -40,84 +31,63 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
   auto millis = avail * 1000.0f /
                 static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
                                    AudioPlaybackPipeline::CHANNEL_COUNT);
-  FLOGI("[AUDIO] play callback with numFrames:%d, available samples %d, buffered %f ms", numFrames, avail, millis); 
-  if (pipeline->lack_of_pcm_ && (avail < numFrames * pipeline->CHANNEL_COUNT || 
-      millis < AudioPlaybackPipeline::CACHE_BUFFER_MS)) {
-    memset(output, 0, requestedBytes);
-    requestedBytes = 0;
-    LOGI("[AUDIO] in lack_of_pcm state, ignore %d request, with available:%d in buffer", requestBytesTotal, avail);
+  FLOGI("[AUDIO] play callback with numFrames:%d, available samples %d, "
+        "buffered %f ms",
+        numFrames, avail, millis);
+  bool exitFromLackOfPcmState = false;
+  if (pipeline->lack_of_pcm_ && millis > OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS && avail > numSamples) {
+    pipeline->lack_of_pcm_ = false;
+    exitFromLackOfPcmState = true;
   }
 
-  if (requestedBytes > 0) {
-    int32_t requestedSamples =
-        requestedBytes / static_cast<int32_t>(sizeof(int16_t));
-    int32_t totalReadSamples = 0;
-    while (totalReadSamples < requestedSamples) {
-      int32_t availNow = sonicSamplesAvailable(pipeline->sonicStream.get());
-      if (availNow == 0)
-        break;
+  if (pipeline->lack_of_pcm_) {
+    memset(output, 0, requestedBytes);
+    LOGI("[AUDIO] in lack_of_pcm state, ignore %d request, with available:%d "
+         "in buffer",
+         requestedBytes, avail);
+    return AAUDIO_CALLBACK_RESULT_CONTINUE;
+  }
+  int32_t readBytesOffset = 0;
+  { // sonic to output
+    int32_t read = sonicReadShortFromStream(pipeline->sonicStream.get(),
+                                            reinterpret_cast<int16_t *>(output),
+                                            numSamples);
+    assert(read <= numSamples);
+    readBytesOffset = read * sizeof(int16_t);
 
-      int32_t toRead = std::min(availNow, requestedSamples - totalReadSamples);
-      int32_t read = sonicReadShortFromStream(
-          pipeline->sonicStream.get(),
-          reinterpret_cast<int16_t *>(output) + totalReadSamples, toRead);
-      if (read <= 0)
-        break;
-      totalReadSamples += read;
-    }
-
-    int32_t consumedBytes =
-        totalReadSamples * static_cast<int32_t>(sizeof(int16_t));
-    requestedBytes -= consumedBytes;
-    output += consumedBytes;
-
-    if (pipeline->lack_of_pcm_) {
-      if (requestedBytes == 0) {
-        LOGW("[AUDIO] SonicRecovery: data is back, with available:%d in buffer", avail);
-        pipeline->lack_of_pcm_ = false;
+    if (read < numSamples) {
+      pipeline->lack_of_pcm_ = true;
+      // apply a fadeOut
+      int fadeOutFrames = std::min(read, AudioPlaybackPipeline::SAMPLE_RATE /
+                                             100); // 10ms fade out
+      auto _pcm = static_cast<int16_t *>(audioData);
+      auto fadeOutStart = _pcm + read - fadeOutFrames;
+      for (int32_t i = 0; i < fadeOutFrames; i++) {
+        float ratio = static_cast<float>(fadeOutFrames - i) / fadeOutFrames;
+        fadeOutStart[i] = static_cast<int16_t>(fadeOutStart[i] * ratio);
       }
+      LOGI("[AUDIO] Enter lack_of_pcm state, read %d "
+           "samples, requested %d samples, fadeOut applied for last %d frames",
+           read, numSamples, fadeOutFrames);
+      memset(output + readBytesOffset, 0, requestedBytes - readBytesOffset);
+    } else if (exitFromLackOfPcmState) {
       // do fade in for the first 10ms to avoid audio crackle
-      int32_t fadeInBytes = std::min(static_cast<int32_t>(totalReadSamples * sizeof(int16_t)),
-                                     static_cast<int32_t>(AudioPlaybackPipeline::SAMPLE_RATE * pipeline->CHANNEL_COUNT *
-                                                        sizeof(int16_t) / 100)); // 10ms fade in
+      int32_t fadeInFrames = std::min(
+          numFrames, AudioPlaybackPipeline::SAMPLE_RATE / 100); // 10ms fade in
+      auto const fadeInBytes =
+          fadeInFrames * pipeline->CHANNEL_COUNT * sizeof(int16_t);
       assert(fadeInBytes % 2 == 0);
-      auto fadeInSamples = fadeInBytes / sizeof(int16_t);
-      auto _pcm = static_cast<uint8_t *>(audioData);
-      auto fadeInStart = reinterpret_cast<int16_t *>(_pcm);
-
-      LOGW("[AUDIO] SonicUnderrun: recver from lack of pcm with %d samples, fade in %d samples", requestedBytes/sizeof(int16_t), fadeInBytes/sizeof(int16_t));
-      for (int32_t i = 0; i < fadeInSamples; i++) {
-        float ratio = static_cast<float>(i) / fadeInSamples;
+      auto _pcm = static_cast<int16_t *>(audioData);
+      auto fadeInStart = _pcm;
+    LOGW("[AUDIO] Exit lack_of_pcm state. available:%d, numSamples:%d, FadeIn with %d frames",
+         avail, numSamples, fadeInFrames);
+      for (int32_t i = 0; i < fadeInFrames; i++) {
+        float ratio = static_cast<float>(i) / fadeInFrames;
         fadeInStart[i] = static_cast<int16_t>(fadeInStart[i] * ratio);
       }
     }
   }
 
-  if (requestedBytes > 0) {
-    LOGI("[AUDIO] in lack_of_pcm mode. with requestBytes:%d and available %d in buffer", requestBytesTotal, avail);
-    pipeline->lack_of_pcm_ = true;
-    auto _pcm = static_cast<uint8_t *>(audioData);
-    // fade out the last 10ms to avoid audio crackle and then, fill the rest with silence
-    int32_t fadeOutBytes = std::min(static_cast<int32_t>(output - _pcm), static_cast<int32_t>(
-        AudioPlaybackPipeline::SAMPLE_RATE * pipeline->CHANNEL_COUNT *
-        sizeof(int16_t) / 100)); // 10ms fade out
-    assert(fadeOutBytes % 2 == 0);
-    auto fadeOutStart = output - fadeOutBytes;
-    assert(fadeOutStart - _pcm >= 0l);
-    if (fadeOutStart - _pcm > 0) {
-      LOGW("[AUDIO] SonicUnderrun: filling silence %d samples, fade out %d samples, available:%d in buffer", requestedBytes/sizeof(int16_t), fadeOutBytes/sizeof(int16_t), avail);
-      
-      assert((fadeOutStart - _pcm) % 2 == 0);
-      const auto fadeOutSamples = fadeOutBytes / sizeof(int16_t);
-      auto fadeOutStartSamples = reinterpret_cast<int16_t *>(fadeOutStart);
-      
-      for (int32_t i = 0; i < fadeOutSamples; i++) {
-        float ratio = 1.0f - static_cast<float>(i) / fadeOutSamples;
-        fadeOutStartSamples[i] = static_cast<int16_t>(fadeOutStartSamples[i] * ratio);
-      }
-    }
-    memset(output, 0, requestedBytes);
-  }
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 
@@ -196,23 +166,23 @@ std::shared_ptr<AudioPlaybackPipeline> audioPlaybackCreate(int audioCodec) {
 }
 
 double calcSpeed(double delta_ms) {
-    const double pivot = 60.0;
+  const double pivot = 60.0;
 
-    const double min_speed = 0.90;
-    const double max_speed = 1.5;
+  const double min_speed = 0.90;
+  const double max_speed = 1.5;
 
-    const double tau1 = 150.0; // below pivot
-    const double tau2 = 5000.0; // above pivot
+  const double tau1 = 150.0;  // below pivot
+  const double tau2 = 5000.0; // above pivot
 
-    if (delta_ms < pivot) {
-        double t = pivot - delta_ms;
-        double factor = 1.0 - exp(-t / tau1);
-        return 1.0 - (1.0 - min_speed) * factor;
-    } else {
-        double t = delta_ms - pivot;
-        double factor = 1.0 - exp(-t / tau2);
-        return 1.0 + (max_speed - 1.0) * factor;
-    }
+  if (delta_ms < pivot) {
+    double t = pivot - delta_ms;
+    double factor = 1.0 - exp(-t / tau1);
+    return 1.0 - (1.0 - min_speed) * factor;
+  } else {
+    double t = delta_ms - pivot;
+    double factor = 1.0 - exp(-t / tau2);
+    return 1.0 + (max_speed - 1.0) * factor;
+  }
 }
 
 void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
@@ -229,7 +199,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
     ensureStreamCreated(pipeline);
   }
 
-  #if 0
+#if 0
   {
     // test sleep to simulate slow decoding and see if sonic can speed up the playback
     static int64_t _idx = 0;
@@ -238,27 +208,16 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
       std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
   }
-  #endif
+#endif
 
   std::lock_guard<std::mutex> lock(pipeline->mutex_);
   int32_t avail = sonicSamplesAvailable(pipeline->sonicStream.get());
   auto millis = avail * 1000.0f /
                 static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
                                    AudioPlaybackPipeline::CHANNEL_COUNT);
-  // if (millis > AudioPlaybackPipeline::SPEED_UP_THRESHOLD_MS) {
-  //   float speed = computePlaybackSpeed(avail);
-  //   if (speed != pipeline->currentSpeed) {
-  //     LOGI("[AUDIO] SonicSpeedChange: %.2f -> %.2f, bufferedSamples=%d",
-  //          pipeline->currentSpeed, speed, avail);
-  //     pipeline->currentSpeed = speed;
-  //     sonicSetSpeed(pipeline->sonicStream.get(), speed);
-  //   }
-  // }else {
-
-    
-  // }
   auto const speed = calcSpeed(millis);
-  FLOGI("[AUDIO] change speed from %.2f to %.2f, buffered %f ms", sonicGetSpeed(pipeline->sonicStream.get()), speed, millis);
+  FLOGI("[AUDIO] change speed from %.2f to %.2f, buffered %f ms",
+        sonicGetSpeed(pipeline->sonicStream.get()), speed, millis);
   sonicSetSpeed(pipeline->sonicStream.get(), speed);
   int samples = static_cast<int>(pcm.size());
   int written =

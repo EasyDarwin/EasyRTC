@@ -1,5 +1,11 @@
 #include "easyrtc_video_decoder.h"
+#include "easyrtc_common.h"
+#include <cassert>
+#include <cstdint>
 #include <cstring>
+#include "utils/defer.hpp"
+#include <media/NdkMediaFormat.h>
+#include <string>
 #include <thread>
 #include <unistd.h>
 #include <atomic>
@@ -12,49 +18,55 @@ std::atomic<uint64_t> gDecTryLater{0};
 std::atomic<uint64_t> gDecFormatChanged{0};
 }
 
-static bool initDecoder(std::shared_ptr<VideoDecoderPipeline> pipeline) {
-    std::lock_guard<std::mutex> lock(pipeline->decoderMutex);
-
-    if (pipeline->decoder) {
-        AMediaCodec_stop(pipeline->decoder);
-        AMediaCodec_delete(pipeline->decoder);
-        pipeline->decoder = nullptr;
-    }
-
-    pipeline->decoder = AMediaCodec_createDecoderByType(pipeline->currentCodecType.c_str());
-    if (!pipeline->decoder) {
+static bool initDecoder(VideoDecoderPipeline* pipeline) {
+    assert(!pipeline->decoder);
+    auto decoder = AMediaCodec_createDecoderByType(pipeline->currentCodecType.c_str());
+    if (!decoder) {
         LOGE("Failed to create video decoder for %s", pipeline->currentCodecType.c_str());
+        assert(false);
         return false;
     }
-
+    auto decoder_ptr = std::shared_ptr<AMediaCodec>(decoder, [](AMediaCodec* ptr) {
+        if (ptr) {
+            AMediaCodec_delete(ptr);
+        }
+    });
     AMediaFormat* format = AMediaFormat_new();
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, pipeline->currentCodecType.c_str());
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, pipeline->width);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, pipeline->height);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, pipeline->frameRate);
+//    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, pipeline->frameRate);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, 19);
+    if (!pipeline->csd0.empty()) {
+        AMediaFormat_setBuffer(format, "csd-0", pipeline->csd0.data(), pipeline->csd0.size());
+    }
+    if (!pipeline->csd1.empty()) {
+        AMediaFormat_setBuffer(format, "csd-1", pipeline->csd1.data(), pipeline->csd1.size());
+    }
 
-    media_status_t status = AMediaCodec_configure(pipeline->decoder, format,
+    LOGI("Configuring video decoder: %s %dx%d, frame rate: %d", pipeline->currentCodecType.c_str(),
+         pipeline->width, pipeline->height, pipeline->frameRate);
+    media_status_t status = AMediaCodec_configure(decoder, format,
             pipeline->surface, nullptr, 0);
     AMediaFormat_delete(format);
 
     if (status != AMEDIA_OK) {
         LOGE("Failed to configure video decoder: %d", status);
-        AMediaCodec_delete(pipeline->decoder);
-        pipeline->decoder = nullptr;
+        assert(false);
         return false;
     }
 
-    status = AMediaCodec_start(pipeline->decoder);
+    status = AMediaCodec_start(decoder);
     if (status != AMEDIA_OK) {
         LOGE("Failed to start video decoder: %d", status);
-        AMediaCodec_delete(pipeline->decoder);
-        pipeline->decoder = nullptr;
+        assert(false);
         return false;
     }
 
+    pipeline->decoder = decoder_ptr;
     pipeline->errorCount.store(0);
-    LOGD("Video decoder initialized: %s %dx%d", pipeline->currentCodecType.c_str(),
-            pipeline->width, pipeline->height);
+    LOGD("Video decoder initialized: %s %dx%d, frame rate: %d", pipeline->currentCodecType.c_str(),
+            pipeline->width, pipeline->height, pipeline->frameRate);
     return true;
 }
 
@@ -71,6 +83,56 @@ int64_t getMonoUs() {
     ).count() - _start_us);
 }
 
+static std::string uint8_to_hex(const uint8_t* data, size_t size) {
+    std::string str;
+    for (size_t i = 0; i < size; i++) {
+        char buf[3];
+        snprintf(buf, sizeof(buf), "%02x", data[i]);
+        str += buf;
+    }
+    return str;
+}
+
+static void extractSpsPpsFromAnnexb(const uint8_t* data, size_t size, std::vector<uint8_t>& sps_data,  std::vector<uint8_t>& pps_data) {
+    // This is a simplified parser for annexb format, which may not cover all cases.
+    // It assumes the annexb data contains one SPS and one PPS, and they are in the format of:
+    // [start code][NALU header][SPS][start code][NALU header][PPS]
+    // the start code could be 0x00000001 or 0x000001
+    sps_data.clear();
+    pps_data.clear();
+    size_t pos = 0;
+    while (pos + 4 < size) {
+        uint64_t startCode = (data[pos] << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3];
+        if (startCode == 0x00000001 || startCode == 0x000001) {
+            const auto start_ = pos;
+            // found 4-byte start code
+            size_t nal_start = pos + (startCode == 0x00000001 ? 4 : 3);
+            if (nal_start >= size) break;
+            uint8_t nal_type = data[nal_start] & 0x1F;
+            if (nal_type == 7 || nal_type == 8) {
+                // SPS or PPS
+                auto &target_data = (nal_type == 7) ? sps_data : pps_data;
+                size_t nal_end = nal_start + 1;
+                while (nal_end + 4 < size) {
+                    uint64_t nextStartCode = (data[nal_end] << 24) | (data[nal_end + 1] << 16) | (data[nal_end + 2] << 8) | data[nal_end + 3];
+                    if (nextStartCode == 0x00000001 || nextStartCode == 0x000001) {
+                        break;
+                    }
+                    nal_end++;
+                }
+                target_data.insert(target_data.end(), data + start_, data + nal_end);
+                pos = nal_end;
+                auto hex = uint8_to_hex(target_data.data(), target_data.size());
+                LOGD("Extracted %s, size=%zu, data=%s", (nal_type == 7) ? "SPS" : "PPS", target_data.size(), hex.c_str());
+            }else {
+                break;
+            }
+        } else {
+            pos++;
+        }
+    }
+}
+
 static void* decodeThreadFunc(void* arg) {
     auto* pipeline = static_cast<VideoDecoderPipeline*>(arg);
     LOGD("Video decode thread started");
@@ -80,40 +142,42 @@ static void* decodeThreadFunc(void* arg) {
     int64_t firstSystemUs = -1;
     bool droppingPackets = false;
 
-    while (pipeline->running.load() && !pipeline->destroyed.load()) {
-        Packet *packet = pipeline->frameQueue.acquirePop();
-        if (!packet) {
-            usleep(1000);
-            continue;
+
+    auto enqueueDecoder = [&](AMediaCodec *decoder, Packet *packet) {
+        ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
+        if (inputBufId < 0) {
+            return;
         }
-        {
-            static int64_t __idx = 0;
-            if (__idx++ % 300 == 0) {
-                LOGD("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
-            }
-        }
-        if (droppingPackets && packet->frameFlags == 0) {
-            LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
-            pipeline->frameQueue.commitPop();
-            continue;
-        }
-        droppingPackets = false;
-        const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
-        if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
-            LOGW("Too many pending frames: %zu(count), %llu(ms), start dropping non-key frames", pipeline->frameQueue.size(), cached_packet_millis);
-            droppingPackets = true;
-            pipeline->frameQueue.commitPop();
-            continue;
-        } 
-        AMediaCodec* decoder = pipeline->decoder;
-        if (!decoder) {
-            pipeline->frameQueue.commitPop();
-            usleep(5000);
-            continue;
+        size_t outSize = 0;
+        uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
+        if (!inputBuf || packet->size > outSize) {
+            LOGW("Invalid decoder input buffer: inputBuf=%p frame=%u cap=%zu",
+                 inputBuf, packet->size, outSize);
+            assert(false);
+            return;
         }
 
-        while (pipeline->running.load() && !pipeline->destroyed.load()) {
-            ssize_t outputBufId = AMediaCodec_dequeueOutputBuffer(decoder, &bufferInfo,
+        memcpy(inputBuf, packet->data(), packet->size);
+        int flags = 0;
+        if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
+            flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
+        }
+        AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet->size, packet->ptsUs, flags);
+        uint64_t q = gDecQueued.fetch_add(1) + 1;
+        pipeline->enqueuedFrames.store(q);
+        enqueued++;
+        if (q <= 8 || (q % 120) == 0) {
+            LOGD("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
+                 static_cast<unsigned long long>(q),
+                 packet->size,
+                 static_cast<long long>(packet->ptsUs),
+                 packet->frameFlags,
+                 pipeline->frameQueue.size());
+        }
+    };
+
+    auto dequeueDecoder = [&](AMediaCodec *decoder) -> bool {
+        ssize_t outputBufId = AMediaCodec_dequeueOutputBuffer(decoder, &bufferInfo,
                     pipeline->DEQUEUE_TIMEOUT_US);
             if (outputBufId >= 0) {
                 if (firstPtsUs < 0) {
@@ -122,6 +186,7 @@ static void* decodeThreadFunc(void* arg) {
                 }
 
                 int64_t ptsUs = bufferInfo.presentationTimeUs - firstPtsUs;
+                FLOGI("VIDEO PKT OUT process:%lldms, audio master clock process:%lldms, delta:%lldms", ptsUs/1000, pipeline->audio_master_clock_us/1000, (ptsUs - pipeline->audio_master_clock_us)/1000);
                 int64_t nowUs = getMonoUs();
                 int64_t elapsedUs = nowUs - firstSystemUs;
                 int64_t sleepUs = ptsUs - elapsedUs;
@@ -143,14 +208,13 @@ static void* decodeThreadFunc(void* arg) {
                          static_cast<long long>(sleepUs > 0 ? sleepUs : 0),
                          bufferInfo.flags, enqueued);
                 }
-                continue;
+                return true;
             } else if (outputBufId == AMEDIACODEC_INFO_TRY_AGAIN_LATER) {
                 uint64_t t = gDecTryLater.fetch_add(1) + 1;
                 pipeline->tryLaterCount.store(t);
                 if (t <= 8 || (t % 240) == 0) {
                     LOGD("DEC_TRY_LATER count=%llu", static_cast<unsigned long long>(t));
                 }
-                break;
             } else if (outputBufId == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
                 uint64_t f = gDecFormatChanged.fetch_add(1) + 1;
                 AMediaFormat* outFormat = AMediaCodec_getOutputFormat(decoder);
@@ -171,44 +235,84 @@ static void* decodeThreadFunc(void* arg) {
                     LOGD("DEC_FMT_CHANGED count=%llu", static_cast<unsigned long long>(f));
                 }
             }
+            return false;
+    };
+
+    auto setupDecoder = [&]() {
+        auto packet = pipeline->frameQueue.acquirePop();
+        if (!packet) {
+            usleep(1000);
+            return false;
+        }
+        defer(pipeline->frameQueue.commitPop());
+        if (packet->frameFlags != 0) {
+            // extract sps/pps for avcc stream, and re-init decoder.
+            // give me a util function to parse avcc stream and extract sps/pps data
+            auto hex = uint8_to_hex(packet->data(), std::min(uint32_t(56), packet->size));
+            LOGI("Frame:%s", hex.c_str());
+             extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
+            if (initDecoder(pipeline)){
+                enqueueDecoder(pipeline->decoder.get(), packet);
+                return true;
+            }
+        } else {
+            LOGW("Dropping non-key frame since decoder is not initialized, pts=%lld", static_cast<long long>(packet->ptsUs));
+        }
+        return false;
+    };
+
+    while (pipeline->running.load() && !pipeline->destroyed.load()) {
+        if (!pipeline->decoder) {
+            if (!setupDecoder()) {
+                continue;
+            }
+        }
+        auto decoder = pipeline->decoder.get();
+        assert(pipeline->decoder);
+        while (pipeline->running.load() && !pipeline->destroyed.load()) {
+            if (dequeueDecoder(decoder)) {
+                continue;
+            }else {
+                break;
+            }
         }
 
-        ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
-        if (inputBufId < 0) {
-            pipeline->frameQueue.commitPop();
+        auto packet = pipeline->frameQueue.acquirePop();
+        if (!packet) {
+            usleep(1000);
             continue;
         }
-
-        size_t outSize = 0;
-        uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
-        if (!inputBuf || packet->size > outSize) {
-            LOGW("Invalid decoder input buffer: inputBuf=%p frame=%u cap=%zu",
-                 inputBuf, packet->size, outSize);
-            pipeline->frameQueue.commitPop();
+        defer(pipeline->frameQueue.commitPop());
+        FLOGI("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
+        if (droppingPackets && packet->frameFlags == 0) {
+            LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
             continue;
         }
-
-        memcpy(inputBuf, packet->data(), packet->size);
-        int flags = 0;
-        if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
-        }
-        AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet->size, packet->ptsUs, flags);
-        uint64_t q = gDecQueued.fetch_add(1) + 1;
-        pipeline->enqueuedFrames.store(q);
-        enqueued++;
-        if (q <= 8 || (q % 120) == 0) {
-            LOGD("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
-                 static_cast<unsigned long long>(q),
-                 packet->size,
-                 static_cast<long long>(packet->ptsUs),
-                 packet->frameFlags,
-                 pipeline->frameQueue.size());
-        }
-
-        pipeline->frameQueue.commitPop();
+        droppingPackets = false;
+        const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
+        if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
+            bool hasKeyInside = false;
+            pipeline->frameQueue.check([&](const Packet* p) {
+                if (p->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
+                    hasKeyInside = true;
+                    return true;
+                }
+                return false;
+            });
+            if (hasKeyInside) {
+                LOGW("Too many pending frames: %zu(count), %llu(ms), start dropping non-key frames", pipeline->frameQueue.size(), cached_packet_millis);
+                droppingPackets = true;
+                continue;
+            }
+        } 
+        assert(!droppingPackets);
+        enqueueDecoder(decoder, packet);
     }
 
+    if (pipeline->decoder) {
+        AMediaCodec_stop(pipeline->decoder.get());
+        pipeline->decoder = nullptr;   
+    }
     LOGD("Video decode thread exiting");
     return nullptr;
 }
@@ -221,10 +325,6 @@ std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface,
 
     if (surface) {
         pipeline->surface = surface;
-    }
-
-    if (!initDecoder(pipeline)) {
-        return nullptr;
     }
 
     LOGD("VideoDecoderPipeline created: %s %dx%d", pipeline->currentCodecType.c_str(), width, height);
@@ -245,7 +345,6 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
 
 void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags) {
     if (!pipeline || !pipeline->running.load() || pipeline->destroyed.load() || size <= 0) return;
-
     Packet *slot = pipeline->frameQueue.acquirePush();
     if (!slot) {
         do {

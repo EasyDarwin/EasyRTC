@@ -245,6 +245,9 @@ static int mediaTransceiverCallback(void *userPtr,
                                frame->size, audioPtsUs, frame->flags);
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData,
                                           static_cast<int32_t>(frame->size));
+                if (session->videoDecoder) {
+                    session->videoDecoder->audio_master_clock_us = session->audioPlayback->playedFrames * 1e6 / session->audioPlayback->SAMPLE_RATE;
+                }
             }
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_KEY_FRAME_REQ:

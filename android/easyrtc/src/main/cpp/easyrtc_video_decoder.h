@@ -19,13 +19,10 @@ struct VideoDecoderPipeline {
 
   using OnVideoSizeCallback = void (*)(void *userPtr, int width, int height);
 
-  AMediaCodec *decoder = nullptr;
+  std::shared_ptr<AMediaCodec> decoder = nullptr;
   ANativeWindow *surface = nullptr;
   // we use the ringbuffer to replace frameQueue.
   PacketRingBuffer frameQueue{MAX_QUEUE_SIZE};
-  // std::queue<Packet> frameQueue;
-  std::mutex queueMutex;
-  std::mutex decoderMutex;
   std::atomic<bool> running{false};
   std::atomic<bool> destroyed{false};
   std::atomic<uint64_t> enqueuedFrames{0};
@@ -39,6 +36,10 @@ struct VideoDecoderPipeline {
   std::atomic<int> errorCount{0};
   OnVideoSizeCallback onVideoSize = nullptr;
   void *onVideoSizeUserPtr = nullptr;
+  std::vector<uint8_t> csd0;
+  std::vector<uint8_t> csd1;
+
+  int64_t audio_master_clock_us = 0;
 
   static constexpr int MAX_ERROR_COUNT = 5;
   static constexpr size_t MAX_QUEUE_SIZE = 30;
@@ -51,14 +52,6 @@ struct VideoDecoderPipeline {
 
     if (decodeThread.joinable()) {
         decodeThread.join();
-    }
-    {
-        std::lock_guard<std::mutex> lock(decoderMutex);
-        if (decoder) {
-            AMediaCodec_stop(decoder);
-            AMediaCodec_delete(decoder);
-            decoder = nullptr;
-        }
     }
     LOGD("VideoDecoderPipeline released");
   };

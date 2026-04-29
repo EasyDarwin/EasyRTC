@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstring>
+#include <functional>
 #include <vector>
 namespace easyrtc {
 
@@ -56,6 +57,18 @@ public:
   bool full() const {
     size_t next = (head_.load(std::memory_order_acquire) + 1) & mask_;
     return next == tail_.load(std::memory_order_acquire);
+  }
+
+  void check(std::function<bool(const T *)> callback) const {
+    // iterator all slots between tail and head, check if they are all empty.
+    size_t tail = tail_.load(std::memory_order_acquire);
+    size_t head = head_.load(std::memory_order_acquire);
+    size_t count = 0;
+    while (tail != head) {
+      if (callback(&buffer_[tail])) break;
+      tail = (tail + 1) & mask_;
+      count++;
+    }
   }
 
   size_t size() const {
