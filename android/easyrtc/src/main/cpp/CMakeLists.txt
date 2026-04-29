@@ -15,6 +15,7 @@ add_library(easyrtc_media SHARED
     easyrtc_frame_reader.cpp
     easyrtc_test_jni.cpp
     third_party/sonic.c
+    third_party/g711.cpp
 )
 
 target_include_directories(easyrtc_media PRIVATE

@@ -3,7 +3,9 @@
 #include <cstring>
 #include <time.h>
 #include <assert.h>
+#include "easyrtc_common.h"
 #include "easyrtc_session.h"
+#include "g711.h"
 
 static constexpr int32_t SAMPLE_RATE = 8000;
 static constexpr int32_t CHANNEL_COUNT = 1;
@@ -37,21 +39,47 @@ static aaudio_data_callback_result_t dataCallback(
         clock_gettime(CLOCK_MONOTONIC, &ts);
         pts = static_cast<UINT64>((ts.tv_sec * 1000000000LL + ts.tv_nsec) / 100);
     }
+    FLOGI("[AO] PCM callback frames=%d, size=%d, pts=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts));
+
+#if 1
+    // first let's convert PCM into PCMA
+    for (int i = 0; i < numFrames * CHANNEL_COUNT; ++i) {
+        int16_t sample = reinterpret_cast<int16_t*>(pcmData)[i];
+        uint8_t encodedSample;
+        if (sample >= 0) {
+            encodedSample = (sample >> 8) + 128;
+        } else {
+            encodedSample = 256 - ((-sample) >> 8);
+        }
+        pipeline->audioBuffer[i] = linear2alaw(sample);
+    }
 
     EasyRTC_Frame frame{};
     frame.version = 0;
-    frame.size = static_cast<UINT32>(dataSize);
+    frame.size = static_cast<UINT32>(dataSize >> 1); // PCMA is half the size of PCM
     frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(EASYRTC_FRAME_FLAG_NONE);
     frame.presentationTs = pts;
     frame.decodingTs = pts;
-    frame.frameData = pcmData;
+    frame.frameData = pipeline->audioBuffer;
     frame.trackId = 0;
 
+    
+    // FILE *fp = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_audio_capture.pcm", "ab");
+    // if (fp) {
+    //     fwrite(pcmData, 1, dataSize, fp);
+    //     fclose(fp);
+    // }
+
     // LOGD("Audio capture callback: frames=%d, size=%d, pts=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts));
+    
     int result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
     if (result != 0) {
         LOGE("EasyRTC_SendFrame (audio) failed: %d", result);
     }
+#else 
+    Java_cn_easyrtc_peerconnection_SendAudioFrame(nullptr, nullptr, reinterpret_cast<jlong>(pipeline->audioTransceiver), reinterpret_cast<jbyteArray>(pcmData), static_cast<jint>(dataSize), static_cast<jint>(pts));
+#endif
+    
 
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
@@ -83,6 +111,7 @@ int audioCaptureStart(MediaSession* session) {
     AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
     AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
     AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+    AAudioStreamBuilder_setFramesPerDataCallback(builder, SAMPLE_RATE/100 * 2);// 20ms
     AAudioStreamBuilder_setInputPreset(builder, AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION);
     AAudioStreamBuilder_setDataCallback(builder, dataCallback, session);
     AAudioStreamBuilder_setErrorCallback(builder, errorCallback, session);

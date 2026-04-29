@@ -11,6 +11,8 @@ struct MediaSession;
 struct AudioCapturePipeline {
     AAudioStream* stream = nullptr;
     EasyRTC_Transceiver audioTransceiver = nullptr;
+
+    uint8_t audioBuffer[4800]; // 160ms of 16-bit mono audio at 8000Hz
     std::atomic<bool> running{false};
     std::mutex mutex;
     bool connectionReady = false;

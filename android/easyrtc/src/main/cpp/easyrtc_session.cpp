@@ -433,7 +433,7 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
         assert(false && "Failed to add video transceiver");
         return -1;
     }
-    LOGD("Video transceiver added: %p", session->videoTransceiver);
+    LOGD("Video transceiver added,codec:%d, r: %p", videoCodec, session->videoTransceiver);
 
     EasyRTC_MediaStreamTrack audioTrack{};
     audioTrack.codec = static_cast<EasyRTC_CODEC>(audioCodec);
@@ -452,7 +452,7 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
         assert(false && "Failed to add audio transceiver");
         return -2;
     }
-    LOGD("Audio transceiver added: %p", session->audioTransceiver);
+    LOGD("Audio transceiver added. codec:%d, r: %p", audioCodec, session->audioTransceiver);
 
     session->transceiversAdded.store(true);
     LOGI("[CRITICAL] AddTransceivers: SUCCESS video=%p audio=%p",
