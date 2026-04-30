@@ -5,9 +5,13 @@
 #include "easyrtc_audio_playback.h"
 #include "easyrtc_video_decoder.h"
 #include "easyrtc_frame_dump.h"
+#include "easyrtc_encoder_gl.h"
 #include <camera/NdkCameraManager.h>
 #include <camera/NdkCameraMetadataTags.h>
+#include <android/surface_texture_jni.h>
 #include <cassert>
+#include <chrono>
+#include <unistd.h>
 #include <jni.h>
 #include <cstring>
 #include <thread>
@@ -19,6 +23,7 @@ namespace {
     std::atomic<uint64_t> gVideoCbBytes{0};
     std::atomic<uint64_t> gVideoCbAnnexB{0};
     std::atomic<uint64_t> gVideoCbAvcc{0};
+
 }
 
 static void releaseCaptureSession(MediaSession *s) {
@@ -31,21 +36,21 @@ static void releaseCaptureSession(MediaSession *s) {
         ACaptureRequest_free(s->captureRequest);
         s->captureRequest = nullptr;
     }
-    if (s->encoderTarget) {
-        ACameraOutputTarget_free(s->encoderTarget);
-        s->encoderTarget = nullptr;
-    }
     if (s->previewTarget) {
         ACameraOutputTarget_free(s->previewTarget);
         s->previewTarget = nullptr;
     }
-    if (s->encoderOutput) {
-        ACaptureSessionOutput_free(s->encoderOutput);
-        s->encoderOutput = nullptr;
+    if (s->cameraInputTarget) {
+        ACameraOutputTarget_free(s->cameraInputTarget);
+        s->cameraInputTarget = nullptr;
     }
     if (s->previewOutput) {
         ACaptureSessionOutput_free(s->previewOutput);
         s->previewOutput = nullptr;
+    }
+    if (s->cameraInputOutput) {
+        ACaptureSessionOutput_free(s->cameraInputOutput);
+        s->cameraInputOutput = nullptr;
     }
     if (s->outputContainer) {
         ACaptureSessionOutputContainer_free(s->outputContainer);
@@ -62,18 +67,22 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
         return false;
     }
 
-    if (s->videoEncoder && s->videoEncoder->running.load()) {
+    if (s->cameraInputWindow) {
         camStatus = ACaptureSessionOutput_create(
-                reinterpret_cast<ACameraWindowType *>(s->videoEncoder->window), &s->encoderOutput);
+                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow), &s->cameraInputOutput);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
         }
-        camStatus = ACaptureSessionOutputContainer_add(s->outputContainer, s->encoderOutput);
+        camStatus = ACaptureSessionOutputContainer_add(s->outputContainer, s->cameraInputOutput);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
         }
+    } else if (withEncoder) {
+        LOGE("[CRITICAL] EncoderRotate: cameraInputWindow missing; refuse direct camera->encoder path");
+        releaseCaptureSession(s);
+        return false;
     }
 
     if (s->previewWindow) {
@@ -98,18 +107,22 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
         return false;
     }
 
-    if (withEncoder && s->videoEncoder && s->videoEncoder->window) {
+    if (withEncoder && s->cameraInputWindow) {
         camStatus = ACameraOutputTarget_create(
-                reinterpret_cast<ACameraWindowType *>(s->videoEncoder->window), &s->encoderTarget);
+                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow), &s->cameraInputTarget);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
         }
-        camStatus = ACaptureRequest_addTarget(s->captureRequest, s->encoderTarget);
+        camStatus = ACaptureRequest_addTarget(s->captureRequest, s->cameraInputTarget);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
         }
+    } else if (withEncoder) {
+        LOGE("[CRITICAL] EncoderRotate: cameraInputTarget missing; refuse direct camera->encoder path");
+        releaseCaptureSession(s);
+        return false;
     }
 
     if (s->previewWindow) {
@@ -476,10 +489,13 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
     assert(session && "Invalid session");
 
     const char *mime = (codec == 6) ? "video/hevc" : "video/avc";
+    const bool swapWH = session->encoderSwapWH;
+    const int encoderWidth = swapWH ? height : width;
+    const int encoderHeight = swapWH ? width : height;
     AMediaFormat *format = AMediaFormat_new();
     AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, mime);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, width);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, height);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, encoderWidth);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, encoderHeight);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, bitrate);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, fps);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, iframeInterval);
@@ -487,16 +503,30 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
 
     auto pipeline = std::make_shared<MediaPipeline>();
     pipeline->transceiver = session->videoTransceiver;
-    pipeline->width = width;
-    pipeline->height = height;
+    pipeline->width = encoderWidth;
+    pipeline->height = encoderHeight;
     pipeline->bitrate = bitrate;
     pipeline->fps = fps;
     pipeline->iframeInterval = iframeInterval;
     pipeline->format = std::shared_ptr<AMediaFormat>(format, AMediaFormat_delete);
     pipeline->mime = mime;
     session->videoEncoder = pipeline;
-    LOGD("Video encoder setup: %dx%d @ %d bps, mime=%s", width, height, bitrate, mime);
+    LOGI("[CRITICAL] EncoderRotate setup: req=%dx%d out=%dx%d swap=%d rot=%d mime=%s",
+         width, height, encoderWidth, encoderHeight, swapWH ? 1 : 0, session->encoderRotation, mime);
     return 0;
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeSetEncoderRotation(
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jint rotation) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    assert(session && "Invalid session");
+    int r = rotation % 360;
+    if (r < 0) r += 360;
+    session->encoderRotation = r;
+    session->encoderSwapWH = (r == 90 || r == 270);
+    LOGI("[CRITICAL] EncoderRotate config: rotation=%d swapWH=%d", session->encoderRotation,
+         session->encoderSwapWH ? 1 : 0);
 }
 
 JNIEXPORT void JNICALL
@@ -517,6 +547,85 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
     }
 }
 
+static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, int width, int height) {
+    if (!session || !session->javaObj || !session->encoderGlBridge) {
+        return false;
+    }
+    if (session->cameraInputWindow && session->cameraInputSurfaceTexture && session->cameraInputSurfaceTextureObj) {
+        return true;
+    }
+    jclass clazz = env->GetObjectClass(session->javaObj);
+    if (!clazz) return false;
+    jmethodID mid = env->GetMethodID(clazz, "createCameraInputSurfaceTexture", "(III)Landroid/graphics/SurfaceTexture;");
+    if (!mid) return false;
+    jobject stLocal = env->CallObjectMethod(session->javaObj, mid,
+                                            static_cast<jint>(session->encoderGlBridge->cameraOesTex),
+                                            static_cast<jint>(width), static_cast<jint>(height));
+    if (!stLocal) {
+        return false;
+    }
+
+    session->cameraInputSurfaceTextureObj = env->NewGlobalRef(stLocal);
+    env->DeleteLocalRef(stLocal);
+    session->cameraInputSurfaceTexture = ASurfaceTexture_fromSurfaceTexture(env, session->cameraInputSurfaceTextureObj);
+    if (!session->cameraInputSurfaceTexture) {
+        return false;
+    }
+    session->cameraInputWindow = ASurfaceTexture_acquireANativeWindow(session->cameraInputSurfaceTexture);
+    if (!session->cameraInputWindow) {
+        return false;
+    }
+    LOGI("[CRITICAL] EncoderRotate camera input ST created: st=%p window=%p tex=%u",
+         session->cameraInputSurfaceTexture, session->cameraInputWindow,
+         session->encoderGlBridge->cameraOesTex);
+    return true;
+}
+
+static void startRenderThread(MediaSession *session) {
+    if (!session || session->renderThreadRunning.load()) {
+        return;
+    }
+    session->renderThreadRunning.store(true);
+    session->renderThread = std::thread([session]() {
+        LOGI("[CRITICAL] EncoderRotate render thread started");
+        if (!encoderGlMakeCurrent(session->encoderGlBridge)) {
+            LOGE("[CRITICAL] EncoderRotate render thread makeCurrent failed");
+        }
+        if (session->cameraInputSurfaceTexture && session->encoderGlBridge) {
+            ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
+            int attach = ASurfaceTexture_attachToGLContext(session->cameraInputSurfaceTexture,
+                                                            session->encoderGlBridge->cameraOesTex);
+            LOGI("[CRITICAL] EncoderRotate render thread attachToGLContext=%d tex=%u",
+                 attach, session->encoderGlBridge->cameraOesTex);
+        }
+        while (session->renderThreadRunning.load()) {
+            if (session->cameraInputSurfaceTexture && session->encoderGlBridge && session->encoderGlBridge->initialized) {
+                float m[16];
+                int64_t ts = 0;
+                if (encoderGlUpdateTexImage(session->cameraInputSurfaceTexture, m, &ts)) {
+                    encoderGlSetInputTransform(session->encoderGlBridge, m);
+                    if (!encoderGlRenderFrame(session->encoderGlBridge, static_cast<long long>(ts))) {
+                        LOGW("[CRITICAL] EncoderRotate render thread frame render failed");
+                    }
+                }
+            }
+            usleep(33000);
+        }
+        if (session->cameraInputSurfaceTexture) {
+            ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
+        }
+        LOGI("[CRITICAL] EncoderRotate render thread stopped");
+    });
+}
+
+static void stopRenderThread(MediaSession *session) {
+    if (!session) return;
+    session->renderThreadRunning.store(false);
+    if (session->renderThread.joinable()) {
+        session->renderThread.join();
+    }
+}
+
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
@@ -530,6 +639,19 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
         return -1;
     }
     assert(p->encoder);
+    session->encoderGlBridge = encoderGlCreate(p->window, p->width, p->height, session->encoderRotation);
+    if (session->encoderGlBridge && session->encoderGlBridge->initialized) {
+        LOGI("[CRITICAL] EncoderRotate pipeline: camera->offscreen->encoder active rot=%d size=%dx%d",
+             session->encoderRotation, p->width, p->height);
+    } else {
+        LOGW("[CRITICAL] EncoderRotate pipeline: GL bridge not fully initialized");
+    }
+    LOGI("[CRITICAL] EncoderRotate start send: rotation=%d swapWH=%d",
+         session->encoderRotation, session->encoderSwapWH ? 1 : 0);
+    if (!ensureCameraInputSurfaceTexture(env, session, p->width, p->height)) {
+        LOGW("[CRITICAL] EncoderRotate failed to create camera input surface texture");
+    }
+    startRenderThread(session);
     media_status_t status = AMediaCodec_start(p->encoder);
     if (status != AMEDIA_OK) {
         LOGE("Failed to start encoder: %d", status);
@@ -600,9 +722,12 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
     LOGI("[CRITICAL] StopSend: stopping audio capture and video encoder");
 
     audioCaptureStop(session);
+    encoderGlRelease(session->encoderGlBridge);
 
     if (session->videoEncoder) {
-        auto p = session->videoEncoder;
+    auto p = session->videoEncoder;
+
+    stopRenderThread(session);
         if (p->running.exchange(false)) {
             LOGI("[CRITICAL] StopSend: signaling EOS and stopping encoder");
             if (p->encoder) { AMediaCodec_signalEndOfInputStream(p->encoder); }
@@ -750,6 +875,19 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
     if (session->decoderSurface) {
         ANativeWindow_release(session->decoderSurface);
         session->decoderSurface = nullptr;
+    }
+
+    if (session->cameraInputWindow) {
+        ANativeWindow_release(session->cameraInputWindow);
+        session->cameraInputWindow = nullptr;
+    }
+    if (session->cameraInputSurfaceTexture) {
+        ASurfaceTexture_release(session->cameraInputSurfaceTexture);
+        session->cameraInputSurfaceTexture = nullptr;
+    }
+    if (session->cameraInputSurfaceTextureObj) {
+        env->DeleteGlobalRef(session->cameraInputSurfaceTextureObj);
+        session->cameraInputSurfaceTextureObj = nullptr;
     }
 
     if (session->javaObj) {

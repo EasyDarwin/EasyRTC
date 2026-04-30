@@ -1,6 +1,7 @@
 package cn.easyrtc.media
 
 import android.util.Log
+import android.graphics.SurfaceTexture
 import android.view.Surface
 import androidx.annotation.Keep
 import cn.easyrtc.model.VideoEncodeConfig
@@ -42,6 +43,7 @@ class MediaSession {
 
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
         val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
+        setEncoderRotation(90)
         return nativeSetupVideoEncoder(
             nativePtr, codec,
             config.getWidth(), config.getHeight(),
@@ -50,12 +52,23 @@ class MediaSession {
         )
     }
 
+    fun setEncoderRotation(rotation: Int) {
+        nativeSetEncoderRotation(nativePtr, rotation)
+    }
+
     fun setConnectState(state: Int) {
         nativeSetState(nativePtr, state);
     }
 
     fun setDecoderSurface(surface: Surface?) {
         nativeSetDecoderSurface(nativePtr, surface)
+    }
+
+    @Keep
+    fun createCameraInputSurfaceTexture(texId: Int, width: Int, height: Int): SurfaceTexture {
+        return SurfaceTexture(texId).also {
+            it.setDefaultBufferSize(width, height)
+        }
     }
 
     fun switchCamera() {
@@ -103,6 +116,7 @@ class MediaSession {
         fps: Int,
         iframeInterval: Int
     ): Int
+    private external fun nativeSetEncoderRotation(sessionPtr: Long, rotation: Int)
 
     private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeStartSend(sessionPtr: Long): Int

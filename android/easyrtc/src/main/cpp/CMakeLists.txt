@@ -13,6 +13,7 @@ add_library(easyrtc_media SHARED
     easyrtc_session.cpp
     easyrtc_frame_dump.cpp
     easyrtc_frame_reader.cpp
+    easyrtc_encoder_gl.cpp
     easyrtc_test_jni.cpp
     third_party/sonic.c
     third_party/g711.cpp
@@ -27,6 +28,8 @@ target_include_directories(easyrtc_media PRIVATE
 target_link_libraries(easyrtc_media
     android
     log
+    EGL
+    GLESv2
     mediandk
     camera2ndk
     aaudio
