@@ -530,6 +530,24 @@ Java_cn_easyrtc_media_MediaSession_nativeSetEncoderRotation(
 }
 
 JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeSetDeviceId(
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jstring deviceId) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    assert(session && "Invalid session");
+
+    const char *chars = env->GetStringUTFChars(deviceId, nullptr);
+    if (chars) {
+        session->deviceId = chars;
+        // Propagate to encoder GL bridge if already created
+        if (session->encoderGlBridge) {
+            session->encoderGlBridge->deviceId = chars;
+        }
+        env->ReleaseStringUTFChars(deviceId, chars);
+        LOGI("[CRITICAL] EncoderRotate deviceId set: %s", session->deviceId.c_str());
+    }
+}
+
+JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jobject surface) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
@@ -640,6 +658,9 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     }
     assert(p->encoder);
     session->encoderGlBridge = encoderGlCreate(p->window, p->width, p->height, session->encoderRotation);
+    if (!session->deviceId.empty() && session->encoderGlBridge) {
+        session->encoderGlBridge->deviceId = session->deviceId;
+    }
     if (session->encoderGlBridge && session->encoderGlBridge->initialized) {
         LOGI("[CRITICAL] EncoderRotate pipeline: camera->offscreen->encoder active rot=%d size=%dx%d",
              session->encoderRotation, p->width, p->height);
@@ -722,12 +743,15 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
     LOGI("[CRITICAL] StopSend: stopping audio capture and video encoder");
 
     audioCaptureStop(session);
+
+    // Must stop the render thread BEFORE releasing GL resources,
+    // otherwise the render thread may call glDrawElements on deleted VBO/IBO.
+    stopRenderThread(session);
     encoderGlRelease(session->encoderGlBridge);
 
     if (session->videoEncoder) {
     auto p = session->videoEncoder;
 
-    stopRenderThread(session);
         if (p->running.exchange(false)) {
             LOGI("[CRITICAL] StopSend: signaling EOS and stopping encoder");
             if (p->encoder) { AMediaCodec_signalEndOfInputStream(p->encoder); }

@@ -3,6 +3,14 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <android/surface_texture.h>
+#include <chrono>
+#include <ctime>
+#include <cstdio>
+#include <cstring>
+#include <vector>
+
+#define STB_EASY_FONT_IMPLEMENTATION
+#include "third_party/stb_easy_font.h"
 #ifndef GL_TEXTURE_EXTERNAL_OES
 #define GL_TEXTURE_EXTERNAL_OES 0x8D65
 #endif
@@ -31,6 +39,23 @@ static const char *kFs2d =
         "varying vec2 vTex;\n"
         "uniform sampler2D uTex;\n"
         "void main(){ gl_FragColor=texture2D(uTex,vTex); }\n";
+
+// Overlay shader for timestamp text (no texture, per-vertex color)
+static const char *kVsOverlay =
+        "attribute vec2 aPos;\n"
+        "attribute vec4 aColor;\n"
+        "varying vec4 vColor;\n"
+        "uniform vec2 uScale;\n"
+        "uniform vec2 uOffset;\n"
+        "void main(){\n"
+        "  gl_Position=vec4(aPos*uScale+uOffset,0.0,1.0);\n"
+        "  vColor=aColor;\n"
+        "}\n";
+
+static const char *kFsOverlay =
+        "precision mediump float;\n"
+        "varying vec4 vColor;\n"
+        "void main(){ gl_FragColor=vColor; }\n";
 
 GLuint compileShader(GLenum type, const char *src) {
     GLuint s = glCreateShader(type);
@@ -64,6 +89,20 @@ GLuint linkProgram(const char *vsSrc, const char *fsSrc) {
         return 0;
     }
     return p;
+}
+
+// Format: "05-01 08:11:20.324"
+static void formatTimestamp(char *buf, size_t bufSize) {
+    using namespace std::chrono;
+    auto now = system_clock::now();
+    auto tt = system_clock::to_time_t(now);
+    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
+    struct tm tmBuf;
+    localtime_r(&tt, &tmBuf);
+    snprintf(buf, bufSize, "%02d-%02d %02d:%02d:%02d.%03lld",
+             tmBuf.tm_mon + 1, tmBuf.tm_mday,
+             tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec,
+             static_cast<long long>(ms.count()));
 }
 
 bool initEglForEncoder(EncoderGlBridge* bridge) {
@@ -176,6 +215,19 @@ bool initEglForEncoder(EncoderGlBridge* bridge) {
     bridge->blitTexLoc = 1;
     bridge->blitMatLoc = glGetUniformLocation(bridge->blitProgram, "uTexMat");
 
+    // --- Overlay program for timestamp text ---
+    bridge->overlayProgram = linkProgram(kVsOverlay, kFsOverlay);
+    if (bridge->overlayProgram) {
+        bridge->overlayPosLoc = glGetAttribLocation(bridge->overlayProgram, "aPos");
+        bridge->overlayColorLoc = glGetAttribLocation(bridge->overlayProgram, "aColor");
+        bridge->overlayScaleLoc = glGetUniformLocation(bridge->overlayProgram, "uScale");
+        bridge->overlayOffsetLoc = glGetUniformLocation(bridge->overlayProgram, "uOffset");
+
+        // Pre-allocate VBO and IBO with reasonable initial sizes
+        glGenBuffers(1, &bridge->overlayVbo);
+        glGenBuffers(1, &bridge->overlayIbo);
+    }
+
     // Release current context from creator thread; render thread will own it.
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     return true;
@@ -212,6 +264,20 @@ void teardownEgl(EncoderGlBridge* bridge) {
     if (bridge->blitProgram) {
         glDeleteProgram(bridge->blitProgram);
         bridge->blitProgram = 0;
+    }
+    if (bridge->overlayProgram) {
+        glDeleteProgram(bridge->overlayProgram);
+        bridge->overlayProgram = 0;
+    }
+    if (bridge->overlayVbo) {
+        GLuint vbo = bridge->overlayVbo;
+        glDeleteBuffers(1, &vbo);
+        bridge->overlayVbo = 0;
+    }
+    if (bridge->overlayIbo) {
+        GLuint ibo = bridge->overlayIbo;
+        glDeleteBuffers(1, &ibo);
+        bridge->overlayIbo = 0;
     }
     if (display != EGL_NO_DISPLAY && context != EGL_NO_CONTEXT) {
         eglDestroyContext(display, context);
@@ -297,6 +363,115 @@ bool encoderGlMakeCurrent(const std::shared_ptr<EncoderGlBridge>& bridge) {
     return true;
 }
 
+// Text scale factor applied to the NDC transform (1.0 = original size)
+static const float kTextScale = 3.0f;
+
+// Renders a line of text at pixel coordinates (x,y) into the current framebuffer.
+// coord space: x right, y down, origin top-left of the encoded frame.
+static void renderTextLine(const std::shared_ptr<EncoderGlBridge>& bridge,
+                           const char *text, float pixelX, float pixelY,
+                           const unsigned char color[4]) {
+    if (!bridge || !bridge->overlayProgram || !bridge->overlayVbo || !bridge->overlayIbo || !text) {
+        return;
+    }
+
+    // Estimate vertex buffer size (~270 bytes per char)
+    const int maxQuads = 256;
+    const int vbufBytes = maxQuads * 4 * 16; // 4 verts/quad, 16 bytes/vert
+    std::vector<char> vbuf(vbufBytes);
+
+    int quadCount = stb_easy_font_print(pixelX, pixelY,
+                                        const_cast<char*>(text),
+                                        const_cast<unsigned char*>(color),
+                                        vbuf.data(), vbufBytes);
+    if (quadCount <= 0) return;
+
+    // Upload vertex data to VBO
+    glBindBuffer(GL_ARRAY_BUFFER, bridge->overlayVbo);
+    glBufferData(GL_ARRAY_BUFFER, quadCount * 4 * 16, vbuf.data(), GL_DYNAMIC_DRAW);
+
+    // Build index buffer (convert quads to triangles: 0-1-2, 0-2-3)
+    const int idxCount = quadCount * 6;
+    std::vector<unsigned short> indices(idxCount);
+    for (int q = 0; q < quadCount; ++q) {
+        unsigned short base = static_cast<unsigned short>(q * 4);
+        int i = q * 6;
+        indices[i + 0] = base + 0;
+        indices[i + 1] = base + 1;
+        indices[i + 2] = base + 2;
+        indices[i + 3] = base + 0;
+        indices[i + 4] = base + 2;
+        indices[i + 5] = base + 3;
+    }
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bridge->overlayIbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, idxCount * sizeof(unsigned short), indices.data(), GL_DYNAMIC_DRAW);
+
+    // Setup and draw
+    glUseProgram(bridge->overlayProgram);
+
+    // Pixel → NDC transform (scaled for readability):
+    const float scaleX = 2.0f / static_cast<float>(bridge->width) * kTextScale;
+    const float scaleY = -2.0f / static_cast<float>(bridge->height) * kTextScale; // flip Y
+    const float offsetX = -1.0f;
+    const float offsetY = 1.0f;
+    glUniform2f(bridge->overlayScaleLoc, scaleX, scaleY);
+    glUniform2f(bridge->overlayOffsetLoc, offsetX, offsetY);
+
+    glEnableVertexAttribArray(bridge->overlayPosLoc);
+    glBindBuffer(GL_ARRAY_BUFFER, bridge->overlayVbo);
+    glVertexAttribPointer(bridge->overlayPosLoc, 2, GL_FLOAT, GL_FALSE, 16, reinterpret_cast<void*>(0));
+
+    glEnableVertexAttribArray(bridge->overlayColorLoc);
+    glVertexAttribPointer(bridge->overlayColorLoc, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16, reinterpret_cast<void*>(12));
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bridge->overlayIbo);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glDrawElements(GL_TRIANGLES, idxCount, GL_UNSIGNED_SHORT, nullptr);
+
+    glDisable(GL_BLEND);
+    glDisableVertexAttribArray(bridge->overlayPosLoc);
+    glDisableVertexAttribArray(bridge->overlayColorLoc);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    bridge->overlayQuadCount = quadCount;
+}
+
+// Render timestamp at top-right
+static void renderTimestampOverlay(const std::shared_ptr<EncoderGlBridge>& bridge) {
+    char text[64];
+    formatTimestamp(text, sizeof(text));
+
+    // Compute text width for right-alignment.
+    // Pixel coordinates are scaled by kTextScale in the shader, so the
+    // visible pixel range is [0, width/kTextScale] not [0, width].
+    int textW = stb_easy_font_width(text);
+    const float pad = 12.0f;
+    float pixelX = static_cast<float>(bridge->width) / kTextScale - static_cast<float>(textW) - pad / kTextScale;
+    float pixelY = pad / kTextScale;
+    if (pixelX < 0.0f) pixelX = 0.0f;
+
+    unsigned char colorWhite[4] = {255, 255, 255, 255};
+    renderTextLine(bridge, text, pixelX, pixelY, colorWhite);
+}
+
+// Render device ID (last 6 chars) at top-left
+static void renderDeviceIdOverlay(const std::shared_ptr<EncoderGlBridge>& bridge) {
+    if (bridge->deviceId.empty()) return;
+
+    // Show only last 6 characters of the device ID
+    std::string shortId = bridge->deviceId;
+    if (shortId.size() > 6) {
+        shortId = shortId.substr(shortId.size() - 6);
+    }
+
+    const float pad = 12.0f;
+    unsigned char colorGreen[4] = {0, 255, 0, 255};
+    renderTextLine(bridge, shortId.c_str(), pad / kTextScale, pad / kTextScale, colorGreen);
+}
+
 bool encoderGlRenderFrame(const std::shared_ptr<EncoderGlBridge>& bridge, long long timestampNs) {
     if (!bridge || !bridge->initialized) {
         return false;
@@ -346,6 +521,13 @@ bool encoderGlRenderFrame(const std::shared_ptr<EncoderGlBridge>& bridge, long l
     glVertexAttribPointer(bridge->blitTexLoc, 2, GL_FLOAT, GL_FALSE, 0, tex);
     glEnableVertexAttribArray(bridge->blitTexLoc);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // Draw timestamp overlay on top of the video frame
+    renderTimestampOverlay(bridge);
+
+    // Draw device ID overlay
+    renderDeviceIdOverlay(bridge);
+
     if (!eglSwapBuffers(display, surface)) {
         LOGE("[CRITICAL] EncoderRotate render: eglSwapBuffers failed");
         return false;

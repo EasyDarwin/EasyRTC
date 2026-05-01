@@ -56,6 +56,10 @@ class MediaSession {
         nativeSetEncoderRotation(nativePtr, rotation)
     }
 
+    fun setDeviceId(deviceId: String) {
+        nativeSetDeviceId(nativePtr, deviceId)
+    }
+
     fun setConnectState(state: Int) {
         nativeSetState(nativePtr, state);
     }
@@ -117,6 +121,7 @@ class MediaSession {
         iframeInterval: Int
     ): Int
     private external fun nativeSetEncoderRotation(sessionPtr: Long, rotation: Int)
+    private external fun nativeSetDeviceId(sessionPtr: Long, deviceId: String)
 
     private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeStartSend(sessionPtr: Long): Int

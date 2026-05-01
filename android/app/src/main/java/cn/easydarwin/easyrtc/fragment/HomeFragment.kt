@@ -86,6 +86,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         super.onCreate(savedInstanceState)
         session = MediaSession().apply{
             create()
+            setDeviceId(SPUtil.getInstance().rtcUserUUID)
         }
     }
 

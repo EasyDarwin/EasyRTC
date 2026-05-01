@@ -12,6 +12,7 @@
 #include <mutex>
 #include <array>
 #include <thread>
+#include <string>
 
 #include <jni.h>
 
@@ -68,6 +69,7 @@ struct MediaSession {
     FrameDumpWriter frameDump;
 
     int connectState{};
+    std::string deviceId;
 };
 
 #endif
