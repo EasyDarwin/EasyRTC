@@ -35,7 +35,8 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
         "buffered %f ms",
         numFrames, avail, millis);
   bool exitFromLackOfPcmState = false;
-  if (pipeline->lack_of_pcm_ && millis > OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS && avail > numSamples) {
+  if (pipeline->lack_of_pcm_ && millis > OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS &&
+      avail > numSamples) {
     pipeline->lack_of_pcm_ = false;
     exitFromLackOfPcmState = true;
   }
@@ -79,8 +80,9 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
       assert(fadeInBytes % 2 == 0);
       auto _pcm = static_cast<int16_t *>(audioData);
       auto fadeInStart = _pcm;
-    LOGW("[AUDIO] Exit lack_of_pcm state. available:%d, numSamples:%d, FadeIn with %d frames",
-         avail, numSamples, fadeInFrames);
+      LOGW("[AUDIO] Exit lack_of_pcm state. available:%d, numSamples:%d, "
+           "FadeIn with %d frames",
+           avail, numSamples, fadeInFrames);
       for (int32_t i = 0; i < fadeInFrames; i++) {
         float ratio = static_cast<float>(i) / fadeInFrames;
         fadeInStart[i] = static_cast<int16_t>(fadeInStart[i] * ratio);
@@ -93,8 +95,28 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
 
 static void playbackErrorCallback(AAudioStream *stream, void *userData,
                                   aaudio_result_t error) {
-  assert(false);
+  //  AAudio playback error: -899 when setSpeakerphoneOn
+  if (error == AAUDIO_ERROR_DISCONNECTED) {
+    LOGW("[AUDIO] AAudio playback stream disconnected");
+    // restart, just release, will start again when new frames come in
+    auto *pipeline = static_cast<AudioPlaybackPipeline *>(userData);
+
+    std::thread myThread([pipeline, stream]() {
+      if (pipeline->stream) {
+        AAudioStream_requestStop(pipeline->stream);
+        AAudioStream_close(pipeline->stream);
+        pipeline->stream = nullptr;
+      }
+
+      pipeline->stopped.store(true);
+      pipeline->playing.store(false);
+      LOGI("[AUDIO] AudioPlaybackClose: DONE");
+    });
+    myThread.detach(); // Don't wait for the thread to finish.
+    return;
+  }
   LOGE("AAudio playback error: %d", error);
+  assert(false);
 }
 
 static int
