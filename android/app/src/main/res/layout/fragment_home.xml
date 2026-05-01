@@ -143,10 +143,19 @@
             android:orientation="horizontal">
 
             <ImageButton
+                android:id="@+id/switchCameraButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_marginEnd="24dp"
+                android:background="@drawable/ic_drawer_background"
+                android:contentDescription="@string/change_camera"
+                android:elevation="8dp"
+                android:src="@drawable/ic_switch_camera" />
+
+            <ImageButton
                 android:id="@+id/endCallButton"
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:layout_marginEnd="32dp"
                 android:background="@drawable/ic_drawer_red_background"
                 android:contentDescription="@string/close_rtc_label"
                 android:drawableTint="@android:color/white"
@@ -154,19 +163,10 @@
                 android:src="@drawable/ic_white_call" />
 
             <ImageButton
-                android:id="@+id/switchCameraButton"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:background="@drawable/ic_drawer_background"
-                android:contentDescription="@string/change_camera"
-                android:elevation="8dp"
-                android:src="@drawable/ic_switch_camera" />
-
-            <ImageButton
                 android:id="@+id/speakerButton"
                 android:layout_width="56dp"
                 android:layout_height="56dp"
-                android:layout_marginStart="32dp"
+                android:layout_marginStart="24dp"
                 android:background="@drawable/ic_drawer_background"
                 android:contentDescription="切换扬声器"
                 android:elevation="8dp"
