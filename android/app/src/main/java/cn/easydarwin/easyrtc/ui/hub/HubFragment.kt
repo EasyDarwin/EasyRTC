@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.core.ui.UiState
@@ -24,13 +25,14 @@ class HubFragment : Fragment() {
 
     private lateinit var viewModel: HubViewModel
     private var recyclerView: RecyclerView? = null
+    private var swipeRefresh: SwipeRefreshLayout? = null
     private var loadingView: View? = null
     private var stateText: TextView? = null
     private var retryButton: MaterialButton? = null
     private val userAdapter = UserCardAdapter { user ->
         val activity = activity as? MainActivity ?: return@UserCardAdapter
         activity.ws?.call(user.uuid)
-        Toast.makeText(requireContext(), "正在连接 ${user.username}", Toast.LENGTH_LONG).show()
+        Toast.makeText(requireContext(), "Connecting ${user.username}…", Toast.LENGTH_LONG).show()
         activity.bottomNavigationView?.selectedItemId = R.id.navigation_live
     }
 
@@ -46,6 +48,12 @@ class HubFragment : Fragment() {
         recyclerView = view.findViewById<RecyclerView>(R.id.recyclerHub).also {
             it.layoutManager = LinearLayoutManager(requireContext())
             it.adapter = userAdapter
+        }
+        swipeRefresh = view.findViewById<SwipeRefreshLayout>(R.id.swipeRefreshHub).also {
+            it.setOnRefreshListener {
+                (activity as? MainActivity)?.ws?.getOnlineUsers()
+                it.isRefreshing = false
+            }
         }
         loadingView = view.findViewById(R.id.progressHub)
         stateText = view.findViewById(R.id.textHubState)
@@ -67,6 +75,7 @@ class HubFragment : Fragment() {
     override fun onDestroyView() {
         recyclerView?.adapter = null
         recyclerView = null
+        swipeRefresh = null
         loadingView = null
         stateText = null
         retryButton = null
@@ -75,14 +84,14 @@ class HubFragment : Fragment() {
 
     private fun renderState(state: UiState<List<EasyRTCUser>>) {
         val loadingView = loadingView ?: return
-        val recyclerView = recyclerView ?: return
+        val swipeRefresh = swipeRefresh ?: return
         val stateText = stateText ?: return
         val retryButton = retryButton ?: return
 
         when (state) {
             is UiState.Loading -> {
                 loadingView.isVisible = true
-                recyclerView.isVisible = false
+                swipeRefresh.isVisible = false
                 stateText.isVisible = true
                 stateText.text = getString(R.string.hub_loading)
                 retryButton.isVisible = false
@@ -90,7 +99,7 @@ class HubFragment : Fragment() {
 
             is UiState.Content -> {
                 loadingView.isVisible = false
-                recyclerView.isVisible = true
+                swipeRefresh.isVisible = true
                 stateText.isVisible = false
                 retryButton.isVisible = false
                 userAdapter.submitList(state.data)
@@ -98,7 +107,7 @@ class HubFragment : Fragment() {
 
             is UiState.Empty -> {
                 loadingView.isVisible = false
-                recyclerView.isVisible = false
+                swipeRefresh.isVisible = false
                 stateText.isVisible = true
                 stateText.text = state.reason
                 retryButton.isVisible = false
@@ -106,7 +115,7 @@ class HubFragment : Fragment() {
 
             is UiState.Error -> {
                 loadingView.isVisible = false
-                recyclerView.isVisible = false
+                swipeRefresh.isVisible = false
                 stateText.isVisible = true
                 stateText.text = state.message
                 retryButton.isVisible = true

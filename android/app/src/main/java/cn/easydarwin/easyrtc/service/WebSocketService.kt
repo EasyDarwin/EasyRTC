@@ -101,6 +101,10 @@ class WebSocketService : Service() {
         manager.sendOfferSDP(sdp, isOffer)
     }
 
+    fun getOnlineUsers() {
+        manager.getOnlineClients()
+    }
+
     fun handleIncomingCall(event: Event.IncomingCall, session: MediaSession) {
         event.handled = true
         if (event.callout)
