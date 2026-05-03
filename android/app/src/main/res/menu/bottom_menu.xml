@@ -16,10 +16,4 @@
         android:icon="@drawable/ic_setting_selector"
         android:title="@string/navigation_settings"
         android:tooltipText="" />
-
-    <item
-        android:id="@+id/navigation_about"
-        android:icon="@drawable/ic_about_selector"
-        android:title="@string/navigation_about"
-        android:tooltipText="" />
 </menu>

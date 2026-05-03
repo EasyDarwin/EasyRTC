@@ -115,6 +115,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.material)
     implementation(libs.material.icons);
+    implementation(libs.androidx.swiperefreshlayout)
+    implementation(libs.tencent.bugly)
 
     // Retrofit
     implementation(libs.retrofit2.retrofit)

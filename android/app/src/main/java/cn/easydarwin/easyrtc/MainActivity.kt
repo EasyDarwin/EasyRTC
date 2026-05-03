@@ -15,7 +15,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
-import cn.easydarwin.easyrtc.fragment.AboutFragment
+import com.tencent.bugly.crashreport.CrashReport
 import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.hub.HubFragment
@@ -59,6 +59,8 @@ class MainActivity : AppCompatActivity() {
         MagicFileHelper.init(this)
 
         setContentView(R.layout.activity_main)
+
+        CrashReport.initCrashReport(applicationContext, "5aece7ce65", false)
 
         checkPermission()
         bindWebSocketService()
@@ -114,11 +116,6 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
 
-                R.id.navigation_about -> {
-                    switchFragment("about")
-                    true
-                }
-
                 else -> false
             }
         }
@@ -143,7 +140,6 @@ class MainActivity : AppCompatActivity() {
                 "hub" -> HubFragment()
                 "live" -> LiveFragment.newInstance()
                 "setting" -> SettingFragment()
-                "about" -> AboutFragment()
                 else -> return
             }
             transaction.add(R.id.fragment_container, fragment, tag)

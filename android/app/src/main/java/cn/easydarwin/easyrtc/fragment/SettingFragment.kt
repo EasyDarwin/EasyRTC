@@ -1,5 +1,7 @@
 package cn.easydarwin.easyrtc.fragment
 
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -32,6 +34,9 @@ class SettingFragment : Fragment() {
     private var tvAudioChannel: TextView? = null
     private var tvAudioRate: TextView? = null
 
+    // 关于相关视图
+    private var tvAppVersion: TextView? = null
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_setting, container, false)
     }
@@ -42,6 +47,7 @@ class SettingFragment : Fragment() {
         initDeviceId()
         initVideoSettings(view)
         initAudioSettings(view)
+        initAboutSection(view)
     }
 
     private fun initViews(view: View) {
@@ -176,6 +182,31 @@ class SettingFragment : Fragment() {
         }
     }
 
+    private fun initAboutSection(view: View) {
+        tvAppVersion = view.findViewById(R.id.tv_app_version)
+        val versionName = getAppVersionNameOrUnknown()
+        tvAppVersion?.text = getString(R.string.about_version_value, versionName)
+    }
+
+    private fun getAppVersionNameOrUnknown(): String {
+        return try {
+            val context = requireContext()
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    PackageManager.PackageInfoFlags.of(0),
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            packageInfo.versionName?.takeIf { it.isNotBlank() }
+                ?: getString(R.string.about_version_unknown)
+        } catch (_: PackageManager.NameNotFoundException) {
+            getString(R.string.about_version_unknown)
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         Log.d(TAG, "onPause")
@@ -198,6 +229,7 @@ class SettingFragment : Fragment() {
         tvAudioSampleRate = null
         tvAudioChannel = null
         tvAudioRate = null
+        tvAppVersion = null
         Log.d(TAG, "onDestroyView")
     }
 

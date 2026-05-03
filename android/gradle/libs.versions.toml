@@ -22,6 +22,8 @@ recyclerview = "1.4.0"
 preferenceKtx = "1.2.1"
 material = "1.13.0"
 compiler = "3.2.0-alpha11"
+swiperefreshlayout = "1.1.0"
+bugly = "4.1.9.3"
 
 # 新增的版本号
 lifecycleViewModelKtx = "2.7.0"
@@ -60,6 +62,8 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 material-icons= { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
 androidx-compiler = { group = "androidx.databinding", name = "compiler", version.ref = "compiler" }
+androidx-swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version.ref = "swiperefreshlayout" }
+tencent-bugly = { module = "com.tencent.bugly:crashreport", version.ref = "bugly" }
 
 # 新增的库
 retrofit2-retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
