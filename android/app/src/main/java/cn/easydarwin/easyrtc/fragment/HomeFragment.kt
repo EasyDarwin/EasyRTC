@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.os.Looper
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
+import android.view.MotionEvent
 import android.view.LayoutInflater
 import android.view.Surface
 import android.view.TextureView
@@ -204,7 +205,21 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         mainVideoView.surfaceTextureListener = this
         smallVideoView.surfaceTextureListener = this
 
-        smallVideoContainer.setOnClickListener { }
+        smallVideoContainer.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
+                    view.translationX = event.rawX - anchor[0]
+                    view.translationY = event.rawY - anchor[1]
+                    true
+                }
+                else -> false
+            }
+        }
 
         endCallButton.setOnClickListener {
             Log.d(TAG, "挂电话")
