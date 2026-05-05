@@ -267,13 +267,16 @@ static int mediaTransceiverCallback(void *userPtr,
             }
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_KEY_FRAME_REQ:
+        {
             LOGD("mediaTransceiverCallback KEY_FRAME_REQ bw=%.2f", bandwidthEstimation);
-            if (session->videoEncoder && session->videoEncoder->encoder) {
-                AMediaFormat *params = AMediaFormat_new();
-                AMediaFormat_setInt32(params, "request-sync", 0);
-                AMediaCodec_setParameters(session->videoEncoder->encoder, params);
-                AMediaFormat_delete(params);
+            auto p = session->videoEncoder;
+            if (p) {
+                p->requestKeyFramePending.store(true);
+            }else {
+                LOGW("mediaTransceiverCallback KEY_FRAME_REQ but video encoder not running");
             }
+        }
+
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_BANDWIDTH:
             // LOGD("mediaTransceiverCallback BANDWIDTH=%.2f", bandwidthEstimation);
@@ -391,7 +394,13 @@ Java_cn_easyrtc_media_MediaSession_nativeSetState(
     assert(session && "Invalid session");
     LOGI("[CRITICAL] nativeSetState ENTRY: session=%p %d -> %d", session, session->connectState,
          state);
+    const bool becameConnected = (session->connectState != 3 && state == 3);
     session->connectState = state;
+    auto p = session->videoEncoder;
+    if (becameConnected && p) {
+        p->requestKeyFramePending.store(true);
+        LOGI("[CRITICAL] nativeSetState: queued key frame request after connected");
+    }
 }
 
 JNIEXPORT void JNICALL
@@ -645,15 +654,25 @@ static void startRenderThread(MediaSession *session) {
                 float m[16];
                 int64_t ts = 0;
                 if (encoderGlUpdateTexImage(session->cameraInputSurfaceTexture, m, &ts)) {
-                    encoderGlSetInputTransform(session->encoderGlBridge, m);
-                    if (!encoderGlRenderFrame(session->encoderGlBridge, static_cast<long long>(ts))) {
-                        LOGW("[CRITICAL] EncoderRotate render thread frame render failed");
+                    // Keep SurfaceTexture drained, but only feed encoder when connected.
+                    if (session->connectState == 3) {
+                        encoderGlSetInputTransform(session->encoderGlBridge, m);
+                        if (!encoderGlRenderFrame(session->encoderGlBridge, static_cast<long long>(ts))) {
+                            LOGW("[CRITICAL] EncoderRotate render thread frame render failed");
+                            assert(false && "Encoder render failed");
+                        }
+                    } else {
+                        FLOGI("[CRITICAL] EncoderRotate render thread: not connected, skipping frame");
                     }
+                }else {
+                    LOGE("[CRITICAL] EncoderRotate render thread updateTexImage failed");
+                    assert(false && "Encoder updateTexImage failed");
                 }
             }
             usleep(33000);
         }
         if (session->cameraInputSurfaceTexture) {
+            LOGI("[CRITICAL] EncoderRotate render thread: detaching SurfaceTexture");
             ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
         }
         LOGI("[CRITICAL] EncoderRotate render thread stopped");
@@ -870,11 +889,13 @@ Java_cn_easyrtc_media_MediaSession_nativeRequestKeyFrame(
     LOGI("[CRITICAL] nativeRequestKeyFrame ENTRY: sessionPtr=%p",
          reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->videoEncoder || !session->videoEncoder->encoder) return;
-    AMediaFormat *params = AMediaFormat_new();
-    AMediaFormat_setInt32(params, "request-sync", 0);
-    AMediaCodec_setParameters(session->videoEncoder->encoder, params);
-    AMediaFormat_delete(params);
+    assert(session && "session is null");
+    auto p = session->videoEncoder;
+    if (!p) {
+        LOGW("[CRITICAL] nativeRequestKeyFrame: video encoder not running, cannot request key frame");
+        return;
+    }
+    p->requestKeyFramePending.store(true);
 }
 
 JNIEXPORT jlong JNICALL

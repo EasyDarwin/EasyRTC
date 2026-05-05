@@ -92,10 +92,19 @@ void* outputThreadFunc(void* arg) {
         if (!pipeline->encoder) {
             break;
         }
-        if (session->connectState != 3) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            continue;
+
+        if (pipeline->requestKeyFramePending.exchange(false)) {
+            AMediaFormat* params = AMediaFormat_new();
+            AMediaFormat_setInt32(params, "request-sync", 0);
+            media_status_t requestStatus = AMediaCodec_setParameters(pipeline->encoder, params);
+            AMediaFormat_delete(params);
+            if (requestStatus != AMEDIA_OK) {
+                LOGW("[VO] request-sync failed: status=%d", requestStatus);
+            } else {
+                LOGI("[VO] request-sync applied on output thread");
+            }
         }
+
         AMediaCodecBufferInfo info;
         ssize_t bufIdx = AMediaCodec_dequeueOutputBuffer(pipeline->encoder, &info, 10000);
         if (bufIdx < 0) {
@@ -105,6 +114,7 @@ void* outputThreadFunc(void* arg) {
         size_t outSize = 0;
         uint8_t* outBuf = AMediaCodec_getOutputBuffer(pipeline->encoder, bufIdx, &outSize);
         if (!outBuf) {
+            assert(false && "Failed to get output buffer");
             AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
             continue;
         }
@@ -131,6 +141,8 @@ void* outputThreadFunc(void* arg) {
         frame.frameData = data;
         frame.trackId = 0;
 
+        const bool isConnected = (session->connectState == 3);
+
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
             LOGI("[VO] Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
             if (pipeline->sps_pps_size > 0) {
@@ -143,7 +155,14 @@ void* outputThreadFunc(void* arg) {
             }
         }
 
+        // Discard non-key media frames until the connection is ready.
+        if (!isConnected) {
+            AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
+            continue;
+        }
+
         if (!pipeline->transceiver) {
+            assert(false && "No transceiver available for sending frames");
             AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
             continue;
         }

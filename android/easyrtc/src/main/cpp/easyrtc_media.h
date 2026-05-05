@@ -21,6 +21,7 @@ struct MediaPipeline {
     int fps = 0;
     int iframeInterval = 0;
     std::atomic<bool> running{false};
+    std::atomic<bool> requestKeyFramePending{false};
     std::thread outputThread;
     std::vector<uint8_t> sps_pps_buffer;
     int sps_pps_size{0};
