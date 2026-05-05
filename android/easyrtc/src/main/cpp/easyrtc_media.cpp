@@ -86,7 +86,7 @@ void* outputThreadFunc(void* arg) {
     assert(session && "Invalid session");
     assert(session->videoEncoder);
     auto* pipeline = session->videoEncoder.get();
-    LOGD("Output thread started");
+    LOGI("[VO] Output thread started");
 
     while (pipeline->running.load()) {
         if (!pipeline->encoder) {
@@ -132,7 +132,7 @@ void* outputThreadFunc(void* arg) {
         frame.trackId = 0;
 
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            LOGD("Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
+            LOGI("[VO] Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
             if (pipeline->sps_pps_size > 0) {
                 pipeline->sps_pps_buffer.resize(pipeline->sps_pps_size);
                 // let's expand the sps_pps_buffer, and append the current frame data after it, then send the combined buffer to the peer, so that the decoder on the peer side can get the sps/pps before decoding the key frame
@@ -151,12 +151,14 @@ void* outputThreadFunc(void* arg) {
         // LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
         int sendResult = EasyRTC_SendFrame(pipeline->transceiver, &frame);
         if (sendResult != 0) {
-            LOGE("EasyRTC_SendFrame failed: %d, size=%u, flags=%u", sendResult, frame.size, frame.flags);
+            LOGE("[VO] EasyRTC_SendFrame failed: %d, size=%u, flags=%u", sendResult, frame.size, frame.flags);
+        }else {
+            FLOGI("[VO] EasyRTC_SendFrame success: size=%u, flags=%u, pts=%llu", frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
         }
 
         AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
     }
 
-    LOGD("Output thread exiting");
+    LOGI("[VO] Output thread exiting");
     return nullptr;
 }

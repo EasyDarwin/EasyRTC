@@ -27,6 +27,7 @@ namespace {
 }
 
 static void releaseCaptureSession(MediaSession *s) {
+    LOGI("[CRITICAL] releaseCaptureSession ENTRY: s=%p", s);
     if (s->captureSession) {
         ACameraCaptureSession_stopRepeating(s->captureSession);
         ACameraCaptureSession_close(s->captureSession);
@@ -59,6 +60,7 @@ static void releaseCaptureSession(MediaSession *s) {
 }
 
 static bool createCaptureSession(MediaSession *s, bool withEncoder) {
+    LOGI("[CRITICAL] createCaptureSession ENTRY: s=%p withEncoder=%d", s, withEncoder ? 1 : 0);
     camera_status_t camStatus;
 
     camStatus = ACaptureSessionOutputContainer_create(&s->outputContainer);
@@ -162,6 +164,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
 }
 
 static void closeCamera(MediaSession *s) {
+    LOGI("[CRITICAL] closeCamera ENTRY: s=%p", s);
     std::lock_guard<std::mutex> lock(s->cameraMutex);
     releaseCaptureSession(s);
     if (s->cameraDevice) {
@@ -316,6 +319,7 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeCreate(JNIEnv *env, jobject thiz) {
+    LOGI("[CRITICAL] nativeCreate ENTRY: thiz=%p", thiz);
     auto *session = new MediaSession();
     env->GetJavaVM(&session->jvm);
     session->javaObj = env->NewGlobalRef(thiz);
@@ -326,6 +330,8 @@ Java_cn_easyrtc_media_MediaSession_nativeCreate(JNIEnv *env, jobject thiz) {
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jobject surface) {
+    LOGI("[CRITICAL] nativeStartPreview ENTRY: sessionPtr=%p surface=%p",
+         reinterpret_cast<void *>(sessionPtr), surface);
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(!session->previewRunning.load() && "Preview already running");
@@ -383,16 +389,20 @@ Java_cn_easyrtc_media_MediaSession_nativeSetState(
         jint state) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
-    LOGI("[CRITICAL] SetState: %d -> %d", session->connectState, state);
+    LOGI("[CRITICAL] nativeSetState ENTRY: session=%p %d -> %d", session, session->connectState,
+         state);
     session->connectState = state;
 }
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStopPreview(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeStopPreview ENTRY: sessionPtr=%p",
+         reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
+    LOGI("[CRITICAL] nativeStopPreview: before closeCamera");
     closeCamera(session);
     if (session->previewWindow) {
         ANativeWindow_release(session->previewWindow);
@@ -405,6 +415,8 @@ Java_cn_easyrtc_media_MediaSession_nativeStopPreview(
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetPeerConnection(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jlong peerConnectionHandle) {
+    LOGI("[CRITICAL] nativeSetPeerConnection ENTRY: sessionPtr=%p peerConnectionHandle=%p",
+         reinterpret_cast<void *>(sessionPtr), reinterpret_cast<void *>(peerConnectionHandle));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -417,6 +429,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSetPeerConnection(
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jint videoCodec, jint audioCodec) {
+    LOGI("[CRITICAL] nativeAddTransceivers ENTRY: sessionPtr=%p videoCodec=%d audioCodec=%d",
+         reinterpret_cast<void *>(sessionPtr), videoCodec, audioCodec);
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(session->peerConnection && "Invalid peerConnection");
@@ -485,6 +499,8 @@ JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
         JNIEnv *env, jobject thiz, jlong sessionPtr,
         jint codec, jint width, jint height, jint bitrate, jint fps, jint iframeInterval) {
+    LOGI("[CRITICAL] nativeSetupVideoEncoder ENTRY: sessionPtr=%p codec=%d size=%dx%d bitrate=%d fps=%d iframe=%d",
+         reinterpret_cast<void *>(sessionPtr), codec, width, height, bitrate, fps, iframeInterval);
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -519,6 +535,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetEncoderRotation(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jint rotation) {
+    LOGI("[CRITICAL] nativeSetEncoderRotation ENTRY: sessionPtr=%p rotation=%d",
+         reinterpret_cast<void *>(sessionPtr), rotation);
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     int r = rotation % 360;
@@ -532,6 +550,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSetEncoderRotation(
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetDeviceId(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jstring deviceId) {
+    LOGI("[CRITICAL] nativeSetDeviceId ENTRY: sessionPtr=%p deviceId=%p",
+         reinterpret_cast<void *>(sessionPtr), deviceId);
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -550,6 +570,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDeviceId(
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jobject surface) {
+    LOGI("[CRITICAL] nativeSetDecoderSurface ENTRY: sessionPtr=%p surface=%p",
+         reinterpret_cast<void *>(sessionPtr), surface);
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -600,6 +622,8 @@ static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, 
 }
 
 static void startRenderThread(MediaSession *session) {
+    LOGI("[CRITICAL] startRenderThread ENTRY: session=%p running=%d", session,
+         session ? (session->renderThreadRunning.load() ? 1 : 0) : -1);
     if (!session || session->renderThreadRunning.load()) {
         return;
     }
@@ -637,6 +661,8 @@ static void startRenderThread(MediaSession *session) {
 }
 
 static void stopRenderThread(MediaSession *session) {
+    LOGI("[CRITICAL] stopRenderThread ENTRY: session=%p running=%d", session,
+         session ? (session->renderThreadRunning.load() ? 1 : 0) : -1);
     if (!session) return;
     session->renderThreadRunning.store(false);
     if (session->renderThread.joinable()) {
@@ -646,6 +672,7 @@ static void stopRenderThread(MediaSession *session) {
 
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeStartSend ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(session->videoEncoder);
@@ -672,6 +699,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     if (!ensureCameraInputSurfaceTexture(env, session, p->width, p->height)) {
         LOGW("[CRITICAL] EncoderRotate failed to create camera input surface texture");
     }
+    LOGI("[CRITICAL] nativeStartSend: before startRenderThread");
     startRenderThread(session);
     media_status_t status = AMediaCodec_start(p->encoder);
     if (status != AMEDIA_OK) {
@@ -710,6 +738,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeStartRecv ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -737,6 +766,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv *env, jobject thiz, jl
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeStopSend ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -746,6 +776,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
 
     // Must stop the render thread BEFORE releasing GL resources,
     // otherwise the render thread may call glDrawElements on deleted VBO/IBO.
+    LOGI("[CRITICAL] nativeStopSend: before stopRenderThread");
     stopRenderThread(session);
     encoderGlRelease(session->encoderGlBridge);
 
@@ -781,6 +812,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeStopRecv ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -801,6 +833,8 @@ Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv *env, jobject thiz, jlo
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeSwitchCamera ENTRY: sessionPtr=%p",
+         reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
@@ -837,6 +871,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeRequestKeyFrame(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeRequestKeyFrame ENTRY: sessionPtr=%p",
+         reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session || !session->videoEncoder || !session->videoEncoder->encoder) return;
     AMediaFormat *params = AMediaFormat_new();
@@ -848,6 +884,8 @@ Java_cn_easyrtc_media_MediaSession_nativeRequestKeyFrame(
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeGetVideoTransceiver(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeGetVideoTransceiver ENTRY: sessionPtr=%p",
+         reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     return session ? reinterpret_cast<jlong>(session->videoTransceiver) : 0;
 }
@@ -855,6 +893,8 @@ Java_cn_easyrtc_media_MediaSession_nativeGetVideoTransceiver(
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeGetAudioTransceiver(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeGetAudioTransceiver ENTRY: sessionPtr=%p",
+         reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     return session ? reinterpret_cast<jlong>(session->audioTransceiver) : 0;
 }
@@ -862,6 +902,8 @@ Java_cn_easyrtc_media_MediaSession_nativeGetAudioTransceiver(
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeRemoveTransceivers ENTRY: sessionPtr=%p",
+         reinterpret_cast<void *>(sessionPtr));
 
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return;
@@ -884,6 +926,8 @@ Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeRelease(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    LOGI("[CRITICAL] nativeRelease ENTRY: sessionPtr=%p",
+         reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return;
 

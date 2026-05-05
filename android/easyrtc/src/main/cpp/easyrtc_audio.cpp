@@ -75,6 +75,8 @@ static aaudio_data_callback_result_t dataCallback(
     int result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
     if (result != 0) {
         LOGE("EasyRTC_SendFrame (audio) failed: %d", result);
+    }else {
+        FLOGI("[AO] EasyRTC_SendFrame (audio) success: size=%u, pts=%llu", frame.size, static_cast<unsigned long long>(frame.presentationTs));
     }
 #else 
     Java_cn_easyrtc_peerconnection_SendAudioFrame(nullptr, nullptr, reinterpret_cast<jlong>(pipeline->audioTransceiver), reinterpret_cast<jbyteArray>(pcmData), static_cast<jint>(dataSize), static_cast<jint>(pts));
