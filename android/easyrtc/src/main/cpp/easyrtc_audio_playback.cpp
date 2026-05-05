@@ -10,7 +10,7 @@
 #include <mutex>
 #include <thread>
 
-#define OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS 200.0f
+#define OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS 500.0f
 
 static int ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline);
 
@@ -45,9 +45,9 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
 
   if (pipeline->lack_of_pcm_) {
     memset(output, 0, requestedBytes);
-    LOGI("[AUDIO] in lack_of_pcm state, ignore %d request, with available:%d "
-         "in buffer",
-         requestedBytes, avail);
+    // LOGI("[AUDIO] in lack_of_pcm state, ignore %d request, with available:%d "
+    //      "in buffer",
+    //      requestedBytes, avail);
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
   }
   int32_t readBytesOffset = 0;
@@ -69,9 +69,9 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
         float ratio = static_cast<float>(fadeOutFrames - i) / fadeOutFrames;
         fadeOutStart[i] = static_cast<int16_t>(fadeOutStart[i] * ratio);
       }
-      LOGI("[AUDIO] Enter lack_of_pcm state, read %d "
+      LOGI("[AUDIO] Enter lack_of_pcm state, read %d/%d "
            "samples, requested %d samples, fadeOut applied for last %d frames",
-           read, numSamples, fadeOutFrames);
+           read, avail, numSamples, fadeOutFrames);
       memset(output + readBytesOffset, 0, requestedBytes - readBytesOffset);
     } else if (exitFromLackOfPcmState) {
       // do fade in for the first 10ms to avoid audio crackle
@@ -82,9 +82,9 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
       assert(fadeInBytes % 2 == 0);
       auto _pcm = static_cast<int16_t *>(audioData);
       auto fadeInStart = _pcm;
-      LOGW("[AUDIO] Exit lack_of_pcm state. available:%d, numSamples:%d, "
+      LOGW("[AUDIO] Exit lack_of_pcm state. read %d/%d, numSamples:%d, "
            "FadeIn with %d frames",
-           avail, numSamples, fadeInFrames);
+           read, avail, numSamples, fadeInFrames);
       for (int32_t i = 0; i < fadeInFrames; i++) {
         float ratio = static_cast<float>(i) / fadeInFrames;
         fadeInStart[i] = static_cast<int16_t>(fadeInStart[i] * ratio);
