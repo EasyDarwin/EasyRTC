@@ -684,7 +684,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
         return -1;
     }
     assert(p->encoder);
-    session->encoderGlBridge = encoderGlCreate(p->window, p->width, p->height, session->encoderRotation);
+    session->encoderGlBridge = encoderGlCreate(p->encoderInputSurface.get(), p->width, p->height, session->encoderRotation);
     if (!session->deviceId.empty() && session->encoderGlBridge) {
         session->encoderGlBridge->deviceId = session->deviceId;
     }
@@ -792,10 +792,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
         if (p->encoder) {
             AMediaCodec_delete(p->encoder);
             p->encoder = nullptr;
-        }
-        if (p->window) {
-            ANativeWindow_release(p->window);
-            p->window = nullptr;
         }
     }
 

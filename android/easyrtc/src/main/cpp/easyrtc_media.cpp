@@ -75,7 +75,7 @@ bool MediaPipeline::initEncoder()
         assert(false);
         return false;
     }
-    this->window = inputWindow;
+    this->encoderInputSurface = std::shared_ptr<ANativeWindow>(inputWindow, ANativeWindow_release);
     this->encoder = encoder;
     LOGI("[CRITICAL] initEncoder: SUCCESS encoder=%p window=%p", encoder, inputWindow);
     return true;
