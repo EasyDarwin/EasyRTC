@@ -1,20 +1,22 @@
 #include "easyrtc_logger.h"
 
 #include <android/log.h>
+#include <spdlog/logger.h>
+#include <spdlog/sinks/android_sink.h>
+#include <spdlog/sinks/rotating_file_sink.h>
 #include <cstdarg>
 #include <cstdio>
-#include <cstring>
-#include <ctime>
-#include <mutex>
+#include <filesystem>
+#include <memory>
 #include <string>
 #include <fcntl.h>
 #include <unistd.h>
 
 namespace {
-std::mutex gFileMutex;
-const size_t kRotateBytes = 5 * 1024 * 1024;
+constexpr size_t kRotateBytes = 5 * 1024 * 1024;
+constexpr size_t kRotateFiles = 2;
 
-static std::string log_dir() {
+std::string log_dir() {
     static std::string dumpDir;
     if (!dumpDir.empty()) {
         return dumpDir;
@@ -29,45 +31,59 @@ static std::string log_dir() {
     return dumpDir;
 }
 
-void rotate_if_needed_locked(FILE* fp) {
-    if (!fp) return;
-    std::fflush(fp);
-    long pos = std::ftell(fp);
-    if (pos < 0 || static_cast<size_t>(pos) < kRotateBytes) return;
-
-    std::fclose(fp);
-    std::remove((log_dir() + "/easyrtc_native.log.1").c_str());
-    std::rename((log_dir() + "/easyrtc_native.log").c_str(), (log_dir() + "/easyrtc_native.log.1").c_str());
-}
-
-const char* level_tag(int priority) {
+spdlog::level::level_enum to_spdlog_level(int priority) {
     switch (priority) {
-        case ANDROID_LOG_ERROR: return "E";
-        case ANDROID_LOG_WARN: return "W";
-        case ANDROID_LOG_INFO: return "I";
-        default: return "D";
+        case ANDROID_LOG_VERBOSE: return spdlog::level::trace;
+        case ANDROID_LOG_DEBUG: return spdlog::level::debug;
+        case ANDROID_LOG_INFO: return spdlog::level::info;
+        case ANDROID_LOG_WARN: return spdlog::level::warn;
+        case ANDROID_LOG_ERROR: return spdlog::level::err;
+        case ANDROID_LOG_FATAL: return spdlog::level::critical;
+        default: return spdlog::level::debug;
     }
 }
 
-void write_file_line(int priority, const char* tag, const char* message) {
-    std::lock_guard<std::mutex> lock(gFileMutex);
+std::shared_ptr<spdlog::logger> create_logger() {
+    std::vector<spdlog::sink_ptr> sinks;
 
-    auto kLogPath = log_dir() + "/easyrtc_native.log";
-    FILE* fp = std::fopen(kLogPath.c_str(), "a+");
-    if (!fp) return;
+    auto androidSink = std::make_shared<spdlog::sinks::android_sink_mt>("EasyRTC.Native", true);
+    androidSink->set_pattern("[%l] [pid:%P tid:%t] %v");
+    sinks.push_back(androidSink);
 
-    rotate_if_needed_locked(fp);
-    fp = std::fopen(kLogPath.c_str(), "a+");
-    if (!fp) return;
+    const std::string dir = log_dir();
+    if (!dir.empty()) {
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (!ec) {
+            const auto filePath = dir + "/easyrtc_native.log";
+            auto fileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+                filePath,
+                kRotateBytes,
+                kRotateFiles,
+                true);
+            fileSink->set_pattern("%Y-%m-%d %H:%M:%S.%e [%l] [pid:%P tid:%t] %v");
+            sinks.push_back(fileSink);
+        }
+    }
 
-    std::time_t now = std::time(nullptr);
-    std::tm tm_buf{};
-    localtime_r(&now, &tm_buf);
-    char ts[32] = {0};
-    std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm_buf);
+    auto logger = std::make_shared<spdlog::logger>("easyrtc_native", sinks.begin(), sinks.end());
+    logger->set_level(spdlog::level::trace);
+    logger->flush_on(spdlog::level::info);
+    return logger;
+}
 
-    std::fprintf(fp, "%s [%s] %s: %s\n", ts, level_tag(priority), tag, message);
-    std::fclose(fp);
+std::shared_ptr<spdlog::logger> get_logger() {
+    static std::shared_ptr<spdlog::logger> logger = create_logger();
+    return logger;
+}
+
+void fallback_logcat(int priority, const char* tag, const char* message) {
+    __android_log_print(priority,
+                        tag ? tag : "EasyRTC.Native",
+                        "[pid:%d tid:%d] %s",
+                        static_cast<int>(getpid()),
+                        static_cast<int>(gettid()),
+                        message ? message : "");
 }
 }
 
@@ -78,6 +94,10 @@ void easyrtc_log_print(int priority, const char* tag, const char* fmt, ...) {
     std::vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    __android_log_print(priority, tag, "%s", buf);
-    write_file_line(priority, tag, buf);
+    try {
+        auto logger = get_logger();
+        logger->log(to_spdlog_level(priority), "[{}] {}", tag ? tag : "EasyRTC.Native", buf);
+    } catch (...) {
+        fallback_logcat(priority, tag, buf);
+    }
 }
