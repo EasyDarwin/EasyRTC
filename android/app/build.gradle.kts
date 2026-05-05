@@ -1,9 +1,28 @@
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
+
+fun gitRevisionCountOrDefault(): Int {
+    return try {
+        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .directory(rootDir)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+        if (process.waitFor() == 0) output.toIntOrNull() ?: 1 else 1
+    } catch (_: Exception) {
+        1
+    }
+}
+
+val computedVersionCode = gitRevisionCountOrDefault()
+val computedVersionName = "V1.0." + computedVersionCode + "." + LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd"))
 
 android {
     namespace = "cn.easydarwin.easyrtc"
@@ -25,9 +44,8 @@ android {
         applicationId = "cn.easydarwin.easyrtc"
         minSdk = 28
         targetSdk = 36
-        //noinspection HighAppVersionCode
-        versionCode =  2026032603
-        versionName = "V1.26.032603"
+        versionCode = computedVersionCode
+        versionName = computedVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
