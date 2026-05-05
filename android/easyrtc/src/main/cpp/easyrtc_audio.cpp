@@ -113,15 +113,16 @@ static aaudio_data_callback_result_t dataCallback(
     int64_t frameIndex = 0;
     int64_t timeNanos = 0;
     auto tsResult = AAudioStream_getTimestamp(stream, CLOCK_MONOTONIC, &frameIndex, &timeNanos);
-    UINT64 pts = 0;
+    // EasyRTC expects 100ns ticks, so convert from CLOCK_MONOTONIC nanoseconds by /100.
+    UINT64 pts100ns = 0;
     if (tsResult == AAUDIO_OK) {
-        pts = static_cast<UINT64>(timeNanos / 100);
+        pts100ns = static_cast<UINT64>(timeNanos / 100);
     } else {
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        pts = static_cast<UINT64>((ts.tv_sec * 1000000000LL + ts.tv_nsec) / 100);
+        pts100ns = static_cast<UINT64>((ts.tv_sec * 1000000000LL + ts.tv_nsec) / 100);
     }
-    FLOGI("[AO] PCM callback frames=%d, size=%d, pts=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts));
+    FLOGI("[AO] PCM callback frames=%d, size=%d, pts100ns=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts100ns));
 
 #if 1
     // first let's convert PCM into PCMA
@@ -140,8 +141,8 @@ static aaudio_data_callback_result_t dataCallback(
     frame.version = 0;
     frame.size = static_cast<UINT32>(dataSize >> 1); // PCMA is half the size of PCM
     frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(EASYRTC_FRAME_FLAG_KEY_FRAME);
-    frame.presentationTs = pts;
-    frame.decodingTs = pts;
+    frame.presentationTs = pts100ns;
+    frame.decodingTs = pts100ns;
     frame.frameData = pipeline->audioBuffer;
     frame.trackId = 0;
 

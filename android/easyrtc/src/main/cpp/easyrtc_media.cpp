@@ -136,7 +136,8 @@ void* outputThreadFunc(void* arg) {
         frame.flags = (info.flags & 1)
                 ? EASYRTC_FRAME_FLAG_KEY_FRAME
                 : EASYRTC_FRAME_FLAG_NONE;
-        frame.presentationTs = static_cast<UINT64>(info.presentationTimeUs) * 100ULL;
+        // MediaCodec output timestamp is in microseconds; convert to 100ns ticks.
+        frame.presentationTs = static_cast<UINT64>(info.presentationTimeUs) * 10ULL;
         frame.decodingTs = frame.presentationTs;
         frame.frameData = data;
         frame.trackId = 0;

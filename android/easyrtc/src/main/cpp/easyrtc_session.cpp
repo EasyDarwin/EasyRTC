@@ -315,7 +315,8 @@ static int mediaTransceiverCallback(void *userPtr,
                          static_cast<unsigned long long>(avccCount));
                 }
 
-                const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 1000);
+                // EasyRTC timestamps are 100ns ticks; convert to microseconds for decoder queue.
+                const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
                                frame->size, ptsUs, frame->flags);
                 updateMediaInputKbpsStats(session, n, 0);
@@ -343,9 +344,9 @@ static int mediaTransceiverCallback(void *userPtr,
                                frame->size, audioPtsUs, frame->flags);
                 updateMediaInputKbpsStats(session, 0, frame->size);
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData,
-                                          static_cast<int32_t>(frame->size));
+                                          static_cast<int32_t>(frame->size), audioPtsUs);
                 if (session->videoDecoder) {
-                    session->videoDecoder->audio_master_clock_us = session->audioPlayback->playedFrames * 1e6 / session->audioPlayback->SAMPLE_RATE;
+                    session->videoDecoder->audio_master_clock_us = estimateAudioMasterClockUs(session->audioPlayback);
                 }
             }
             break;
