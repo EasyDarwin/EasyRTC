@@ -57,18 +57,19 @@ static aaudio_data_callback_result_t dataCallback(
     EasyRTC_Frame frame{};
     frame.version = 0;
     frame.size = static_cast<UINT32>(dataSize >> 1); // PCMA is half the size of PCM
-    frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(EASYRTC_FRAME_FLAG_NONE);
+    frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(EASYRTC_FRAME_FLAG_KEY_FRAME);
     frame.presentationTs = pts;
     frame.decodingTs = pts;
     frame.frameData = pipeline->audioBuffer;
     frame.trackId = 0;
 
-    
-    // FILE *fp = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_audio_capture.pcm", "ab");
-    // if (fp) {
-    //     fwrite(pcmData, 1, dataSize, fp);
-    //     fclose(fp);
-    // }
+#if 0
+    FILE *fp = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_audio_capture.pcm", "ab");
+    if (fp) {
+        fwrite(frame.frameData, 1, frame.size, fp);
+        fclose(fp);
+    }
+#endif
 
     // LOGD("Audio capture callback: frames=%d, size=%d, pts=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts));
     
