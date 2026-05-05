@@ -54,7 +54,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     private lateinit var endCallButton: ImageButton
     private lateinit var switchCameraButton: ImageButton
     private lateinit var speakerButton: ImageButton
-    private var isSpeakerOn = true
     private val audioManager by lazy { requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     private lateinit var mainVideoView: TextureView
@@ -240,9 +239,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         }
 
         speakerButton.setOnClickListener {
-            isSpeakerOn = !isSpeakerOn
+            audioManager.isSpeakerphoneOn = !audioManager.isSpeakerphoneOn
+            val isSpeakerOn = audioManager.isSpeakerphoneOn
             speakerButton.setImageResource(if (isSpeakerOn) R.drawable.ic_speaker_on else R.drawable.ic_speaker_off)
-            audioManager.isSpeakerphoneOn = isSpeakerOn
             appendLog(if (isSpeakerOn) "扬声器已开启" else "扬声器已关闭")
         }
 
