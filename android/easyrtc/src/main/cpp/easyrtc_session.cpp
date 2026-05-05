@@ -719,8 +719,11 @@ static void startRenderThread(MediaSession *session) {
     if (!session || session->renderThreadRunning.load()) {
         return;
     }
+    auto encoder = session->videoEncoder;
+    assert(encoder && "Video encoder must be initialized before starting render thread");
+    const uint32_t frameIntervalUs = static_cast<uint32_t>(1000000 / (encoder->fps > 0 ? encoder->fps : 29.97));
     session->renderThreadRunning.store(true);
-    session->renderThread = std::thread([session]() {
+    session->renderThread = std::thread([session, frameIntervalUs]() {
         LOGI("[CRITICAL] EncoderRotate render thread started");
         if (!encoderGlMakeCurrent(session->encoderGlBridge)) {
             LOGE("[CRITICAL] EncoderRotate render thread makeCurrent failed");
@@ -752,7 +755,7 @@ static void startRenderThread(MediaSession *session) {
                     assert(false && "Encoder updateTexImage failed");
                 }
             }
-            usleep(33000);
+            usleep(frameIntervalUs);
         }
         if (session->cameraInputSurfaceTexture) {
             LOGI("[CRITICAL] EncoderRotate render thread: detaching SurfaceTexture");
@@ -760,6 +763,10 @@ static void startRenderThread(MediaSession *session) {
         }
         LOGI("[CRITICAL] EncoderRotate render thread stopped");
     });
+    pthread_t th = session->renderThread.native_handle();
+    sched_param sch_params;
+    sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
+    pthread_setschedparam(th, SCHED_FIFO, &sch_params);
 }
 
 static void stopRenderThread(MediaSession *session) {
