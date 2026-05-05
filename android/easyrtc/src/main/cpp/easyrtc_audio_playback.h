@@ -34,6 +34,7 @@ struct AudioPlaybackPipeline {
     bool lack_of_pcm_ = false;
     float currentSpeed = 1.0f;
     int64_t playedFrames = 0;
+    std::mutex streamMutex;
     std::mutex mutex_;
 };
 

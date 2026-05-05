@@ -12,6 +12,8 @@
 
 #define OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS 200.0f
 
+static int ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline);
+
 static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
                                                       void *userData,
                                                       void *audioData,
@@ -98,19 +100,20 @@ static void playbackErrorCallback(AAudioStream *stream, void *userData,
   //  AAudio playback error: -899 when setSpeakerphoneOn
   if (error == AAUDIO_ERROR_DISCONNECTED) {
     LOGW("[AUDIO] AAudio playback stream disconnected");
-    // restart, just release, will start again when new frames come in
     auto *pipeline = static_cast<AudioPlaybackPipeline *>(userData);
+    if (!pipeline) {
+      return;
+    }
 
-    std::thread myThread([pipeline, stream]() {
+    pipeline->playing.store(false);
+
+    std::thread myThread([pipeline]() {
+      std::lock_guard<std::mutex> lock(pipeline->streamMutex);
       if (pipeline->stream) {
         AAudioStream_requestStop(pipeline->stream);
         AAudioStream_close(pipeline->stream);
         pipeline->stream = nullptr;
       }
-
-      pipeline->stopped.store(true);
-      pipeline->playing.store(false);
-      LOGI("[AUDIO] AudioPlaybackClose: DONE");
     });
     myThread.detach(); // Don't wait for the thread to finish.
     return;
@@ -121,8 +124,16 @@ static void playbackErrorCallback(AAudioStream *stream, void *userData,
 
 static int
 ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
-  if (pipeline->stream)
-    return 0;
+  if (!pipeline || pipeline->stopped.load()) {
+    return -1;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(pipeline->streamMutex);
+    if (pipeline->stream) {
+      return 0;
+    }
+  }
 
   LOGI("[AUDIO] AudioPlaybackOpen: %dHz %dch",
        AudioPlaybackPipeline::SAMPLE_RATE,
@@ -160,8 +171,17 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
     return -1;
   }
 
-  pipeline->stream = stream;
-  pipeline->stopped.store(false);
+  {
+    std::lock_guard<std::mutex> lock(pipeline->streamMutex);
+    if (pipeline->stream) {
+      AAudioStream_requestStop(stream);
+      AAudioStream_close(stream);
+      return 0;
+    }
+    pipeline->stream = stream;
+    pipeline->stopped.store(false);
+    pipeline->lack_of_pcm_ = false;
+  }
 
   result = AAudioStream_requestStart(stream);
   if (result != AAUDIO_OK) {
@@ -260,10 +280,15 @@ void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   pipeline->stopped.store(true);
   pipeline->playing.store(false);
 
-  if (pipeline->stream) {
-    AAudioStream_requestStop(pipeline->stream);
-    AAudioStream_close(pipeline->stream);
+  AAudioStream* stream = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(pipeline->streamMutex);
+    stream = pipeline->stream;
     pipeline->stream = nullptr;
+  }
+  if (stream) {
+    AAudioStream_requestStop(stream);
+    AAudioStream_close(stream);
   }
   LOGI("[AUDIO] AudioPlaybackClose: DONE");
 }
