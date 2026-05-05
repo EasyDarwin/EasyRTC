@@ -43,7 +43,7 @@ struct VideoDecoderPipeline {
 
   static constexpr int MAX_ERROR_COUNT = 5;
   static constexpr size_t MAX_QUEUE_SIZE = 30;
-  static constexpr int64_t DEQUEUE_TIMEOUT_US = 10000;
+  static constexpr int64_t DEQUEUE_TIMEOUT_US = 1000;
 
   VideoDecoderPipeline() = default;
   ~VideoDecoderPipeline() {
