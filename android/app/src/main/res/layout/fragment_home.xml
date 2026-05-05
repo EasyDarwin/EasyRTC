@@ -33,6 +33,16 @@
                 android:id="@+id/smallVideoView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_gravity="bottom"
+                android:layout_margin="8dp"
+                android:ellipsize="start"
+                android:maxLines="2"
+                android:textColor="@color/white"
+                android:textSize="10sp"
+                android:id="@+id/media_bandwidth"
+                android:layout_height="wrap_content"></TextView>
 
         </FrameLayout>
 

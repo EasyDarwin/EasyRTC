@@ -11,6 +11,7 @@
 #include <android/surface_texture_jni.h>
 #include <cassert>
 #include <chrono>
+#include <media/NdkMediaFormat.h>
 #include <unistd.h>
 #include <jni.h>
 #include <cstring>
@@ -600,6 +601,11 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, encoderWidth);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, encoderHeight);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, bitrate);
+//    public static final int BITRATE_MODE_CBR = 2;
+//    public static final int BITRATE_MODE_CBR_FD = 3;
+//    public static final int BITRATE_MODE_CQ = 0;
+//    public static final int BITRATE_MODE_VBR = 1;
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BITRATE_MODE, 2);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, fps);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, iframeInterval);
     AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, COLOR_FormatSurface);

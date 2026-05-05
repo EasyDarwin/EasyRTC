@@ -77,6 +77,7 @@
         <item>2048</item>
         <item>1024</item>
         <item>512</item>
+        <item>256</item>
     </string-array>
 
     <string-array name="audiocodearr">

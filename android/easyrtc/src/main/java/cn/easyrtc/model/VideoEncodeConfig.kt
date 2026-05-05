@@ -11,7 +11,7 @@ data class VideoEncodeConfig(
     private val resolution: Size = Size(1280, 720),
     private val orientation: Int = ORIENTATION_0, //是否旋转
     private val bitRate: Int = 500_000,
-    private val iFrameInterval: Int = 1,
+    private val iFrameInterval: Int = 10,
 ) {
 
     // 验证参数的有效性

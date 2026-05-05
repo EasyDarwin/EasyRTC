@@ -158,7 +158,8 @@ class SPUtil private constructor(context: Context) {
             1 -> 2048
             2 -> 1024
             3 -> 512
-            else -> 1024 // 默认值
+            4 -> 256
+            else -> 512 // 默认值
         } * 1024
     }
 

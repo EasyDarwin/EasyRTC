@@ -72,6 +72,7 @@ class MediaSession {
     }
 
     fun setConnectState(state: Int) {
+        if (nativePtr == 0L) return;
         nativeSetState(nativePtr, state);
     }
 
@@ -91,6 +92,7 @@ class MediaSession {
     }
 
     fun requestKeyFrame() {
+        if (nativePtr == 0L) return;
         nativeRequestKeyFrame(nativePtr)
     }
 

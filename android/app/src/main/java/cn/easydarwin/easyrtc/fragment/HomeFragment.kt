@@ -80,6 +80,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     private val liveSessionController = LiveSessionController()
     private var activeSessionUser: String? = null
 
+    private var bandwidthTV: TextView? = null
+
     private lateinit var session: MediaSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,13 +90,15 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
             create()
             setDeviceId(SPUtil.getInstance().rtcUserUUID)
             setInputKbpsStatsListener { stats ->
-                appendLog2(String.format(
-                    Locale.getDefault(),
-                    "[STAT] 输入码率: video=%.2f kbps audio=%.2f kbps total=%.2f kbps",
-                    stats.videoKbps,
-                    stats.audioKbps,
-                    stats.totalKbps
-                ))
+                runOnMainThread {
+                    bandwidthTV?.text = String.format(
+                        Locale.getDefault(),
+                        "v:%.2f kbps\na:%.2f kbps",
+                        stats.videoKbps,
+                        stats.audioKbps,
+                        stats.totalKbps
+                    )
+                }
             }
         }
     }
@@ -197,6 +201,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         endCallButton = view.findViewById(R.id.endCallButton)
         switchCameraButton = view.findViewById(R.id.switchCameraButton)
         speakerButton = view.findViewById(R.id.speakerButton)
+        bandwidthTV = view.findViewById(R.id.media_bandwidth)
 
         endCallButton.visibility = View.GONE
 
