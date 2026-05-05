@@ -29,12 +29,7 @@ namespace {
 static void notifyInputKbpsStats(MediaSession *session,
                                  double videoKbps,
                                  double audioKbps,
-                                 double totalKbps,
-                                 int codecId,
-                                 int fps,
-                                 int bps,
-                                 int width,
-                                 int height) {
+                                 double totalKbps) {
     if (!session || !session->jvm || !session->javaObj) {
         return;
     }
@@ -53,17 +48,12 @@ static void notifyInputKbpsStats(MediaSession *session,
 
     jclass clazz = env->GetObjectClass(session->javaObj);
     if (clazz) {
-        jmethodID mid = env->GetMethodID(clazz, "onInputKbpsStats", "(DDDIIIII)V");
+        jmethodID mid = env->GetMethodID(clazz, "onInputKbpsStats", "(DDD)V");
         if (mid) {
             env->CallVoidMethod(session->javaObj, mid,
                                 static_cast<jdouble>(videoKbps),
                                 static_cast<jdouble>(audioKbps),
-                                static_cast<jdouble>(totalKbps),
-                                static_cast<jint>(codecId),
-                                static_cast<jint>(fps),
-                                static_cast<jint>(bps),
-                                static_cast<jint>(width),
-                                static_cast<jint>(height));
+                                static_cast<jdouble>(totalKbps));
         }
     }
 
@@ -114,21 +104,7 @@ static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes
     session->mediaInputAudioKbpsX100.store(static_cast<uint32_t>(audioKbps * 100.0), std::memory_order_relaxed);
     session->mediaInputTotalKbpsX100.store(static_cast<uint32_t>(totalKbps * 100.0), std::memory_order_relaxed);
 
-    int codecId = session->videoCodec;
-    int fps = 0;
-    int bps = 0;
-    int width = 0;
-    int height = 0;
-    auto p = session->videoEncoder;
-    if (p) {
-        fps = p->fps;
-        bps = p->bitrate;
-        width = p->width;
-        height = p->height;
-    }
-
-    notifyInputKbpsStats(session, videoKbps, audioKbps, totalKbps,
-                         codecId, fps, bps, width, height);
+    notifyInputKbpsStats(session, videoKbps, audioKbps, totalKbps);
 }
 
 static void releaseCaptureSession(MediaSession *s) {
