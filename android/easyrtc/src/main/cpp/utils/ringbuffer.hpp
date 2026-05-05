@@ -69,6 +69,7 @@ public:
       tail = (tail + 1) & mask_;
       count++;
     }
+    callback(nullptr); // indicate end of check
   }
 
   size_t size() const {

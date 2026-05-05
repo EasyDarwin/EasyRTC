@@ -14,7 +14,7 @@ struct FrameDumpWriter {
 };
 
 void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec);
-void frameDumpWrite(FrameDumpWriter* writer, uint32_t kind, const uint8_t* data, uint32_t size, int64_t ptsUs, uint32_t flags);
+void frameDumpWrite(FrameDumpWriter* writer, uint32_t kind, const uint8_t* data, uint32_t size, uint32_t flags);
 void frameDumpClose(FrameDumpWriter* writer);
 
 #endif

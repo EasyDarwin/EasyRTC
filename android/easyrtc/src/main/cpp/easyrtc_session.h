@@ -16,6 +16,18 @@
 
 #include <jni.h>
 
+#if 0
+    // 100ns = 0.1us, so *10 to get microseconds
+    // frame->presentationTs * 10 / 90000 => microseconds, so, presentationTs/9000=> milliseconds
+    #define VIDEO_PTS_TO_US(presentationTs) (static_cast<int64_t>(presentationTs) / 9000)
+    #define AUDIO_SAMPLES_TO_US(SAMPLES, sampleRate) (static_cast<int64_t>(SAMPLES) * 1000000 / (sampleRate))
+#else
+    // the unit should be 100us!!!
+    // so, presentationTs*100/90000 => microseconds
+    #define VIDEO_PTS_TO_US(presentationTs) (static_cast<int64_t>(presentationTs) / 900)
+    #define AUDIO_PTS_TO_US(presentationTs, sampleRate) (static_cast<int64_t>(presentationTs) * 100 / sampleRate)
+    #define AUDIO_SAMPLES_TO_US(SAMPLES, sampleRate) (static_cast<int64_t>(SAMPLES) * 1000000 / (sampleRate))
+#endif
 struct AudioPlaybackPipeline;
 struct VideoDecoderPipeline;
 struct AudioCapturePipeline;

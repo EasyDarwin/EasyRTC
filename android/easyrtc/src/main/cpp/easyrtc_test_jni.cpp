@@ -1,3 +1,4 @@
+#include "EasyRTCAPI.h"
 #include "easyrtc_video_decoder.h"
 #include "easyrtc_audio_playback.h"
 #include "easyrtc_audio_decoder.h"
@@ -52,9 +53,18 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
         }
         if (f.data.empty()) continue;
         if (f.kind == 0) {
-            videoDecoderEnqueueFrame(decoder, f.data.data(), static_cast<int32_t>(f.data.size()), f.ptsUs, f.flags);
+            EasyRTC_Frame frame;
+            frame.frameData = f.data.data();
+            frame.size = static_cast<int32_t>(f.data.size());
+            frame.presentationTs = f.ptsUs * 10; // convert back to 100ns ticks
+            frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(f.flags);
+            videoDecoderEnqueueFrame(decoder, &frame);
         } else if (f.kind == 1) {
-            audioPlaybackEnqueueFrame(audioPlayback, f.data.data(), static_cast<int32_t>(f.data.size()));
+            EasyRTC_Frame frame;
+            frame.frameData = f.data.data();
+            frame.size = static_cast<int32_t>(f.data.size());
+            frame.presentationTs = f.ptsUs * 10; // convert back to 100ns ticks
+            audioPlaybackEnqueueFrame(audioPlayback, &frame);
         }
     }
 

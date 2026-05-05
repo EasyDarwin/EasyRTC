@@ -298,7 +298,7 @@ static int mediaTransceiverCallback(void *userPtr,
                     const uint64_t totalBytes = gVideoCbBytes.load();
                     const uint64_t annexBCount = gVideoCbAnnexB.load();
                     const uint64_t avccCount = gVideoCbAvcc.load();
-                    LOGD("VIDEO_CB idx=%llu codec=%d size=%u nal=%d fmt=%s pts=%llu dec=%p b0=%02X b1=%02X b2=%02X b3=%02X avg=%llu annexb=%llu avcc=%llu",
+                    LOGD("VIDEO_CB idx=%lld codec=%d size=%u nal=%d fmt=%s pts=%lld dec=%p b0=%02X b1=%02X b2=%02X b3=%02X avg=%llu annexb=%llu avcc=%llu",
                          static_cast<unsigned long long>(idx),
                          codecID,
                          n,
@@ -314,17 +314,10 @@ static int mediaTransceiverCallback(void *userPtr,
                          static_cast<unsigned long long>(annexBCount),
                          static_cast<unsigned long long>(avccCount));
                 }
-
-                // EasyRTC timestamps are 100ns ticks; convert to microseconds for decoder queue.
-                const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
-                               frame->size, ptsUs, frame->flags);
+                               frame->size, frame->flags);
                 updateMediaInputKbpsStats(session, n, 0);
-                videoDecoderEnqueueFrame(session->videoDecoder,
-                                         frame->frameData,
-                                         static_cast<int32_t>(frame->size),
-                                         ptsUs,
-                                         static_cast<uint32_t>(frame->flags));
+                videoDecoderEnqueueFrame(session->videoDecoder, frame);
             } else {
                 LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d",
                      session->videoDecoder ? session->videoDecoder.get() : nullptr,
@@ -335,18 +328,19 @@ static int mediaTransceiverCallback(void *userPtr,
             }
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_AUDIO_FRAME:
+            FLOGI("AUDIO_CB codec=%d size=%u pts=%lld", codecID,
+                 frame ? frame->size : 0,
+                 static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
 //            LOGD("mediaTransceiverCallback AUDIO codec=%d size=%u pts=%llu", codecID,
 //                    frame ? frame->size : 0,
 //                    static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
-                int64_t audioPtsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData,
-                               frame->size, audioPtsUs, frame->flags);
+                               frame->size, frame->flags);
                 updateMediaInputKbpsStats(session, 0, frame->size);
-                audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData,
-                                          static_cast<int32_t>(frame->size), audioPtsUs);
+                audioPlaybackEnqueueFrame(session->audioPlayback, frame);
                 if (session->videoDecoder) {
-                    session->videoDecoder->audio_master_clock_us = estimateAudioMasterClockUs(session->audioPlayback);
+                    session->videoDecoder->audio_master_clock_us_from_begining_to_now = estimateAudioMasterClockUs(session->audioPlayback);
                 }
             }
             break;

@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <atomic>
 #include <chrono>
+#include "easyrtc_session.h"
 
 namespace {
 std::atomic<uint64_t> gDecQueued{0};
@@ -186,13 +187,12 @@ static void* decodeThreadFunc(void* arg) {
                 }
 
                 int64_t ptsUs = bufferInfo.presentationTimeUs - firstPtsUs;
-                FLOGI("VIDEO PKT OUT process:%lldms, audio master clock process:%lldms, delta:%lldms", ptsUs/1000, pipeline->audio_master_clock_us/1000, (ptsUs - pipeline->audio_master_clock_us)/1000);
-                int64_t nowUs = getMonoUs();
-                int64_t elapsedUs = nowUs - firstSystemUs;
-                int64_t sleepUs = ptsUs - elapsedUs;
+                const auto delta_us_to_master = (ptsUs - pipeline->audio_master_clock_us_from_begining_to_now);
+                FLOGI("VIDEO PKT OUT process:%lldms, audio master clock process:%lldms, delta:%lldms", ptsUs/1000, pipeline->audio_master_clock_us_from_begining_to_now/1000, delta_us_to_master/1000);
+                int64_t sleepUs = delta_us_to_master - 3000;
 
                 if (sleepUs > 0 ) {
-//                    std::this_thread::sleep_for(std::chrono::microseconds(sleepUs));
+                   std::this_thread::sleep_for(std::chrono::microseconds(sleepUs));
                 }
 
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
@@ -205,7 +205,7 @@ static void* decodeThreadFunc(void* arg) {
                          static_cast<unsigned long long>(r),
                          bufferInfo.size,
                          static_cast<long long>(bufferInfo.presentationTimeUs),
-                         static_cast<long long>(sleepUs > 0 ? sleepUs : 0),
+                         static_cast<long long>(sleepUs),
                          bufferInfo.flags, enqueued);
                 }
                 return true;
@@ -293,6 +293,7 @@ static void* decodeThreadFunc(void* arg) {
         if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
             bool hasKeyInside = false;
             pipeline->frameQueue.check([&](const Packet* p) {
+                if(!p) return false;
                 if (p->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
                     hasKeyInside = true;
                     return true;
@@ -343,7 +344,12 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
     return 0;
 }
 
-void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags) {
+void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, const EasyRTC_Frame* frame) {
+    // const uint8_t* data, int32_t size, int64_t ptsUs, uint32_t frameFlags
+    const uint8_t* data = frame->frameData;
+    int32_t size = frame->size;
+    int64_t ptsUs = VIDEO_PTS_TO_US(frame->presentationTs);
+    uint32_t frameFlags = frame->flags;
     if (!pipeline || !pipeline->running.load() || pipeline->destroyed.load() || size <= 0) return;
     Packet *slot = pipeline->frameQueue.acquirePush();
     if (!slot) {
@@ -359,7 +365,14 @@ void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, co
     {
         static int64_t __idx = 0;
         if (__idx++ % 300 == 0) {
-            LOGD("VIDEO PKG IN pts:%llums, in packet caches:%llu", ptsUs/1000, pipeline->frameQueue.size());
+            int64_t firstUs{}, lastUs{};
+            pipeline->frameQueue.check([&](const Packet*pkt){
+                if (!pkt) return false;
+                if (firstUs == 0) firstUs = pkt->ptsUs;
+                lastUs = pkt->ptsUs;
+                return false;
+            });
+            LOGD("VIDEO PKG IN pts:%llums, in packet caches:%llu/%llums", ptsUs/1000, pipeline->frameQueue.size(), (lastUs - firstUs)/1000);
         }
     }
 }

@@ -1,4 +1,5 @@
 #include "easyrtc_audio_playback.h"
+#include "easyrtc_session.h"
 #include "easyrtc_common.h"
 #include "sonic.h"
 #include <aaudio/AAudio.h>
@@ -228,14 +229,16 @@ double calcSpeed(double delta_ms) {
 }
 
 void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
-                               const uint8_t *data, int32_t size) {
+                               const EasyRTC_Frame*frame) {
+  const uint8_t *data = frame->frameData;
+  int32_t size = frame->size;
   if (!pipeline || pipeline->stopped.load() || size <= 0)
     return;
-
   std::vector<int16_t> pcm =
       audioDecoderDecode(pipeline->audioDecoder, data, size);
   if (pcm.empty())
     return;
+  const auto ptsUs = AUDIO_SAMPLES_TO_US(pipeline->playedFrames, AudioPlaybackPipeline::SAMPLE_RATE);
   pipeline->playedFrames += pcm.size() / AudioPlaybackPipeline::CHANNEL_COUNT;
   if (!pipeline->playing.load()) {
     LOGI("[AUDIO] AudioPlaybackEnqueueFrame: not playing, trying to start stream");
@@ -267,8 +270,8 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
       sonicWriteShortToStream(pipeline->sonicStream.get(), pcm.data(), samples);
   int buffered = sonicSamplesAvailable(pipeline->sonicStream.get());
   FLOGI("[AUDIO] SonicEnqueue: wrote samples=%d buffered samples=%d "
-           "speed=%.2f",
-           samples, buffered, pipeline->currentSpeed)
+           "speed=%.2f, sampleUs:%lld",
+           samples, buffered, pipeline->currentSpeed, ptsUs);
 }
 
 void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
@@ -291,4 +294,12 @@ void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
     AAudioStream_close(stream);
   }
   LOGI("[AUDIO] AudioPlaybackClose: DONE");
+}
+
+int64_t estimateAudioMasterClockUs(std::shared_ptr<AudioPlaybackPipeline> pipeline)
+{
+  if (!pipeline) {
+    return -1;
+  }
+  return AUDIO_SAMPLES_TO_US(pipeline->playedFrames - sonicSamplesAvailable(pipeline->sonicStream.get()), AudioPlaybackPipeline::SAMPLE_RATE);
 }

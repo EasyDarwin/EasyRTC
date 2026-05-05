@@ -39,7 +39,7 @@ struct VideoDecoderPipeline {
   std::vector<uint8_t> csd0;
   std::vector<uint8_t> csd1;
 
-  int64_t audio_master_clock_us = 0;
+  int64_t audio_master_clock_us_from_begining_to_now = 0;
 
   static constexpr int MAX_ERROR_COUNT = 5;
   static constexpr size_t MAX_QUEUE_SIZE = 30;
@@ -62,9 +62,7 @@ struct VideoDecoderPipeline {
 std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow *surface, int codecType,
                                          int width, int height);
 int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline);
-void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline,
-                              const uint8_t *data, int32_t size, int64_t ptsUs,
-                              uint32_t frameFlags);
+void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, const EasyRTC_Frame*);
 void videoDecoderRelease(std::shared_ptr<VideoDecoderPipeline> pipeline);
 
 #endif
