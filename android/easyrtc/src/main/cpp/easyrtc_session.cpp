@@ -26,6 +26,111 @@ namespace {
 
 }
 
+static void notifyInputKbpsStats(MediaSession *session,
+                                 double videoKbps,
+                                 double audioKbps,
+                                 double totalKbps,
+                                 int codecId,
+                                 int fps,
+                                 int bps,
+                                 int width,
+                                 int height) {
+    if (!session || !session->jvm || !session->javaObj) {
+        return;
+    }
+
+    JNIEnv *env = nullptr;
+    bool attached = false;
+    int ret = session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+    if (ret != JNI_OK) {
+        if (session->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) {
+            attached = true;
+        } else {
+            LOGW("notifyInputKbpsStats: failed to attach thread to JVM");
+            return;
+        }
+    }
+
+    jclass clazz = env->GetObjectClass(session->javaObj);
+    if (clazz) {
+        jmethodID mid = env->GetMethodID(clazz, "onInputKbpsStats", "(DDDIIIII)V");
+        if (mid) {
+            env->CallVoidMethod(session->javaObj, mid,
+                                static_cast<jdouble>(videoKbps),
+                                static_cast<jdouble>(audioKbps),
+                                static_cast<jdouble>(totalKbps),
+                                static_cast<jint>(codecId),
+                                static_cast<jint>(fps),
+                                static_cast<jint>(bps),
+                                static_cast<jint>(width),
+                                static_cast<jint>(height));
+        }
+    }
+
+    if (attached) {
+        session->jvm->DetachCurrentThread();
+    }
+}
+
+static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes, uint32_t audioBytes) {
+    if (!session) {
+        return;
+    }
+    if (videoBytes > 0) {
+        session->mediaInputVideoBytesWindow.fetch_add(videoBytes, std::memory_order_relaxed);
+    }
+    if (audioBytes > 0) {
+        session->mediaInputAudioBytesWindow.fetch_add(audioBytes, std::memory_order_relaxed);
+    }
+
+    const int64_t nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    int64_t lastNs = session->mediaInputLastReportNs.load(std::memory_order_relaxed);
+    if (lastNs == 0) {
+        session->mediaInputLastReportNs.compare_exchange_strong(lastNs, nowNs, std::memory_order_relaxed);
+        return;
+    }
+    const int64_t durationNs = nowNs - lastNs;
+    constexpr int64_t kReportIntervalNs = 1000LL * 1000LL * 1000LL;
+    if (durationNs < kReportIntervalNs) {
+        return;
+    }
+    if (!session->mediaInputLastReportNs.compare_exchange_strong(lastNs, nowNs, std::memory_order_relaxed)) {
+        return;
+    }
+
+    const uint64_t videoWindowBytes = session->mediaInputVideoBytesWindow.exchange(0, std::memory_order_relaxed);
+    const uint64_t audioWindowBytes = session->mediaInputAudioBytesWindow.exchange(0, std::memory_order_relaxed);
+    const double elapsedSec = static_cast<double>(durationNs) / 1e9;
+    if (elapsedSec <= 0.0) {
+        return;
+    }
+
+    const double videoKbps = static_cast<double>(videoWindowBytes) * 8.0 / 1000.0 / elapsedSec;
+    const double audioKbps = static_cast<double>(audioWindowBytes) * 8.0 / 1000.0 / elapsedSec;
+    const double totalKbps = videoKbps + audioKbps;
+
+    session->mediaInputVideoKbpsX100.store(static_cast<uint32_t>(videoKbps * 100.0), std::memory_order_relaxed);
+    session->mediaInputAudioKbpsX100.store(static_cast<uint32_t>(audioKbps * 100.0), std::memory_order_relaxed);
+    session->mediaInputTotalKbpsX100.store(static_cast<uint32_t>(totalKbps * 100.0), std::memory_order_relaxed);
+
+    int codecId = session->videoCodec;
+    int fps = 0;
+    int bps = 0;
+    int width = 0;
+    int height = 0;
+    auto p = session->videoEncoder;
+    if (p) {
+        fps = p->fps;
+        bps = p->bitrate;
+        width = p->width;
+        height = p->height;
+    }
+
+    notifyInputKbpsStats(session, videoKbps, audioKbps, totalKbps,
+                         codecId, fps, bps, width, height);
+}
+
 static void releaseCaptureSession(MediaSession *s) {
     LOGI("[CRITICAL] releaseCaptureSession ENTRY: s=%p", s);
     if (s->captureSession) {
@@ -237,6 +342,7 @@ static int mediaTransceiverCallback(void *userPtr,
                 const int64_t ptsUs = static_cast<int64_t>(frame->presentationTs / 1000);
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
                                frame->size, ptsUs, frame->flags);
+                updateMediaInputKbpsStats(session, n, 0);
                 videoDecoderEnqueueFrame(session->videoDecoder,
                                          frame->frameData,
                                          static_cast<int32_t>(frame->size),
@@ -259,6 +365,7 @@ static int mediaTransceiverCallback(void *userPtr,
                 int64_t audioPtsUs = static_cast<int64_t>(frame->presentationTs / 10ULL);
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData,
                                frame->size, audioPtsUs, frame->flags);
+                updateMediaInputKbpsStats(session, 0, frame->size);
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame->frameData,
                                           static_cast<int32_t>(frame->size));
                 if (session->videoDecoder) {
@@ -763,10 +870,19 @@ Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv *env, jobject thiz, jl
 
     LOGI("[CRITICAL] StartRecv: creating audio playback and video decoder codec=%d", session->videoCodec);
 
-    session->audioPlayback = audioPlaybackCreate(5);
+    session->audioPlayback = audioPlaybackCreate(session->audioCodec);
 
-    session->videoDecoder = videoDecoderCreate(session->decoderSurface, session->videoCodec, 720,
-                                               1280);
+    int decoderWidth = 720;
+    int decoderHeight = 1280;
+    if (session->videoEncoder) {
+        decoderWidth = session->videoEncoder->width;
+        decoderHeight = session->videoEncoder->height;
+    }
+
+    session->videoDecoder = videoDecoderCreate(session->decoderSurface,
+                                               session->videoCodec,
+                                               decoderWidth,
+                                               decoderHeight);
     if (!session->videoDecoder) {
         LOGE("[CRITICAL] StartRecv: videoDecoderCreate FAILED");
         return;

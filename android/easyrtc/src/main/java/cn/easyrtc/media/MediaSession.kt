@@ -8,7 +8,18 @@ import cn.easyrtc.model.VideoEncodeConfig
 
 class MediaSession {
 
+    data class InputKbpsStats(
+        val videoKbps: Double,
+        val audioKbps: Double,
+        val totalKbps: Double,
+    )
+
     private var nativePtr: Long = 0
+    private var inputKbpsStatsListener: ((InputKbpsStats) -> Unit)? = null
+
+    fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
+        inputKbpsStatsListener = listener
+    }
 
     fun create() {
         assert(nativePtr == 0L)
@@ -98,6 +109,11 @@ class MediaSession {
         cn.easyrtc.EasyRTCSdk.notifyRemoteVideoSize(width, height)
     }
 
+    @Keep
+    private fun onInputKbpsStats(videoKbps: Double, audioKbps: Double, totalKbps: Double) {
+        inputKbpsStatsListener?.invoke(InputKbpsStats(videoKbps, audioKbps, totalKbps))
+    }
+
     private external fun nativeCreate(): Long
     private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
     private external fun nativeStopPreview(sessionPtr: Long)
@@ -130,7 +146,6 @@ class MediaSession {
     private external fun nativeStopRecv(sessionPtr: Long)
     private external fun nativeSwitchCamera(sessionPtr: Long)
     private external fun nativeRequestKeyFrame(sessionPtr: Long)
-
     private external fun nativeRelease(sessionPtr: Long)
 
     companion object {

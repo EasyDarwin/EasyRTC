@@ -87,10 +87,20 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         session = MediaSession().apply{
             create()
             setDeviceId(SPUtil.getInstance().rtcUserUUID)
+            setInputKbpsStatsListener { stats ->
+                appendLog2(String.format(
+                    Locale.getDefault(),
+                    "[STAT] 输入码率: video=%.2f kbps audio=%.2f kbps total=%.2f kbps",
+                    stats.videoKbps,
+                    stats.audioKbps,
+                    stats.totalKbps
+                ))
+            }
         }
     }
 
     override fun onDestroy() {
+        session.setInputKbpsStatsListener(null)
         session.release()
         super.onDestroy()
     }

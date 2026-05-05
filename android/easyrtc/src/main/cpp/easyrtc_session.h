@@ -68,6 +68,13 @@ struct MediaSession {
     std::thread renderThread;
     FrameDumpWriter frameDump;
 
+    std::atomic<uint64_t> mediaInputVideoBytesWindow{0};
+    std::atomic<uint64_t> mediaInputAudioBytesWindow{0};
+    std::atomic<int64_t> mediaInputLastReportNs{0};
+    std::atomic<uint32_t> mediaInputVideoKbpsX100{0};
+    std::atomic<uint32_t> mediaInputAudioKbpsX100{0};
+    std::atomic<uint32_t> mediaInputTotalKbpsX100{0};
+
     int connectState{};
     std::string deviceId;
 };
