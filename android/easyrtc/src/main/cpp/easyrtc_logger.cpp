@@ -1,6 +1,9 @@
 #include "easyrtc_logger.h"
 
 #include <android/log.h>
+#include <spdlog/async.h>
+#include <spdlog/async_logger.h>
+#include <spdlog/details/thread_pool.h>
 #include <spdlog/logger.h>
 #include <spdlog/sinks/android_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
@@ -13,8 +16,18 @@
 #include <unistd.h>
 
 namespace {
-constexpr size_t kRotateBytes = 5 * 1024 * 1024;
+constexpr size_t kRotateBytes = 20 * 1024 * 1024;
 constexpr size_t kRotateFiles = 2;
+constexpr size_t kAsyncQueueSize = 8192;
+constexpr size_t kAsyncWorkerThreads = 1;
+
+std::shared_ptr<spdlog::details::thread_pool> get_thread_pool() {
+    static std::shared_ptr<spdlog::details::thread_pool> tp = []() {
+        spdlog::init_thread_pool(kAsyncQueueSize, kAsyncWorkerThreads);
+        return spdlog::thread_pool();
+    }();
+    return tp;
+}
 
 std::string log_dir() {
     static std::string dumpDir;
@@ -66,7 +79,12 @@ std::shared_ptr<spdlog::logger> create_logger() {
         }
     }
 
-    auto logger = std::make_shared<spdlog::logger>("easyrtc_native", sinks.begin(), sinks.end());
+    auto logger = std::make_shared<spdlog::async_logger>(
+        "easyrtc_native",
+        sinks.begin(),
+        sinks.end(),
+        get_thread_pool(),
+        spdlog::async_overflow_policy::block);
     logger->set_level(spdlog::level::trace);
     logger->flush_on(spdlog::level::info);
     return logger;
