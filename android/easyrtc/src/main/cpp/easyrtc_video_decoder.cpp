@@ -256,7 +256,7 @@ static void* decodeThreadFunc(void* arg) {
                 return true;
             }
         } else {
-            LOGW("Dropping non-key frame since decoder is not initialized, pts=%lld", static_cast<long long>(packet->ptsUs));
+            FLOGI("Dropping non-key frame since decoder is not initialized, pts=%lld", static_cast<long long>(packet->ptsUs));
         }
         return false;
     };

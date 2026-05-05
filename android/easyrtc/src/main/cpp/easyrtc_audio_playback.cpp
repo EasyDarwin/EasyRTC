@@ -218,6 +218,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
     return;
   pipeline->playedFrames += pcm.size() / AudioPlaybackPipeline::CHANNEL_COUNT;
   if (!pipeline->playing.load()) {
+    LOGI("[AUDIO] AudioPlaybackEnqueueFrame: not playing, trying to start stream");
     ensureStreamCreated(pipeline);
   }
 
@@ -244,16 +245,10 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
   int samples = static_cast<int>(pcm.size());
   int written =
       sonicWriteShortToStream(pipeline->sonicStream.get(), pcm.data(), samples);
-  {
-    // loging every 500 frames to avoid flooding the logcat
-    static int64_t __idx = 0;
-    if (__idx++ % 500 == 0) {
-      int buffered = sonicSamplesAvailable(pipeline->sonicStream.get());
-      LOGI("[AUDIO] SonicEnqueue: wrote samples=%d buffered samples=%d "
+  int buffered = sonicSamplesAvailable(pipeline->sonicStream.get());
+  FLOGI("[AUDIO] SonicEnqueue: wrote samples=%d buffered samples=%d "
            "speed=%.2f",
-           samples, buffered, pipeline->currentSpeed);
-    }
-  }
+           samples, buffered, pipeline->currentSpeed)
 }
 
 void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
