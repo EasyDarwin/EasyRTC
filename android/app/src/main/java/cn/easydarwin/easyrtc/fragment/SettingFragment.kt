@@ -16,7 +16,6 @@ import androidx.fragment.app.Fragment
 import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.repository.LogUploadRepository
 import cn.easydarwin.easyrtc.ui.settings.SettingsValidator
-import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.CommonSpinnerHelper
 import cn.easydarwin.easyrtc.utils.SPUtil
 import kotlinx.coroutines.launch
@@ -223,16 +222,10 @@ class SettingFragment : Fragment() {
     }
 
     private fun reportLogs() {
-        val logText = AppLogStore.text().trim()
-        if (logText.isBlank()) {
-            Toast.makeText(requireContext(), getString(R.string.upload_log_empty), Toast.LENGTH_SHORT).show()
-            return
-        }
-
         uploadLogsItem?.isEnabled = false
         lifecycleScope.launch {
             try {
-                val result = logUploadRepository.uploadLogs(logText)
+                val result = logUploadRepository.uploadLogs(requireContext().getExternalFilesDir(null))
                 if (result.success) {
                     Toast.makeText(requireContext(), getString(R.string.upload_log_success), Toast.LENGTH_SHORT).show()
                 } else {

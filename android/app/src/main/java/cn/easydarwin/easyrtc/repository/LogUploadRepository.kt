@@ -9,6 +9,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
@@ -29,9 +30,24 @@ class LogUploadRepository(
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    suspend fun uploadLogs(logText: String): LogUploadResult = withContext(Dispatchers.IO) {
+    suspend fun uploadLogs(externalFilesDir: File?): LogUploadResult = withContext(Dispatchers.IO) {
         try {
-            val zipBytes = createZipBytes(logText)
+            if (externalFilesDir == null) {
+                return@withContext LogUploadResult(
+                    success = false,
+                    message = "外部日志目录不可用"
+                )
+            }
+
+            val txtFiles = collectTextFiles(externalFilesDir)
+            if (txtFiles.isEmpty()) {
+                return@withContext LogUploadResult(
+                    success = false,
+                    message = "暂无可上传的 txt 文件"
+                )
+            }
+
+            val zipBytes = createZipBytes(externalFilesDir, txtFiles)
             val requestBody = zipBytes.toRequestBody("application/zip".toMediaType())
             val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -66,12 +82,24 @@ class LogUploadRepository(
         }
     }
 
-    private fun createZipBytes(logText: String): ByteArray {
+    private fun collectTextFiles(rootDir: File): List<File> {
+        return rootDir.walkTopDown()
+            .filter { file -> file.isFile && file.extension.equals("txt", ignoreCase = true) }
+            .sortedBy { file -> file.relativeTo(rootDir).path }
+            .toList()
+    }
+
+    private fun createZipBytes(rootDir: File, files: List<File>): ByteArray {
         val buffer = ByteArrayOutputStream()
         ZipOutputStream(buffer).use { zip ->
-            zip.putNextEntry(ZipEntry("local_logs.txt"))
-            zip.write(logText.toByteArray(Charsets.UTF_8))
-            zip.closeEntry()
+            files.forEach { file ->
+                val relativePath = file.relativeTo(rootDir).path.replace(File.separatorChar, '/')
+                zip.putNextEntry(ZipEntry(relativePath))
+                file.inputStream().use { input ->
+                    input.copyTo(zip)
+                }
+                zip.closeEntry()
+            }
         }
         return buffer.toByteArray()
     }

@@ -20,6 +20,7 @@ import com.tencent.bugly.crashreport.CrashReport
 import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
 import cn.easydarwin.easyrtc.ui.hub.EmptyTabFragment
+import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easyrtc.helper.MagicFileHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -57,6 +58,7 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         SPUtil.init(this)
+        AppLogStore.init(this)
         MagicFileHelper.init(this)
 
         setContentView(R.layout.activity_main)
