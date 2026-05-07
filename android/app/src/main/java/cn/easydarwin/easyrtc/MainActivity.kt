@@ -8,6 +8,7 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Bundle
+import androidx.core.view.WindowCompat
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -16,10 +17,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
 import com.tencent.bugly.crashreport.CrashReport
-import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.service.WebSocketService
-import cn.easydarwin.easyrtc.ui.hub.HubFragment
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
+import cn.easydarwin.easyrtc.ui.hub.EmptyTabFragment
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easyrtc.helper.MagicFileHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -37,8 +37,9 @@ class MainActivity : AppCompatActivity() {
         if (event is WebSocketService.Event.IncomingCall) {
             incomingCallLiveData.postValue(event)
             runOnUiThread {
-                if (bottomNavigationView?.selectedItemId != R.id.navigation_live)
-                    bottomNavigationView?.selectedItemId = R.id.navigation_live
+                if (bottomNavigationView?.selectedItemId != R.id.navigation_p2p_call) {
+                    bottomNavigationView?.selectedItemId = R.id.navigation_p2p_call
+                }
             }
         }
     }
@@ -101,18 +102,18 @@ class MainActivity : AppCompatActivity() {
 
         bottomNavigationView?.setOnItemSelectedListener {
             when (it.itemId) {
-                R.id.navigation_hub -> {
-                    switchFragment("hub")
+                R.id.navigation_p2p_call -> {
+                    switchFragment("p2p_call")
                     true
                 }
 
-                R.id.navigation_live -> {
-                    switchFragment("live")
+                R.id.navigation_whip_push -> {
+                    switchFragment("whip_push")
                     true
                 }
 
-                R.id.navigation_setting -> {
-                    switchFragment("setting")
+                R.id.navigation_ip_direct -> {
+                    switchFragment("ip_direct")
                     true
                 }
 
@@ -120,32 +121,37 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        bottomNavigationView?.selectedItemId = R.id.navigation_hub
+        bottomNavigationView?.selectedItemId = R.id.navigation_p2p_call
     }
 
-    fun switchFragment(tag: String) {
+    fun switchFragment(tag: String, commitNow: Boolean = false) {
         val fm = supportFragmentManager
         if (fm.isStateSaved) return
 
         val transaction = fm.beginTransaction()
-        currentFragmentTag = tag
+        try {
 
-        fm.fragments.forEach { transaction.remove(it) }
+            currentFragmentTag = tag
 
-        val exist = fm.findFragmentByTag(tag)
-        if (exist != null) {
-            transaction.show(exist)
-        } else {
-            val fragment = when (tag) {
-                "hub" -> HubFragment()
-                "live" -> LiveFragment.newInstance()
-                "setting" -> SettingFragment()
-                else -> return
+            fm.fragments.forEach { transaction.remove(it) }
+
+            val exist = fm.findFragmentByTag(tag)
+            if (exist != null) {
+                transaction.show(exist)
+            } else {
+                val fragment = when (tag) {
+                    "p2p_call" -> LiveFragment.newInstance()
+                    "whip_push" -> EmptyTabFragment()
+                    "ip_direct" -> EmptyTabFragment()
+                    else -> return
+                }
+                transaction.add(R.id.fragment_container, fragment, tag)
             }
-            transaction.add(R.id.fragment_container, fragment, tag)
-        }
 
-        transaction.commit()
+        }finally {
+            if (commitNow) transaction.commitNow()
+            else transaction.commit()
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -160,7 +166,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Notify live fragment to reinitialize camera after permission grant
                 supportFragmentManager.fragments.forEach {
-                    if (it.tag == "live") {
+                    if (it.tag == "p2p_call") {
                         LiveFragment.notifyPermissionGranted(it)
                     }
                 }

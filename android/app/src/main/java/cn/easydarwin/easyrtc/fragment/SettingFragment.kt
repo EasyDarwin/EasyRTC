@@ -9,13 +9,18 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.view.isVisible
 import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.Fragment
 import cn.easydarwin.easyrtc.R
+import cn.easydarwin.easyrtc.repository.LogUploadRepository
 import cn.easydarwin.easyrtc.ui.settings.SettingsValidator
+import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.CommonSpinnerHelper
 import cn.easydarwin.easyrtc.utils.SPUtil
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 
 class SettingFragment : Fragment() {
 
@@ -36,6 +41,8 @@ class SettingFragment : Fragment() {
 
     // 关于相关视图
     private var tvAppVersion: TextView? = null
+    private var uploadLogsItem: View? = null
+    private val logUploadRepository = LogUploadRepository()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_setting, container, false)
@@ -47,6 +54,7 @@ class SettingFragment : Fragment() {
         initDeviceId()
         initVideoSettings(view)
         initAudioSettings(view)
+        initLogUploadSection(view)
         initAboutSection(view)
     }
 
@@ -188,6 +196,13 @@ class SettingFragment : Fragment() {
         tvAppVersion?.text = getString(R.string.about_version_value, versionName)
     }
 
+    private fun initLogUploadSection(view: View) {
+        uploadLogsItem = view.findViewById(R.id.layout_upload_logs)
+        uploadLogsItem?.setOnClickListener {
+            reportLogs()
+        }
+    }
+
     private fun getAppVersionNameOrUnknown(): String {
         return try {
             val context = requireContext()
@@ -204,6 +219,32 @@ class SettingFragment : Fragment() {
                 ?: getString(R.string.about_version_unknown)
         } catch (_: PackageManager.NameNotFoundException) {
             getString(R.string.about_version_unknown)
+        }
+    }
+
+    private fun reportLogs() {
+        val logText = AppLogStore.text().trim()
+        if (logText.isBlank()) {
+            Toast.makeText(requireContext(), getString(R.string.upload_log_empty), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        uploadLogsItem?.isEnabled = false
+        lifecycleScope.launch {
+            try {
+                val result = logUploadRepository.uploadLogs(logText)
+                if (result.success) {
+                    Toast.makeText(requireContext(), getString(R.string.upload_log_success), Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        requireContext(),
+                        "${getString(R.string.upload_log_failed)}: ${result.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } finally {
+                uploadLogsItem?.isEnabled = true
+            }
         }
     }
 
@@ -230,6 +271,7 @@ class SettingFragment : Fragment() {
         tvAudioChannel = null
         tvAudioRate = null
         tvAppVersion = null
+        uploadLogsItem = null
         Log.d(TAG, "onDestroyView")
     }
 

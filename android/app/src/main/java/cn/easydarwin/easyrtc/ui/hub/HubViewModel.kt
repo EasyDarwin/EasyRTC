@@ -13,7 +13,7 @@ class HubViewModel : ViewModel() {
 
     fun updateUsers(users: List<EasyRTCUser>) {
         _uiState.value = if (users.isEmpty()) {
-            UiState.Empty("No users online")
+            UiState.Empty("")
         } else {
             UiState.Content(users)
         }

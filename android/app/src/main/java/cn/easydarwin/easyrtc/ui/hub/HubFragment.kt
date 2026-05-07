@@ -4,9 +4,11 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.isVisible
+import androidx.core.widget.doOnTextChanged
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.DiffUtil
@@ -29,11 +31,17 @@ class HubFragment : Fragment() {
     private var loadingView: View? = null
     private var stateText: TextView? = null
     private var retryButton: MaterialButton? = null
+    private var filterInput: EditText? = null
+
+    private var currentState: UiState<List<EasyRTCUser>> = UiState.Loading
+    private var currentQuery: String = ""
+    private var allUsers: List<EasyRTCUser> = emptyList()
+
     private val userAdapter = UserCardAdapter { user ->
         val activity = activity as? MainActivity ?: return@UserCardAdapter
         activity.ws?.call(user.uuid)
-        Toast.makeText(requireContext(), "Connecting ${user.username}…", Toast.LENGTH_LONG).show()
-        activity.bottomNavigationView?.selectedItemId = R.id.navigation_live
+        Toast.makeText(requireContext(), getString(R.string.hub_calling_user, user.username), Toast.LENGTH_LONG).show()
+        parentFragmentManager.popBackStack()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -50,26 +58,54 @@ class HubFragment : Fragment() {
             it.adapter = userAdapter
         }
         swipeRefresh = view.findViewById<SwipeRefreshLayout>(R.id.swipeRefreshHub).also {
-            it.setOnRefreshListener {
-                (activity as? MainActivity)?.ws?.getOnlineUsers()
-                it.isRefreshing = false
-            }
+            it.setOnRefreshListener { refreshUsers() }
         }
         loadingView = view.findViewById(R.id.progressHub)
         stateText = view.findViewById(R.id.textHubState)
         retryButton = view.findViewById<MaterialButton>(R.id.buttonHubRetry).also {
-            it.setOnClickListener { viewModel.setLoading() }
+            it.setOnClickListener { refreshUsers() }
+        }
+        filterInput = view.findViewById<EditText>(R.id.etHubFilter).also { input ->
+            input.doOnTextChanged { text, _, _, _ ->
+                currentQuery = text?.toString().orEmpty()
+                renderCurrentState()
+            }
         }
 
-        viewModel.uiState.observe(viewLifecycleOwner, ::renderState)
+        viewModel.uiState.observe(viewLifecycleOwner) { state ->
+            currentState = state
+            when (state) {
+                is UiState.Loading -> {
+                    allUsers = emptyList()
+                }
+                is UiState.Content -> {
+                    allUsers = state.data
+                }
+                is UiState.Empty -> {
+                    allUsers = emptyList()
+                }
+                is UiState.Error -> {
+                    allUsers = emptyList()
+                }
+            }
+            renderCurrentState()
+        }
 
         (activity as? MainActivity)?.webSocketServiceLiveData?.observe(viewLifecycleOwner) { service ->
             service?.events?.observe(viewLifecycleOwner) { event ->
-                if (event is WebSocketService.Event.OnlineUsers) {
-                    viewModel.updateUsers(event.users)
+                when (event) {
+                    is WebSocketService.Event.OnlineUsers -> viewModel.updateUsers(event.users)
+                    else -> Unit
                 }
             }
+            if (service != null) {
+                refreshUsers()
+            } else {
+                viewModel.updateUsers(emptyList())
+            }
         }
+
+        renderCurrentState()
     }
 
     override fun onDestroyView() {
@@ -79,16 +115,23 @@ class HubFragment : Fragment() {
         loadingView = null
         stateText = null
         retryButton = null
+        filterInput = null
         super.onDestroyView()
     }
 
-    private fun renderState(state: UiState<List<EasyRTCUser>>) {
+    private fun refreshUsers() {
+        viewModel.setLoading()
+        (activity as? MainActivity)?.ws?.getOnlineUsers()
+        swipeRefresh?.isRefreshing = false
+    }
+
+    private fun renderCurrentState() {
         val loadingView = loadingView ?: return
         val swipeRefresh = swipeRefresh ?: return
         val stateText = stateText ?: return
         val retryButton = retryButton ?: return
 
-        when (state) {
+        when (val state = currentState) {
             is UiState.Loading -> {
                 loadingView.isVisible = true
                 swipeRefresh.isVisible = false
@@ -99,17 +142,29 @@ class HubFragment : Fragment() {
 
             is UiState.Content -> {
                 loadingView.isVisible = false
-                swipeRefresh.isVisible = true
-                stateText.isVisible = false
                 retryButton.isVisible = false
-                userAdapter.submitList(state.data)
+
+                val filteredUsers = filterUsers(allUsers, currentQuery)
+                if (filteredUsers.isEmpty()) {
+                    swipeRefresh.isVisible = false
+                    stateText.isVisible = true
+                    stateText.text = if (currentQuery.isBlank()) {
+                        getString(R.string.hub_empty)
+                    } else {
+                        getString(R.string.hub_empty_filter)
+                    }
+                } else {
+                    swipeRefresh.isVisible = true
+                    stateText.isVisible = false
+                    userAdapter.submitList(filteredUsers)
+                }
             }
 
             is UiState.Empty -> {
                 loadingView.isVisible = false
                 swipeRefresh.isVisible = false
                 stateText.isVisible = true
-                stateText.text = state.reason
+                stateText.text = state.reason.ifBlank { getString(R.string.hub_empty) }
                 retryButton.isVisible = false
             }
 
@@ -120,6 +175,17 @@ class HubFragment : Fragment() {
                 stateText.text = state.message
                 retryButton.isVisible = true
             }
+        }
+    }
+
+    private fun filterUsers(users: List<EasyRTCUser>, query: String): List<EasyRTCUser> {
+        val keyword = query.trim()
+        if (keyword.isEmpty()) {
+            return users
+        }
+        return users.filter { user ->
+            user.uuid.contains(keyword, ignoreCase = true) ||
+                user.username.contains(keyword, ignoreCase = true)
         }
     }
 }

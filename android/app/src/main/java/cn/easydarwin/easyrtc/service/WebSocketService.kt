@@ -97,6 +97,10 @@ class WebSocketService : Service() {
         manager.call(uuid)
     }
 
+    fun hangup() {
+        EasyRTCSdk.release()
+    }
+
     fun sendOfferSDP(sdp: String, isOffer: Boolean) {
         manager.sendOfferSDP(sdp, isOffer)
     }

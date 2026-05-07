@@ -17,6 +17,24 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <EditText
+        android:id="@+id/etHubFilter"
+        android:layout_width="0dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/underline"
+        android:hint="@string/hub_filter_hint"
+        android:imeOptions="actionSearch"
+        android:inputType="text"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textColor="@color/color_1a1a1a"
+        android:textColorHint="@color/color_9aa0ac"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/textHubTitle" />
+
     <ProgressBar
         android:id="@+id/progressHub"
         android:layout_width="wrap_content"
@@ -24,7 +42,7 @@
         android:layout_marginTop="24dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/textHubTitle" />
+        app:layout_constraintTop_toBottomOf="@id/etHubFilter" />
 
     <TextView
         android:id="@+id/textHubState"
@@ -58,7 +76,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/textHubTitle">
+        app:layout_constraintTop_toBottomOf="@id/etHubFilter">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerHub"

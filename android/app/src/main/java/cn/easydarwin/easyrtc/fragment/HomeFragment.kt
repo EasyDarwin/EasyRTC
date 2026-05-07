@@ -17,30 +17,32 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.media.AudioManager
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.appcompat.widget.PopupMenu
 import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.service.WebSocketService
+import cn.easyrtc.EasyRTCUser
 import cn.easyrtc.EasyRTCPeerConnectionState
 import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCStreamTrack
+import cn.easyrtc.helper.MagicFileHelper
+import cn.easyrtc.media.MediaSession
+import cn.easydarwin.easyrtc.fragment.SettingFragment
+import cn.easydarwin.easyrtc.ui.hub.HubFragment
 import cn.easydarwin.easyrtc.ui.live.LiveSessionController
 import cn.easydarwin.easyrtc.ui.live.LiveUiState
 import cn.easydarwin.easyrtc.ui.live.NativePipelineController
 import cn.easydarwin.easyrtc.ui.live.NativePipelineState
+import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
-import cn.easyrtc.helper.MagicFileHelper
-import cn.easyrtc.media.MediaSession
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 
@@ -56,10 +58,10 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     private lateinit var speakerButton: ImageButton
     private val audioManager by lazy { requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
-    private lateinit var mainVideoView: TextureView
+    private lateinit var local_preview_: TextureView
     private lateinit var tvFragmentUUID: TextView
-    private lateinit var smallVideoView: TextureView
-    private lateinit var smallVideoContainer: View
+    private lateinit var remote_preview_: TextureView
+    private lateinit var remote_preview_container: View
 
     private var mainSurfaceTexture: SurfaceTexture? = null
     private var smallSurfaceTexture: SurfaceTexture? = null
@@ -68,11 +70,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     private var webSocketService: WebSocketService? = null
 
-    private var tvLogs: TextView? = null
-    private var logs: StringBuilder? = null
-    private var mSendBtn: TextView? = null
-    private var mEditText: EditText? = null
-    private val MAX_LOG_LENGTH = 100 * 1024
+    private var buttonHomeMenu: ImageButton? = null
+    private var userList: List<EasyRTCUser> = emptyList()
     private var isRelease: Boolean = false
 
     private val pipelineController = NativePipelineController()
@@ -127,7 +126,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
                     is WebSocketService.Event.Error -> onWSError(event.throwable)
                     is WebSocketService.Event.Logs -> onWSLogs(event.text)
                     is WebSocketService.Event.IncomingCall -> {}
-                    is WebSocketService.Event.OnlineUsers -> {}
+                    is WebSocketService.Event.OnlineUsers -> updateOnlineUsers(event.users)
                 }
             }
         }
@@ -194,46 +193,26 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun initViews(view: View) {
-        mainVideoView = view.findViewById(R.id.mainVideoView)
+        local_preview_ = view.findViewById(R.id.local_preview_)
         tvFragmentUUID = view.findViewById(R.id.tvFragmentUUID)
-        smallVideoView = view.findViewById(R.id.smallVideoView)
-        smallVideoContainer = view.findViewById(R.id.smallVideoContainer)
+        remote_preview_ = view.findViewById(R.id.remote_preview_)
+        remote_preview_container = view.findViewById(R.id.remote_preview_container)
         endCallButton = view.findViewById(R.id.endCallButton)
         switchCameraButton = view.findViewById(R.id.switchCameraButton)
         speakerButton = view.findViewById(R.id.speakerButton)
         bandwidthTV = view.findViewById(R.id.media_bandwidth)
+        buttonHomeMenu = view.findViewById(R.id.button_home_menu)
 
         endCallButton.visibility = View.GONE
 
-        tvLogs = view.findViewById(R.id.tv_logs)
-        mSendBtn = view.findViewById(R.id.send_msg)
-        mEditText = view.findViewById(R.id.et_msg)
-
         tvFragmentUUID.text = SPUtil.getInstance().rtcUserUUID
 
-        tvLogs?.setOnLongClickListener {
-            copyLogs()
-            true
+        buttonHomeMenu?.setOnClickListener {
+            showHomeMenu(it)
         }
 
-        mainVideoView.surfaceTextureListener = this
-        smallVideoView.surfaceTextureListener = this
-
-        smallVideoContainer.setOnTouchListener { view, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
-                    view.translationX = event.rawX - anchor[0]
-                    view.translationY = event.rawY - anchor[1]
-                    true
-                }
-                else -> false
-            }
-        }
+        local_preview_.surfaceTextureListener = this
+        remote_preview_.surfaceTextureListener = this
 
         endCallButton.setOnClickListener {
             Log.d(TAG, "挂电话")
@@ -245,7 +224,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 //            liveSessionController.onClosed()
             (activity as? MainActivity)?.apply {
 //                switchFragment(if (lastFragment != null) lastFragment!! else "hub")
-                bottomNavigationView?.selectedItemId = R.id.navigation_hub
+                switchFragment("", true);
+                switchFragment("p2p_call")
             }
         }
 
@@ -261,19 +241,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         }
 
         Log.d(TAG, "视图初始化完成")
-
-        tvLogs!!.setMovementMethod(ScrollingMovementMethod())
-
-        mSendBtn!!.setOnClickListener(object : View.OnClickListener {
-            override fun onClick(view: View?) {
-                val text = mEditText?.getText().toString()
-                if (text.isEmpty()) return
-                appendLog(text)
-                val data = text.toByteArray(Charsets.UTF_8)
-                EasyRTCSdk.sendMsg(0, data)
-                mEditText?.setText("")
-            }
-        })
     }
 
     private fun getVideoEncodeConfig(): VideoEncodeConfig {
@@ -289,12 +256,12 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         Log.d(TAG, "SurfaceTexture 可用: $width x $height")
 
         when (surface) {
-            mainVideoView.surfaceTexture -> {
+            local_preview_.surfaceTexture -> {
                 mainSurfaceTexture = surface
                 Log.d(TAG, "主视频 SurfaceTexture 已创建")
             }
 
-            smallVideoView.surfaceTexture -> {
+            remote_preview_.surfaceTexture -> {
                 smallSurfaceTexture = surface
                 session.setupVideoEncoder(getVideoEncodeConfig())
                 session.setDecoderSurface(Surface(surface))
@@ -318,8 +285,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         Log.d(TAG, "SurfaceTexture 被销毁")
         when {
-            surface == mainVideoView.surfaceTexture -> mainSurfaceTexture = null
-            surface == smallVideoView.surfaceTexture -> {
+            surface == local_preview_.surfaceTexture -> mainSurfaceTexture = null
+            surface == remote_preview_.surfaceTexture -> {
                 smallSurfaceTexture = null
                 session.setDecoderSurface(null)
             }
@@ -338,8 +305,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
         try {
 
-            if (mainVideoView.isAvailable) {
-                val result = session.startPreview(Surface(mainVideoView.surfaceTexture))
+            if (local_preview_.isAvailable) {
+                val result = session.startPreview(Surface(local_preview_.surfaceTexture))
                 if (result != 0) {
                     Log.e(TAG, "startPreview() failed: $result")
                     pipelineController.reportError("startPreview failed: $result")
@@ -383,6 +350,8 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         stopEasyRTC()
         session.stopPreview()
         EasyRTCSdk.release()
+        buttonHomeMenu = null
+        EasyRTCSdk.setEventListener(null)
     }
 
     override fun onHiddenChanged(hidden: Boolean) {
@@ -398,7 +367,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     private fun handleHiddenResources() {
         val tag = (activity as? MainActivity)?.cFragmentTag
-        if (tag != "live") {
+        if (tag != "p2p_call") {
             stopEasyRTC()
             endCallButton.visibility = View.INVISIBLE
             isRelease = true
@@ -475,14 +444,36 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         activity?.runOnUiThread {
             val density = resources.displayMetrics.density
             val isPortrait = height > width
-            val desiredWidthDp = if (isPortrait) 144f else 160f
-            val desiredWidthPx = desiredWidthDp * density
+
+            val desiredWidthPx = remote_preview_container.width
             val desiredHeightPx = desiredWidthPx * height / width
-            val lp = smallVideoContainer.layoutParams
-            lp.width = desiredWidthPx.toInt()
-            lp.height = desiredHeightPx.toInt()
-            smallVideoContainer.layoutParams = lp
+            val lp = remote_preview_container.layoutParams
+            lp.width = desiredWidthPx
+            lp.height = desiredHeightPx
+            remote_preview_container.layoutParams = lp
             Log.d(TAG, "Remote video size: ${width}x${height}, container: ${lp.width}x${lp.height}")
+
+
+
+            val desiredWidthDp = 144
+            local_preview_.layoutParams.width = Math.round(desiredWidthDp * density)
+            local_preview_.layoutParams.height = Math.round(local_preview_.layoutParams.width * 1280f/720f);
+            local_preview_.requestLayout()
+            local_preview_.setOnTouchListener { view, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
+                        view.translationX = event.rawX - anchor[0]
+                        view.translationY = event.rawY - anchor[1]
+                        true
+                    }
+                    else -> false
+                }
+            }
         }
     }
 
@@ -500,48 +491,65 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun appendLog2(message: String) {
-        runOnMainThread {
-            if (tvLogs == null) return@runOnMainThread
-            if (logs == null) logs = StringBuilder()
-            logs!!.append("$message \n")
-            if (logs!!.length > MAX_LOG_LENGTH) {
-                logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
-            }
-            tvLogs!!.text = logs.toString()
-            tvLogs!!.post {
-                val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
-                if (scrollAmount > 0) {
-                    tvLogs!!.scrollTo(0, scrollAmount)
-                }
-            }
-        }
+        AppLogStore.appendRaw("$message \n")
     }
 
     private fun appendLog(message: String) {
-        runOnMainThread {
-            if (tvLogs == null) return@runOnMainThread
-            if (logs == null) logs = StringBuilder()
-            val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            val line = "${formatter.format(Date())}: $message\n"
-            logs!!.append(line)
-            if (logs!!.length > MAX_LOG_LENGTH) {
-                logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
-            }
-            tvLogs!!.text = logs.toString()
-            tvLogs!!.post {
-                val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
-                if (scrollAmount > 0) {
-                    tvLogs!!.scrollTo(0, scrollAmount)
+        AppLogStore.appendTimestamped(message)
+    }
+
+    private fun updateOnlineUsers(users: List<EasyRTCUser>) {
+        userList = users
+    }
+
+    private fun showHomeMenu(anchor: View) {
+        PopupMenu(requireContext(), anchor).apply {
+            menuInflater.inflate(R.menu.home_overflow_menu, menu)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.action_home_users -> {
+                        openUserList()
+                        true
+                    }
+                    R.id.action_home_logs -> {
+                        HomeLogsBottomSheetFragment().show(childFragmentManager, "home_logs")
+                        true
+                    }
+                    R.id.action_home_settings -> {
+                        openSettings()
+                        true
+                    }
+                    else -> false
                 }
             }
+            show()
         }
     }
 
-    private fun copyLogs() {
-        val cm = requireActivity().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = tvLogs?.text.toString()
-        cm.setPrimaryClip(ClipData.newPlainText("logs", text))
-        Toast.makeText(requireActivity(), "日志已复制", Toast.LENGTH_SHORT).show()
+    private fun openUserList() {
+        requireActivity().supportFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, HubFragment())
+            .addToBackStack("home_users")
+            .commit()
+    }
+
+    private fun callUser(uuid: String) {
+        appendLog("呼叫: $uuid")
+        webSocketService?.call(uuid)
+    }
+
+    private fun openSettings() {
+        requireActivity().supportFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, SettingFragment())
+            .addToBackStack("settings")
+            .commit()
+    }
+
+    fun sendTextMessage(text: String) {
+        val message = text.trim()
+        if (message.isEmpty()) return
+        appendLog(message)
+        EasyRTCSdk.sendMsg(0, message.toByteArray(Charsets.UTF_8))
     }
 
     fun onPermissionGranted() {
