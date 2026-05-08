@@ -10,6 +10,17 @@
             android:summary="@string/settings_device_id_helper" />
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="WHIP 推流">
+
+        <EditTextPreference
+            android:key="pref_whip_server"
+            android:title="推流服务器地址"
+            android:dialogTitle="推流服务器地址"
+            android:summary="输入 WHIP 服务器 URL，例如 http://192.168.1.100:8000/whip"
+            android:defaultValue="http://192.168.1.100:8000/whip"
+            android:inputType="text" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="@string/settings_section_video">
 
         <ListPreference

@@ -6,7 +6,7 @@
 
     <!-- Fullscreen camera preview -->
 
-    <!-- Top overlay: title -->
+    <!-- Top overlay: status panel -->
     <TextureView
         android:id="@+id/local_preview_"
         android:layout_width="match_parent"
@@ -14,32 +14,37 @@
         android:layout_height="wrap_content" />
 
     <LinearLayout
+        android:id="@+id/whipStatusPanel"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?android:actionBarSize"
         android:layout_gravity="top"
-        android:background="#88000000"
-        android:orientation="vertical"
-        android:padding="12dp">
+        android:background="@drawable/logs"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/button_whip_menu"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_menu" />
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="WHIP 推流"
-            android:textColor="@android:color/white"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <EditText
-            android:id="@+id/et_whip_url"
+            android:id="@+id/tvWhipServer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@android:drawable/edit_text"
-            android:hint="输入 WHIP 服务器地址"
-            android:inputType="text"
-            android:padding="8dp"
-            android:textSize="13sp" />
-
+            android:layout_weight="1"
+            android:background="@drawable/logs"
+            android:layout_marginLeft="@dimen/dp_8"
+            android:gravity="center_vertical"
+            android:textColor="@color/white"
+            android:text="服务器地址"
+            android:visibility="gone"
+            android:textSize="@dimen/sp_14"
+            android:ellipsize="end"
+            android:maxLines="1" />
     </LinearLayout>
 
 
@@ -65,24 +70,15 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/btn_start"
+                android:id="@+id/btn_toggle_stream"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
                 android:layout_weight="1"
                 android:text="开始推流" />
-
-            <Button
-                android:id="@+id/btn_stop"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:enabled="false"
-                android:text="停止推流" />
 
         </LinearLayout>
 

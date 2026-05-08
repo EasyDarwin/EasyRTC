@@ -12,7 +12,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.TextView
+import androidx.appcompat.widget.PopupMenu
+import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.fragment.HomeFragment
 import cn.easyrtc.EasyRTCCodec
@@ -28,6 +31,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     companion object {
         private const val TAG = "WhipFragment"
         private const val DEFAULT_WHIP_URL = "https://demo.easygbs.com:10010/live/test0508_01.whip"
+        private const val PREF_WHIP_SERVER = "pref_whip_server"
 
         fun newInstance(): WhipFragment = WhipFragment()
     }
@@ -38,10 +42,10 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     private lateinit var localPreview: TextureView
     private var localSurfaceTexture: SurfaceTexture? = null
 
-    private lateinit var etWhipUrl: EditText
     private lateinit var tvStatus: TextView
-    private lateinit var btnStart: Button
-    private lateinit var btnStop: Button
+    private lateinit var btnToggleStream: Button
+    private lateinit var buttonWhipMenu: ImageButton
+    private lateinit var tvWhipServer: TextView
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -55,21 +59,27 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         super.onViewCreated(view, savedInstanceState)
         AppLogStore.appendCritical(TAG, "onViewCreated: initialize whip UI")
 
-        etWhipUrl = view.findViewById(R.id.et_whip_url)
         tvStatus = view.findViewById(R.id.tv_status)
-        btnStart = view.findViewById(R.id.btn_start)
-        btnStop = view.findViewById(R.id.btn_stop)
+        btnToggleStream = view.findViewById(R.id.btn_toggle_stream)
+        buttonWhipMenu = view.findViewById(R.id.button_whip_menu)
+        tvWhipServer = view.findViewById(R.id.tvWhipServer)
         localPreview = view.findViewById(R.id.local_preview_)
         localPreview.post {
-            localPreview.layoutParams.height = localPreview.layoutParams.width * cameraVideoHeight /cameraVideoWidth;
+            localPreview.layoutParams.height = localPreview.layoutParams.width * cameraVideoHeight / cameraVideoWidth
         }
 
-        etWhipUrl.setText(DEFAULT_WHIP_URL)
         tvStatus.movementMethod = ScrollingMovementMethod()
         localPreview.surfaceTextureListener = this
 
-        btnStart.setOnClickListener { startWhipPush() }
-        btnStop.setOnClickListener { stopWhipPush() }
+        updateServerAddressDisplay()
+
+        buttonWhipMenu?.setOnClickListener {
+            showWhipMenu(it)
+        }
+
+        btnToggleStream.setOnClickListener { 
+            if (isRunning) stopWhipPush() else startWhipPush() 
+        }
 
         updateButtonState()
 
@@ -81,6 +91,41 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     /** Camera video size — landscape (native sensor) dimensions. */
     private var cameraVideoWidth = 1280
     private var cameraVideoHeight = 720
+
+    private fun updateServerAddressDisplay() {
+        val sharedPrefs = requireContext().getSharedPreferences("EasyRTC", android.content.Context.MODE_PRIVATE)
+        val serverAddr = sharedPrefs.getString(PREF_WHIP_SERVER, DEFAULT_WHIP_URL) ?: DEFAULT_WHIP_URL
+        tvWhipServer.text = serverAddr
+    }
+
+    private fun getWhipServerUrl(): String {
+        val sharedPrefs = requireContext().getSharedPreferences("EasyRTC", android.content.Context.MODE_PRIVATE)
+        return sharedPrefs.getString(PREF_WHIP_SERVER, DEFAULT_WHIP_URL) ?: DEFAULT_WHIP_URL
+    }
+
+    private fun showWhipMenu(anchor: View) {
+        PopupMenu(requireContext(), anchor).apply {
+            menu.add(0, 1, 0, "设置")
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> {
+                        openWhipSettings()
+                        true
+                    }
+                    2 -> {
+                        // Could open a logs dialog here
+                        true
+                    }
+                    else -> false
+                }
+            }
+            show()
+        }
+    }
+
+    private fun openWhipSettings() {
+        (activity as? MainActivity)?.openSettingsScreen()
+    }
 
     /**
      * Apply rotation + aspect-ratio-preserving scale on the TextureView.
@@ -112,9 +157,9 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun startWhipPush() {
-        val url = etWhipUrl.text.toString().trim()
+        val url = getWhipServerUrl().trim()
         if (url.isEmpty()) {
-            appendLog("请输入 WHIP 地址")
+            appendLog("请先在设置中配置 WHIP 推流地址")
             return
         }
 
@@ -323,8 +368,12 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun updateButtonState() {
-        btnStart.isEnabled = !isRunning
-        btnStop.isEnabled = isRunning
+        btnToggleStream.text = if (isRunning) "停止推流" else "开始推流"
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateServerAddressDisplay()
     }
 
     override fun onDestroyView() {
