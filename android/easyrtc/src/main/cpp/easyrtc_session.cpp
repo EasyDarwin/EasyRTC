@@ -897,21 +897,30 @@ Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlo
     // otherwise the render thread may call glDrawElements on deleted VBO/IBO.
     LOGI("[CRITICAL] nativeStopSend: before stopRenderThread");
     stopRenderThread(session);
+    LOGI("[CRITICAL] nativeStopSend: before encoderGlRelease");
     encoderGlRelease(session->encoderGlBridge);
 
     if (session->videoEncoder) {
-    auto p = session->videoEncoder;
+      auto p = session->videoEncoder;
+      p->running.exchange(false);
 
-        if (p->running.exchange(false)) {
-            LOGI("[CRITICAL] StopSend: signaling EOS and stopping encoder");
-            if (p->encoder) { AMediaCodec_signalEndOfInputStream(p->encoder); }
-            if (p->outputThread.joinable()) { p->outputThread.join(); }
-            if (p->encoder) { AMediaCodec_stop(p->encoder); }
-        }
-        if (p->encoder) {
-            AMediaCodec_delete(p->encoder);
-            p->encoder = nullptr;
-        }
+      LOGI("[CRITICAL] StopSend: signaling EOS and stopping encoder");
+      if (p->encoder) {
+        AMediaCodec_signalEndOfInputStream(p->encoder);
+      }
+      LOGI("[CRITICAL] StopSend: join output thread");
+      if (p->outputThread.joinable()) {
+        p->outputThread.join();
+      }
+      LOGI("[CRITICAL] StopSend: stopping encoder");
+      if (p->encoder) {
+        AMediaCodec_stop(p->encoder);
+      }
+      LOGI("[CRITICAL] StopSend: deleting encoder");
+      if (p->encoder) {
+        AMediaCodec_delete(p->encoder);
+      }
+      p->encoder = nullptr;
     }
 
     if (session->cameraDevice) {
