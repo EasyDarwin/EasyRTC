@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.IBinder
 import android.os.Bundle
 import androidx.core.view.WindowCompat
@@ -16,10 +17,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
+import androidx.constraintlayout.widget.ConstraintSet
 import com.tencent.bugly.crashreport.CrashReport
 import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
 import cn.easydarwin.easyrtc.ui.hub.EmptyTabFragment
+import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easyrtc.helper.MagicFileHelper
@@ -34,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     var currentFragmentTag: String? = null
 
     var ws: WebSocketService? = null
+    private var mainRoot: androidx.constraintlayout.widget.ConstraintLayout? = null
     val observer = Observer<WebSocketService.Event> { event ->
         if (event is WebSocketService.Event.IncomingCall) {
             incomingCallLiveData.postValue(event)
@@ -56,12 +60,15 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.statusBarColor = Color.WHITE
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
 
         SPUtil.init(this)
         AppLogStore.init(this)
         MagicFileHelper.init(this)
 
         setContentView(R.layout.activity_main)
+        mainRoot = findViewById(R.id.main_root)
 
         CrashReport.initCrashReport(applicationContext, "5aece7ce65", false)
 
@@ -69,6 +76,8 @@ class MainActivity : AppCompatActivity() {
         bindWebSocketService()
 
         initBNView()
+        supportFragmentManager.addOnBackStackChangedListener { syncChromeVisibility() }
+        syncChromeVisibility()
     }
 
     private fun bindWebSocketService() {
@@ -154,6 +163,31 @@ class MainActivity : AppCompatActivity() {
             if (commitNow) transaction.commitNow()
             else transaction.commit()
         }
+    }
+
+    fun openSettingsScreen() {
+        val fm = supportFragmentManager
+        if (fm.isStateSaved) return
+
+        fm.beginTransaction()
+            .replace(R.id.fragment_container, SettingFragment())
+            .addToBackStack("settings")
+            .commit()
+        syncChromeVisibility()
+    }
+
+    private fun syncChromeVisibility() {
+        val fullScreen = supportFragmentManager.backStackEntryCount > 0
+        bottomNavigationView?.visibility = if (fullScreen) android.view.View.GONE else android.view.View.VISIBLE
+
+        val root = mainRoot ?: return
+        val set = ConstraintSet().apply { clone(root) }
+        if (fullScreen) {
+            set.connect(R.id.fragment_container, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+        } else {
+            set.connect(R.id.fragment_container, ConstraintSet.BOTTOM, R.id.bottomNavigationView, ConstraintSet.TOP)
+        }
+        set.applyTo(root)
     }
 
     override fun onRequestPermissionsResult(

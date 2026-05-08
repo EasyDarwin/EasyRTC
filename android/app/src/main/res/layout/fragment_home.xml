@@ -6,18 +6,6 @@
     android:background="@android:color/black">
 
 
-    <TextView
-        android:id="@+id/media_bandwidth"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_margin="8dp"
-        android:ellipsize="start"
-        android:layout_above="@id/bottomButtonContainer"
-        android:maxLines="2"
-        android:text="1111"
-        android:textColor="@color/white"
-        android:textSize="10sp"></TextView>
 
 
 
@@ -43,35 +31,55 @@
             android:layout_alignParentRight="true" />
 
     <LinearLayout
+        android:layout_width="match_parent"
+        android:orientation="vertical"
+        android:layout_height="wrap_content">
+    <LinearLayout
         android:id="@+id/liveStatusPanel"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="?android:actionBarSize"
         android:background="@drawable/logs"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <ImageButton
             android:id="@+id/button_home_menu"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
             android:background="@android:color/transparent"
             android:contentDescription="@string/app_name"
-            android:padding="@dimen/dp_16"
             android:src="@drawable/ic_menu" />
-        <TextView
-            android:id="@+id/tvFragmentUUID"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/logs"
-            android:gravity="center_vertical"
-            android:textColor="@color/white"
-            android:textSize="@dimen/sp_13"
-            tools:ignore="RelativeOverlap" />
 
+            <TextView
+                android:id="@+id/tvFragmentUUID"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/logs"
+                android:layout_marginLeft="@dimen/dp_8"
+                android:gravity="center_vertical"
+                android:textColor="@color/white"
+                android:text="1122"
+                android:textSize="@dimen/sp_14"
+                tools:ignore="RelativeOverlap" />
     </LinearLayout>
 
 
+    <TextView
+        android:id="@+id/media_bandwidth"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_gravity="bottom"
+        android:textSize="@dimen/sp_14"
+        android:ellipsize="start"
+        android:padding="@dimen/dp_16"
+        android:maxLines="1"
+        android:text=""
+        android:textColor="@color/white"></TextView>
+
+    </LinearLayout>
     <LinearLayout
         android:id="@+id/bottomButtonContainer"
         android:layout_width="match_parent"

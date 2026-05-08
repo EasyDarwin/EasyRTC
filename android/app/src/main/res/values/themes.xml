@@ -1,205 +1,22 @@
-<?xml version="1.0" encoding="utf-8"?><!-- res/values/themes.xml -->
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!-- 基于 Material Components Light 主题进行自定义 -->
-    <style name="Theme.EasyRTCDevice" parent="Theme.MaterialComponents.Light">
-
-        <!-- ========== 颜色系统 ========== -->
-        <!-- 主色调 -->
-        <item name="colorPrimary">@color/enterprise_primary</item>
-        <item name="colorPrimaryDark">@color/enterprise_primary_dark</item>
-        <item name="colorPrimaryVariant">@color/enterprise_primary_variant</item>
-        <item name="colorOnPrimary">@color/enterprise_on_primary</item>
-
-        <!-- 次要色调 -->
-        <item name="colorSecondary">@color/enterprise_secondary</item>
-        <item name="colorSecondaryVariant">@color/enterprise_secondary_variant</item>
-        <item name="colorOnSecondary">@color/enterprise_on_secondary</item>
-
-        <!-- 背景和表面颜色 -->
-        <item name="colorSurface">@color/enterprise_surface</item>
-        <item name="colorOnSurface">@color/enterprise_on_surface</item>
-
-        <!-- 错误颜色 -->
-        <item name="colorError">@color/enterprise_error</item>
-        <item name="colorOnError">@color/enterprise_on_error</item>
-
-        <!-- ========== 状态栏和导航栏 ========== -->
-        <item name="android:statusBarColor">?attr/colorPrimaryDark</item>
-        <item name="android:navigationBarColor">@color/enterprise_nav_background</item>
-
-        <!-- ========== ActionBar/Toolbar 样式 ========== -->
-        <item name="actionBarSize">56dp</item>
-        <item name="toolbarStyle">@style/MyToolbar</item>
-
-        <!-- ========== 按钮样式 ========== -->
-        <item name="materialButtonStyle">@style/MyMaterialButton</item>
-        <item name="borderlessButtonStyle">@style/MyBorderlessButton</item>
-
-        <!-- ========== TextInputLayout 样式 ========== -->
-        <item name="textInputStyle">@style/MyTextInputLayout</item>
-
-        <!-- ========== 卡片样式 ========== -->
-        <item name="cardViewStyle">@style/MyCardView</item>
-
-        <!-- ========== 其他设置 ========== -->
-        <!-- 圆角 -->
-        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Small</item>
-        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Medium</item>
-        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Large</item>
-
-        <!-- 字体 -->
-        <item name="textAppearanceHeadline6">@style/TextAppearance.MyApp.Headline6</item>
-        <item name="textAppearanceSubtitle1">@style/TextAppearance.MyApp.Subtitle1</item>
-        <item name="textAppearanceBody1">@style/TextAppearance.MyApp.Body1</item>
-
-        <!-- 移除 ActionBar -->
+    <style name="Theme.EasyRTCDevice" parent="Theme.Material3.Light.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
-
-        <item name="homeAsUpIndicator">@drawable/ic_back_arrow</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
-
-    <style name="Theme.EasyRTCDevice.Launch" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.EasyRTCDevice.Launch" parent="Theme.Material3.Light.NoActionBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
     </style>
 
     <style name="Theme.EasyRTCDevice.Device" parent="Theme.EasyRTCDevice">
-        <!-- 移除 ActionBar -->
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
-
-        <!-- 全屏或沉浸式 -->
-        <item name="android:windowFullscreen">false</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-
-        <!-- 按钮样式 -->
-        <item name="materialButtonStyle">@style/Widget.EasyRTC.Button.Primary</item>
-
-        <!-- 输入框样式 -->
-        <item name="textInputStyle">@style/Widget.EasyRTC.TextInput.Outlined</item>
     </style>
-
-    <!-- 主按钮样式 -->
-    <style name="Widget.EasyRTC.Button.Primary" parent="Widget.MaterialComponents.Button">
-        <item name="backgroundTint">?attr/colorPrimary</item>
-        <item name="cornerRadius">12dp</item>
-        <item name="android:textColor">@android:color/white</item>
-        <item name="android:textSize">18sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:minHeight">56dp</item>
-        <item name="android:elevation">4dp</item>
-    </style>
-
-    <!-- 输入框样式 -->
-    <style name="Widget.EasyRTC.TextInput.Outlined" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-        <item name="boxStrokeColor">?attr/colorPrimary</item>
-        <item name="boxStrokeWidth">2dp</item>
-        <item name="boxCornerRadiusTopStart">8dp</item>
-        <item name="boxCornerRadiusTopEnd">8dp</item>
-        <item name="boxCornerRadiusBottomStart">8dp</item>
-        <item name="boxCornerRadiusBottomEnd">8dp</item>
-        <item name="hintTextColor">?attr/colorPrimary</item>
-    </style>
-
-
-    <!-- ========== 子样式定义 ========== -->
-
-    <!-- ActionBar/Toolbar 样式 -->
-    <style name="MyActionBar" parent="Widget.MaterialComponents.Light.ActionBar.Solid">
-        <item name="background">?attr/colorPrimary</item>
-        <item name="titleTextColor">@android:color/white</item>
-        <item name="subtitleTextColor">@android:color/white</item>
-    </style>
-
-    <style name="MyToolbar" parent="Widget.MaterialComponents.Toolbar">
-        <item name="titleTextColor">@android:color/white</item>
-        <item name="subtitleTextColor">@android:color/white</item>
-    </style>
-
-    <!-- 按钮样式 -->
-    <style name="MyMaterialButton" parent="Widget.MaterialComponents.Button">
-        <item name="backgroundTint">?attr/colorPrimary</item>
-        <item name="cornerRadius">8dp</item>
-        <item name="android:textColor">@android:color/white</item>
-        <item name="android:textSize">16sp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <style name="MyBorderlessButton" parent="Widget.MaterialComponents.Button.TextButton">
-        <item name="android:textColor">?attr/colorPrimary</item>
-    </style>
-
-    <!-- TextInputLayout 样式 -->
-    <style name="MyTextInputLayout" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-        <item name="boxStrokeColor">?attr/colorPrimary</item>
-        <item name="boxStrokeWidth">1dp</item>
-        <item name="boxCornerRadiusTopStart">8dp</item>
-        <item name="boxCornerRadiusTopEnd">8dp</item>
-        <item name="boxCornerRadiusBottomStart">8dp</item>
-        <item name="boxCornerRadiusBottomEnd">8dp</item>
-        <item name="hintTextColor">?attr/colorPrimary</item>
-    </style>
-
-    <!-- 卡片样式 -->
-    <style name="MyCardView" parent="Widget.MaterialComponents.CardView">
-        <item name="cardCornerRadius">12dp</item>
-        <item name="cardElevation">4dp</item>
-        <item name="cardUseCompatPadding">true</item>
-        <item name="cardBackgroundColor">@android:color/white</item>
-    </style>
-
-    <!-- 圆角样式 -->
-    <style name="ShapeAppearance.Small" parent="ShapeAppearance.MaterialComponents.SmallComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">4dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Medium" parent="ShapeAppearance.MaterialComponents.MediumComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">8dp</item>
-    </style>
-
-    <style name="ShapeAppearance.Large" parent="ShapeAppearance.MaterialComponents.LargeComponent">
-        <item name="cornerFamily">rounded</item>
-        <item name="cornerSize">12dp</item>
-    </style>
-
-    <!-- 文本外观 -->
-    <style name="TextAppearance.MyApp.Headline6" parent="TextAppearance.MaterialComponents.Headline6">
-        <item name="android:textColor">?attr/colorOnSurface</item>
-        <item name="android:textSize">20sp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <style name="TextAppearance.MyApp.Subtitle1" parent="TextAppearance.MaterialComponents.Subtitle1">
-        <item name="android:textColor">?attr/colorOnSurface</item>
-        <item name="android:textSize">16sp</item>
-    </style>
-
-    <style name="TextAppearance.MyApp.Body1" parent="TextAppearance.MaterialComponents.Body1">
-        <item name="android:textColor">?attr/colorOnSurface</item>
-        <item name="android:textSize">14sp</item>
-    </style>
-
-    <style name="MySnackbarButtonStyle">
-        <item name="android:textSize">16sp</item>
-        <item name="android:gravity">center_vertical</item>
-        <item name="android:layout_gravity">center_vertical</item>
-        <item name="android:paddingTop">0dp</item>
-        <item name="android:paddingBottom">0dp</item>
-    </style>
-
-    <style name="MySnackbarStyle" parent="Widget.MaterialComponents.Snackbar">
-        <item name="snackbarButtonStyle">@style/MySnackbarButtonStyle</item>
-        <item name="android:gravity">center_vertical</item>
-    </style>
-
-
-
 
 </resources>

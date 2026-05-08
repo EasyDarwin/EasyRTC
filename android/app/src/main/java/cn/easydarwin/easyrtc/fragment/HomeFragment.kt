@@ -33,7 +33,6 @@ import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCStreamTrack
 import cn.easyrtc.helper.MagicFileHelper
 import cn.easyrtc.media.MediaSession
-import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.ui.hub.HubFragment
 import cn.easydarwin.easyrtc.ui.live.LiveSessionController
 import cn.easydarwin.easyrtc.ui.live.LiveUiState
@@ -92,7 +91,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
                 runOnMainThread {
                     bandwidthTV?.text = String.format(
                         Locale.getDefault(),
-                        "v:%.2f kbps\na:%.2f kbps",
+                        "kbps: v:%.2f a:%.2f",
                         stats.videoKbps,
                         stats.audioKbps,
                         stats.totalKbps
@@ -455,7 +454,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
 
 
-            val desiredWidthDp = 144
+            val desiredWidthDp = 120
             local_preview_.layoutParams.width = Math.round(desiredWidthDp * density)
             local_preview_.layoutParams.height = Math.round(local_preview_.layoutParams.width * 1280f/720f);
             local_preview_.requestLayout()
@@ -539,10 +538,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun openSettings() {
-        requireActivity().supportFragmentManager.beginTransaction()
-            .replace(R.id.fragment_container, SettingFragment())
-            .addToBackStack("settings")
-            .commit()
+        (activity as? MainActivity)?.openSettingsScreen()
     }
 
     fun sendTextMessage(text: String) {
