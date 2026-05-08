@@ -289,6 +289,7 @@ static void* decodeThreadFunc(void* arg) {
             continue;
         }
         droppingPackets = false;
+#if 0
         const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
         if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
             bool hasKeyInside = false;
@@ -307,6 +308,7 @@ static void* decodeThreadFunc(void* arg) {
             }
         } 
         assert(!droppingPackets);
+#endif
         enqueueDecoder(decoder, packet);
     }
 

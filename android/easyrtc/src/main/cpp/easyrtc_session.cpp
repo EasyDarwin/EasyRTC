@@ -20,10 +20,10 @@
 #include <atomic>
 
 namespace {
-    std::atomic<uint64_t> gVideoCbCount{0};
-    std::atomic<uint64_t> gVideoCbBytes{0};
-    std::atomic<uint64_t> gVideoCbAnnexB{0};
-    std::atomic<uint64_t> gVideoCbAvcc{0};
+    // std::atomic<uint64_t> gVideoCbCount{0};
+    // std::atomic<uint64_t> gVideoCbBytes{0};
+    // std::atomic<uint64_t> gVideoCbAnnexB{0};
+    // std::atomic<uint64_t> gVideoCbAvcc{0};
 
 }
 
@@ -67,6 +67,7 @@ static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes
     if (!session) {
         return;
     }
+    std::lock_guard<std::mutex> lock(session->statsMutex);
     if (videoBytes > 0) {
         session->mediaInputVideoBytesWindow.fetch_add(videoBytes, std::memory_order_relaxed);
     }
@@ -266,58 +267,18 @@ static int mediaTransceiverCallback(void *userPtr,
 
     switch (type) {
         case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
-#if 0
-            static auto f = frame->presentationTs;
-            LOGD("VIDEO PTS:%llu, DELTA:%llu， size:%d， flag:%d, duration:%llu", frame->presentationTs, frame->presentationTs - f, frame->size, frame->flags, frame->duration);
-            f = frame->presentationTs;
-#endif
+            assert(frame && "invalid frame in video callback");
+            assert(frame->frameData && "invalid frame data in video callback");
+            assert(frame->size >= 0 && "invalid frame size in video callback");
+
+            FLOGI("VIDEO_CB codec=%d size=%u pts=%lld", codecID,
+                 frame ? frame->size : 0,
+                 static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
-                const uint8_t *p = frame->frameData;
-                const uint32_t n = frame->size;
-                bool annexB = false;
-                bool avcc = false;
-                int nalType = -1;
-                if (n >= 4) {
-                    if (p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x00 && p[3] == 0x01) {
-                        annexB = true;
-                        if (n >= 5) nalType = p[4] & 0x1F;
-                    } else if (p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x01) {
-                        annexB = true;
-                        if (n >= 4) nalType = p[3] & 0x1F;
-                    } else {
-                        avcc = true;
-                        if (n >= 5) nalType = p[4] & 0x1F;
-                    }
-                }
-
-                uint64_t idx = gVideoCbCount.fetch_add(1) + 1;
-                gVideoCbBytes.fetch_add(n);
-                if (annexB) gVideoCbAnnexB.fetch_add(1);
-                if (avcc) gVideoCbAvcc.fetch_add(1);
-
-                if (idx <= 8 || (idx % 120) == 0) {
-                    const uint64_t totalBytes = gVideoCbBytes.load();
-                    const uint64_t annexBCount = gVideoCbAnnexB.load();
-                    const uint64_t avccCount = gVideoCbAvcc.load();
-                    LOGD("VIDEO_CB idx=%lld codec=%d size=%u nal=%d fmt=%s pts=%lld dec=%p b0=%02X b1=%02X b2=%02X b3=%02X avg=%llu annexb=%llu avcc=%llu",
-                         static_cast<unsigned long long>(idx),
-                         codecID,
-                         n,
-                         nalType,
-                         annexB ? "annexb" : (avcc ? "avcc" : "unknown"),
-                         static_cast<unsigned long long>(frame->presentationTs),
-                         session->videoDecoder ? session->videoDecoder.get() : nullptr,
-                         n > 0 ? p[0] : 0,
-                         n > 1 ? p[1] : 0,
-                         n > 2 ? p[2] : 0,
-                         n > 3 ? p[3] : 0,
-                         static_cast<unsigned long long>(idx ? totalBytes / idx : 0),
-                         static_cast<unsigned long long>(annexBCount),
-                         static_cast<unsigned long long>(avccCount));
-                }
+                
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
                                frame->size, frame->flags);
-                updateMediaInputKbpsStats(session, n, 0);
+                updateMediaInputKbpsStats(session, frame->size, 0);
                 videoDecoderEnqueueFrame(session->videoDecoder, frame);
             } else {
                 LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d",
@@ -329,6 +290,9 @@ static int mediaTransceiverCallback(void *userPtr,
             }
             break;
         case EASYRTC_TRANSCEIVER_CALLBACK_AUDIO_FRAME:
+            assert(frame && "invalid frame in audio callback");
+            assert(frame->frameData && "invalid frame data in audio callback");
+            assert(frame->size >= 0 && "invalid frame size in audio callback");
             FLOGI("AUDIO_CB codec=%d size=%u pts=%lld", codecID,
                  frame ? frame->size : 0,
                  static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
@@ -579,7 +543,23 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
         session->videoEncoder->transceiver = session->videoTransceiver;
         LOGD("Video encoder transceiver wired: %p", session->videoTransceiver);
     }
-
+    session->statThread = std::thread([session]() {
+        LOGI("MediaSession stats thread started");
+        auto lastReportTime = std::chrono::steady_clock::now();
+        while (session->transceiversAdded.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(3));
+            if (!session->transceiversAdded.load()) {
+                break;
+            }
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastReportTime).count();
+            if (elapsed >= 1000) {
+                lastReportTime = now;
+                updateMediaInputKbpsStats(session, 0, 0);
+            }
+        }
+        LOGI("MediaSession stats thread exiting");
+    });
     return 0;
 }
 
@@ -1046,6 +1026,10 @@ Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
         session->audioTransceiver = nullptr;
     }
     session->transceiversAdded.store(false);
+    if (session->statThread.joinable()) {
+        LOGI("[CRITICAL] RemoveTransceivers: joining stats thread");
+        session->statThread.join();
+    }
     LOGI("[CRITICAL] RemoveTransceivers: DONE");
 }
 
@@ -1056,7 +1040,8 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
          reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return;
-
+    assert(!session->videoTransceiver && "videoTransceiver should have been removed before release");
+    assert(!session->audioTransceiver && "audioTransceiver should have been removed before release");
     LOGI("[CRITICAL] Release: cleaning up session");
 
     closeCamera(session);

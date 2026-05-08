@@ -80,6 +80,8 @@ struct MediaSession {
     std::thread renderThread;
     FrameDumpWriter frameDump;
 
+    std::thread statThread;
+    std::mutex statsMutex;
     std::atomic<uint64_t> mediaInputVideoBytesWindow{0};
     std::atomic<uint64_t> mediaInputAudioBytesWindow{0};
     std::atomic<int64_t> mediaInputLastReportNs{0};
