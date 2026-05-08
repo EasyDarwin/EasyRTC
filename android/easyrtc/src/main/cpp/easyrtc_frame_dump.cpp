@@ -39,13 +39,14 @@ void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec) {
     LOGD("frameDumpInit: dumping to %s videoCodec=%d audioCodec=%d", dumpPath.c_str(), videoCodec, audioCodec);
 }
 
-void frameDumpWrite(FrameDumpWriter* writer, uint32_t kind, const uint8_t* data, uint32_t size, int64_t ptsUs, uint32_t flags) {
+void frameDumpWrite(FrameDumpWriter* writer, uint32_t kind, const uint8_t* data, uint32_t size, uint32_t flags) {
     if (!writer->enabled || writer->fd < 0) return;
 
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
     int64_t callbackNs = static_cast<int64_t>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
 
+    uint64_t ptsUs = 0; 
     uint8_t frameHeader[28];
     memcpy(frameHeader + 0, &callbackNs, 8);
     memcpy(frameHeader + 8, &kind, 4);

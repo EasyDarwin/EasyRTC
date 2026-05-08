@@ -66,7 +66,7 @@ static bool initDecoder(VideoDecoderPipeline* pipeline) {
 
     pipeline->decoder = decoder_ptr;
     pipeline->errorCount.store(0);
-    LOGD("Video decoder initialized: %s %dx%d, frame rate: %d", pipeline->currentCodecType.c_str(),
+    LOGI("Video decoder initialized: %s %dx%d, frame rate: %d", pipeline->currentCodecType.c_str(),
             pipeline->width, pipeline->height, pipeline->frameRate);
     return true;
 }
@@ -124,7 +124,7 @@ static void extractSpsPpsFromAnnexb(const uint8_t* data, size_t size, std::vecto
                 target_data.insert(target_data.end(), data + start_, data + nal_end);
                 pos = nal_end;
                 auto hex = uint8_to_hex(target_data.data(), target_data.size());
-                LOGD("Extracted %s, size=%zu, data=%s", (nal_type == 7) ? "SPS" : "PPS", target_data.size(), hex.c_str());
+                LOGI("Extracted %s, size=%zu, data=%s", (nal_type == 7) ? "SPS" : "PPS", target_data.size(), hex.c_str());
             }else {
                 break;
             }
@@ -136,7 +136,7 @@ static void extractSpsPpsFromAnnexb(const uint8_t* data, size_t size, std::vecto
 
 static void* decodeThreadFunc(void* arg) {
     auto* pipeline = static_cast<VideoDecoderPipeline*>(arg);
-    LOGD("Video decode thread started");
+    LOGI("Video decode thread started");
     AMediaCodecBufferInfo bufferInfo;
     int enqueued{};
     int64_t firstPtsUs = -1;
@@ -168,7 +168,7 @@ static void* decodeThreadFunc(void* arg) {
         pipeline->enqueuedFrames.store(q);
         enqueued++;
         if (q <= 8 || (q % 120) == 0) {
-            LOGD("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
+            LOGI("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
                  static_cast<unsigned long long>(q),
                  packet->size,
                  static_cast<long long>(packet->ptsUs),
@@ -201,7 +201,7 @@ static void* decodeThreadFunc(void* arg) {
                 pipeline->renderedFrames.store(r);
                 enqueued--;
                 if (r <= 8 || (r % 120) == 0) {
-                    LOGD("DEC_OUT r=%llu size=%d pts=%lld sleepUs=%lld flags=0x%x codec queue cached:%d",
+                    LOGI("DEC_OUT r=%llu size=%d pts=%lld sleepUs=%lld flags=0x%x codec queue cached:%d",
                          static_cast<unsigned long long>(r),
                          bufferInfo.size,
                          static_cast<long long>(bufferInfo.presentationTimeUs),
@@ -213,7 +213,7 @@ static void* decodeThreadFunc(void* arg) {
                 uint64_t t = gDecTryLater.fetch_add(1) + 1;
                 pipeline->tryLaterCount.store(t);
                 if (t <= 8 || (t % 240) == 0) {
-                    LOGD("DEC_TRY_LATER count=%llu", static_cast<unsigned long long>(t));
+                    LOGI("DEC_TRY_LATER count=%llu", static_cast<unsigned long long>(t));
                 }
             } else if (outputBufId == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
                 uint64_t f = gDecFormatChanged.fetch_add(1) + 1;
@@ -222,8 +222,9 @@ static void* decodeThreadFunc(void* arg) {
                     int32_t w = 0, h = 0;
                     AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_WIDTH, &w);
                     AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_HEIGHT, &h);
-                    LOGD("DEC_FMT_CHANGED count=%llu %dx%d", static_cast<unsigned long long>(f), w, h);
-                    if (w > 0 && h > 0 && (w != pipeline->width || h != pipeline->height)) {
+                    LOGI("DEC_FMT_CHANGED count=%llu %dx%d", static_cast<unsigned long long>(f), w, h);
+//                    if (w > 0 && h > 0 && (w != pipeline->width || h != pipeline->height))
+                    {
                         pipeline->width = w;
                         pipeline->height = h;
                         if (pipeline->onVideoSize) {
@@ -232,8 +233,9 @@ static void* decodeThreadFunc(void* arg) {
                     }
                     AMediaFormat_delete(outFormat);
                 } else {
-                    LOGD("DEC_FMT_CHANGED count=%llu", static_cast<unsigned long long>(f));
+                    LOGI("DEC_FMT_CHANGED count=%llu", static_cast<unsigned long long>(f));
                 }
+                return true;
             }
             return false;
     };
@@ -316,7 +318,7 @@ static void* decodeThreadFunc(void* arg) {
         AMediaCodec_stop(pipeline->decoder.get());
         pipeline->decoder = nullptr;   
     }
-    LOGD("Video decode thread exiting");
+    LOGI("Video decode thread exiting");
     return nullptr;
 }
 
@@ -330,7 +332,7 @@ std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface,
         pipeline->surface = surface;
     }
 
-    LOGD("VideoDecoderPipeline created: %s %dx%d", pipeline->currentCodecType.c_str(), width, height);
+    LOGI("VideoDecoderPipeline created: %s %dx%d", pipeline->currentCodecType.c_str(), width, height);
     return pipeline;
 }
 
@@ -374,7 +376,7 @@ void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, co
                 lastUs = pkt->ptsUs;
                 return false;
             });
-            LOGD("VIDEO PKG IN pts:%llums, in packet caches:%llu/%llums", ptsUs/1000, pipeline->frameQueue.size(), (lastUs - firstUs)/1000);
+            LOGI("VIDEO PKG IN pts:%llums, in packet caches:%llu/%llums", ptsUs/1000, pipeline->frameQueue.size(), (lastUs - firstUs)/1000);
         }
     }
 }
