@@ -40,8 +40,8 @@ struct MediaSession {
 
     ACameraDevice *cameraDevice = nullptr;
     int cameraFacing = 0;
-    ANativeWindow *previewWindow = nullptr;
-    ANativeWindow *cameraInputWindow = nullptr;
+    std::shared_ptr<ANativeWindow> previewWindow = nullptr;
+    std::shared_ptr<ANativeWindow>cameraInputWindow = nullptr;
     ASurfaceTexture *cameraInputSurfaceTexture = nullptr;
     ACameraCaptureSession *captureSession = nullptr;
     ACaptureSessionOutputContainer *outputContainer = nullptr;

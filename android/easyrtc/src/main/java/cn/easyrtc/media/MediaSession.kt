@@ -4,6 +4,7 @@ import android.util.Log
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import androidx.annotation.Keep
+import cn.easyrtc.EasyRTCLog
 import cn.easyrtc.model.VideoEncodeConfig
 
 class MediaSession {
@@ -24,17 +25,22 @@ class MediaSession {
     fun create() {
         assert(nativePtr == 0L)
         nativePtr = nativeCreate()
+        EasyRTCLog.i("MediaSession", "create: nativePtr=$nativePtr")
     }
 
     fun startPreview(surface: Surface): Int {
-        return nativeStartPreview(nativePtr, surface)
+        val ret = nativeStartPreview(nativePtr, surface)
+        EasyRTCLog.i("MediaSession", "startPreview: nativePtr=$nativePtr ret=$ret")
+        return ret
     }
 
     fun stopPreview() {
+        EasyRTCLog.i("MediaSession", "stopPreview: nativePtr=$nativePtr")
         nativeStopPreview(nativePtr)
     }
 
     fun setPeerConnection(peerConnectionHandle: Long) {
+        EasyRTCLog.i("MediaSession", "setPeerConnection: nativePtr=$nativePtr peer=$peerConnectionHandle")
         nativeSetPeerConnection(nativePtr, peerConnectionHandle)
     }
 
@@ -43,10 +49,20 @@ class MediaSession {
         val send = nativeStartSend(nativePtr)
         val recv = nativeStartRecv(nativePtr)
         Log.i("MS", "addTrans:$i, startSend:$send, startRecv:$recv")
+        EasyRTCLog.i("MediaSession", "addTransceivers: nativePtr=$nativePtr videoCodec=$videoCodec audioCodec=$audioCodec add=$i send=$send recv=started")
         return i;
     }
 
+    fun addSendOnlyTransceivers(videoCodec: Int, audioCodec: Int): Int {
+        val i = nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
+        val send = nativeStartSend(nativePtr)
+        Log.i("MS", "addSendOnlyTrans:$i, startSend:$send")
+        EasyRTCLog.i("MediaSession", "addSendOnlyTransceivers: nativePtr=$nativePtr videoCodec=$videoCodec audioCodec=$audioCodec add=$i send=$send")
+        return i
+    }
+
     fun removeTransceivers() {
+        EasyRTCLog.i("MediaSession", "removeTransceivers: nativePtr=$nativePtr")
         nativeStopRecv(nativePtr)
         nativeStopSend(nativePtr)
         nativeRemoveTransceivers(nativePtr);
@@ -55,24 +71,32 @@ class MediaSession {
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
         val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
         setEncoderRotation(90)
-        return nativeSetupVideoEncoder(
+        val ret = nativeSetupVideoEncoder(
             nativePtr, codec,
             config.getWidth(), config.getHeight(),
             config.getBitRate(), config.getFrameRate(),
             config.getIFrameInterval()
         )
+        EasyRTCLog.i(
+            "MediaSession",
+            "setupVideoEncoder: nativePtr=$nativePtr codec=$codec ${config.getWidth()}x${config.getHeight()} bitrate=${config.getBitRate()} fps=${config.getFrameRate()} ret=$ret"
+        )
+        return ret
     }
 
     fun setEncoderRotation(rotation: Int) {
+        EasyRTCLog.d("MediaSession", "setEncoderRotation: nativePtr=$nativePtr rotation=$rotation")
         nativeSetEncoderRotation(nativePtr, rotation)
     }
 
     fun setDeviceId(deviceId: String) {
+        EasyRTCLog.i("MediaSession", "setDeviceId: nativePtr=$nativePtr deviceId=$deviceId")
         nativeSetDeviceId(nativePtr, deviceId)
     }
 
     fun setConnectState(state: Int) {
         if (nativePtr == 0L) return;
+        EasyRTCLog.i("MediaSession", "setConnectState: nativePtr=$nativePtr state=$state")
         nativeSetState(nativePtr, state);
     }
 
@@ -88,16 +112,19 @@ class MediaSession {
     }
 
     fun switchCamera() {
+        EasyRTCLog.i("MediaSession", "switchCamera: nativePtr=$nativePtr")
         nativeSwitchCamera(nativePtr)
     }
 
     fun requestKeyFrame() {
         if (nativePtr == 0L) return;
+        EasyRTCLog.i("MediaSession", "requestKeyFrame: nativePtr=$nativePtr")
         nativeRequestKeyFrame(nativePtr)
     }
 
     fun release() {
         if (nativePtr != 0L) {
+            EasyRTCLog.i("MediaSession", "release: nativePtr=$nativePtr")
             nativeStopRecv(nativePtr)
             nativeStopSend(nativePtr)
             nativeRemoveTransceivers(nativePtr);

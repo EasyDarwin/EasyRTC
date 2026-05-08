@@ -10,7 +10,7 @@
         android:id="@+id/userName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="用户名"
+        android:text="设备名"
         android:textSize="16sp"
         android:textColor="@android:color/black" />
 

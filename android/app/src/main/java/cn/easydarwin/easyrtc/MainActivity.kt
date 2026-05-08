@@ -22,9 +22,11 @@ import com.tencent.bugly.crashreport.CrashReport
 import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
 import cn.easydarwin.easyrtc.ui.hub.EmptyTabFragment
+import cn.easydarwin.easyrtc.ui.whip.WhipFragment
 import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
+import cn.easyrtc.EasyRTCLog
 import cn.easyrtc.helper.MagicFileHelper
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
@@ -65,6 +67,18 @@ class MainActivity : AppCompatActivity() {
 
         SPUtil.init(this)
         AppLogStore.init(this)
+        EasyRTCLog.setSink { level, tag, message, throwable ->
+            val logLine = "[${level.name}][$tag] $message"
+            if (throwable != null) {
+                AppLogStore.appendCritical(tag, logLine, throwable)
+            } else {
+                AppLogStore.appendTimestamped(logLine)
+            }
+        }
+        AppLogStore.appendCritical(
+            tag = "MainActivity",
+            message = "Application bootstrapped, pid=${android.os.Process.myPid()}, deviceId=${SPUtil.getInstance().rtcUserUUID}"
+        )
         MagicFileHelper.init(this)
 
         setContentView(R.layout.activity_main)
@@ -152,7 +166,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val fragment = when (tag) {
                     "p2p_call" -> LiveFragment.newInstance()
-                    "whip_push" -> EmptyTabFragment()
+                    "whip_push" -> WhipFragment.newInstance()
                     "ip_direct" -> EmptyTabFragment()
                     else -> return
                 }

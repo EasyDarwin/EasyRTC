@@ -41,7 +41,6 @@ std::string findCameraId(int facing) {
         }
         ACameraManager_deleteCameraIdList(idList);
     }
-
     ACameraManager_delete(mgr);
     return result;
 }

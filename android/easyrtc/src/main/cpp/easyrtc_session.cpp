@@ -6,6 +6,8 @@
 #include "easyrtc_video_decoder.h"
 #include "easyrtc_frame_dump.h"
 #include "easyrtc_encoder_gl.h"
+#include <android/native_window.h>
+#include "utils/defer.hpp"
 #include <camera/NdkCameraManager.h>
 #include <camera/NdkCameraMetadataTags.h>
 #include <android/surface_texture_jni.h>
@@ -154,7 +156,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
 
     if (s->cameraInputWindow) {
         camStatus = ACaptureSessionOutput_create(
-                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow), &s->cameraInputOutput);
+                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow.get()), &s->cameraInputOutput);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
@@ -172,7 +174,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
 
     if (s->previewWindow) {
         camStatus = ACaptureSessionOutput_create(
-                reinterpret_cast<ACameraWindowType *>(s->previewWindow), &s->previewOutput);
+                reinterpret_cast<ACameraWindowType *>(s->previewWindow.get()), &s->previewOutput);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
@@ -194,7 +196,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
 
     if (withEncoder && s->cameraInputWindow) {
         camStatus = ACameraOutputTarget_create(
-                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow), &s->cameraInputTarget);
+                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow.get()), &s->cameraInputTarget);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
@@ -212,7 +214,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
 
     if (s->previewWindow) {
         camStatus = ACameraOutputTarget_create(
-                reinterpret_cast<ACameraWindowType *>(s->previewWindow), &s->previewTarget);
+                reinterpret_cast<ACameraWindowType *>(s->previewWindow.get()), &s->previewTarget);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
@@ -383,21 +385,50 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     assert(!session->previewRunning.load() && "Preview already running");
     assert(surface && "Invalid session");
 
-    session->previewWindow = ANativeWindow_fromSurface(env, surface);
+    session->previewWindow = std::shared_ptr<ANativeWindow>(ANativeWindow_fromSurface(env, surface), ANativeWindow_release);
+
+    // Explicitly set the camera output resolution on the preview window so the HAL doesn't
+    // pick an arbitrary size that mismatches the encoder resolution and causes stretching.
+    if (session->videoEncoder) {
+        const int32_t pw = session->videoEncoder->width;
+        const int32_t ph = session->videoEncoder->height;
+        const int32_t geoRet = ANativeWindow_setBuffersGeometry(session->previewWindow.get(), pw, ph, 0);
+        LOGI("[CRITICAL] nativeStartPreview: setBuffersGeometry(%dx%d) ret=%d", pw, ph, geoRet);
+    } else {
+        LOGI("[CRITICAL] nativeStartPreview: encoder not yet configured, skipping geometry hint");
+    }
 
     ACameraManager *cameraMgr = ACameraManager_create();
     if (!cameraMgr) {
-        ANativeWindow_release(session->previewWindow);
-        session->previewWindow = nullptr;
         return -1;
     }
+    defer(ACameraManager_delete(cameraMgr));
 
     std::string cameraId = findCameraId(session->cameraFacing);
     if (cameraId.empty()) {
-        ANativeWindow_release(session->previewWindow);
-        session->previewWindow = nullptr;
-        ACameraManager_delete(cameraMgr);
+        LOGE("[CRITICAL] nativeStartPreview: no camera found for facing=%d", session->cameraFacing);
         return -1;
+    }
+
+    // Log all camera-supported output formats/resolutions for diagnostics.
+    {
+        ACameraMetadata *metadata = nullptr;
+        camera_status_t charStatus = ACameraManager_getCameraCharacteristics(
+                cameraMgr, cameraId.c_str(), &metadata);
+        if (charStatus == ACAMERA_OK && metadata) {
+            defer(ACameraMetadata_free(metadata));
+            ACameraMetadata_const_entry entry{};
+            if (ACameraMetadata_getConstEntry(
+                    metadata, ACAMERA_SCALER_AVAILABLE_STREAM_CONFIGURATIONS, &entry) == ACAMERA_OK) {
+                for (uint32_t i = 0; i + 4 <= entry.count; i += 4) {
+                    LOGI("CAMERA output format:%d, resolution:%dx%d, input:%d",
+                         entry.data.i32[i], entry.data.i32[i+1],
+                         entry.data.i32[i+2], entry.data.i32[i+3]);
+                }
+            }
+        } else {
+            LOGW("[CRITICAL] nativeStartPreview: getCameraCharacteristics failed: %d", charStatus);
+        }
     }
 
     ACameraDevice_StateCallbacks cb = {};
@@ -407,19 +438,14 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     ACameraDevice *device = nullptr;
     camera_status_t camStatus = ACameraManager_openCamera(cameraMgr, cameraId.c_str(), &cb,
                                                           &device);
-    ACameraManager_delete(cameraMgr);
-
     if (camStatus != ACAMERA_OK || !device) {
-        ANativeWindow_release(session->previewWindow);
-        session->previewWindow = nullptr;
+        LOGE("[CRITICAL] nativeStartPreview: openCamera failed: %d", camStatus);
         return -1;
     }
 
     session->cameraDevice = device;
     if (!createCaptureSession(session, false)) {
         closeCamera(session);
-        ANativeWindow_release(session->previewWindow);
-        session->previewWindow = nullptr;
         return -1;
     }
 
@@ -456,10 +482,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStopPreview(
 
     LOGI("[CRITICAL] nativeStopPreview: before closeCamera");
     closeCamera(session);
-    if (session->previewWindow) {
-        ANativeWindow_release(session->previewWindow);
-        session->previewWindow = nullptr;
-    }
+    session->previewWindow = nullptr;
     session->previewRunning.store(false);
     LOGD("Preview stopped");
 }
@@ -684,12 +707,12 @@ static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, 
     if (!session->cameraInputSurfaceTexture) {
         return false;
     }
-    session->cameraInputWindow = ASurfaceTexture_acquireANativeWindow(session->cameraInputSurfaceTexture);
+    session->cameraInputWindow = std::shared_ptr<ANativeWindow>(ASurfaceTexture_acquireANativeWindow(session->cameraInputSurfaceTexture), ANativeWindow_release);
     if (!session->cameraInputWindow) {
         return false;
     }
     LOGI("[CRITICAL] EncoderRotate camera input ST created: st=%p window=%p tex=%u",
-         session->cameraInputSurfaceTexture, session->cameraInputWindow,
+         session->cameraInputSurfaceTexture, session->cameraInputWindow.get(),
          session->encoderGlBridge->cameraOesTex);
     return true;
 }
@@ -807,6 +830,14 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     // pthread_setschedparam(th, SCHED_FIFO, &sch_params);
     if (session->cameraDevice) {
         std::lock_guard<std::mutex> lock(session->cameraMutex);
+        // Sync preview window geometry to the (post-swap) encoder resolution so the camera
+        // HAL outputs matching frames to both surfaces, eliminating aspect-ratio mismatch.
+        if (session->previewWindow) {
+            const int32_t geoRet = ANativeWindow_setBuffersGeometry(
+                    session->previewWindow.get(), p->width, p->height, 0);
+            LOGI("[CRITICAL] StartSend: previewWindow setBuffersGeometry(%dx%d) ret=%d",
+                 p->width, p->height, geoRet);
+        }
         releaseCaptureSession(session);
         if (!createCaptureSession(session, true)) {
             LOGE("Failed to recreate capture session with encoder");
@@ -1045,10 +1076,7 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
     LOGI("[CRITICAL] Release: cleaning up session");
 
     closeCamera(session);
-    if (session->previewWindow) {
-        ANativeWindow_release(session->previewWindow);
-        session->previewWindow = nullptr;
-    }
+    session->previewWindow = nullptr;
     session->previewRunning.store(false);
 
     if (session->decoderSurface) {
@@ -1056,10 +1084,7 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
         session->decoderSurface = nullptr;
     }
 
-    if (session->cameraInputWindow) {
-        ANativeWindow_release(session->cameraInputWindow);
-        session->cameraInputWindow = nullptr;
-    }
+    session->cameraInputWindow = nullptr;
     if (session->cameraInputSurfaceTexture) {
         ASurfaceTexture_release(session->cameraInputSurfaceTexture);
         session->cameraInputSurfaceTexture = nullptr;

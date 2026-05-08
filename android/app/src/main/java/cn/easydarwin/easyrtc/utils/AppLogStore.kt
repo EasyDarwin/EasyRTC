@@ -1,30 +1,35 @@
 package cn.easydarwin.easyrtc.utils
 
 import android.content.Context
-import android.util.Log
-import java.io.File
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import cn.easyrtc.NativeLogBridge
+import android.util.Log
 
 object AppLogStore {
 
     private const val TAG = "AppLogStore"
-    private const val MESSAGE_FILE_NAME = "message.log"
     private const val MAX_LOG_LENGTH = 100 * 1024
     private val lock = Any()
     private val builder = StringBuilder()
-    @Volatile
-    private var appContext: Context? = null
-
-    fun init(context: Context) {
-        appContext = context.applicationContext
-    }
+    
+    fun init(@Suppress("UNUSED_PARAMETER") context: Context) {}
 
     fun appendTimestamped(message: String) {
         val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         append("${formatter.format(Date())}: $message\n")
+    }
+
+    fun appendCritical(tag: String, message: String, throwable: Throwable? = null) {
+        val thread = Thread.currentThread().name
+        val payload = buildString {
+            append("[CRITICAL][$tag][thread=$thread] $message")
+            if (throwable != null) {
+                append(" | exception=${throwable.javaClass.simpleName}: ${throwable.message}")
+            }
+        }
+        appendTimestamped(payload)
     }
 
     fun appendRaw(message: String) {
@@ -49,23 +54,11 @@ object AppLogStore {
             if (builder.length > MAX_LOG_LENGTH) {
                 builder.delete(0, builder.length - MAX_LOG_LENGTH)
             }
-            persist(value)
+            try {
+                NativeLogBridge.dispatch(value)
+            } catch (e: Throwable) {
+                Log.e(TAG, "Failed to dispatch native log", e)
+            }
         }
-    }
-
-    private fun persist(value: String) {
-        val file = resolveMessageFile() ?: return
-        try {
-            file.parentFile?.mkdirs()
-            file.appendText(value, Charsets.UTF_8)
-        } catch (e: IOException) {
-            Log.e(TAG, "Failed to persist message", e)
-        }
-    }
-
-    private fun resolveMessageFile(): File? {
-        val context = appContext ?: return null
-        val rootDir = context.getExternalFilesDir(null) ?: context.filesDir
-        return File(rootDir, MESSAGE_FILE_NAME)
     }
 }

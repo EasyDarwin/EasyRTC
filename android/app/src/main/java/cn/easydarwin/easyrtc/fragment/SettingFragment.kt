@@ -10,6 +10,7 @@ import androidx.preference.PreferenceFragmentCompat
 import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.repository.LogUploadRepository
 import cn.easydarwin.easyrtc.ui.settings.SettingsValidator
+import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -127,12 +128,15 @@ class SettingFragment : PreferenceFragmentCompat() {
     private fun reportLogs() {
         val preference = uploadLogsPreference ?: return
         val appContext = requireContext().applicationContext
+        AppLogStore.appendCritical("SettingFragment", "reportLogs: triggered by user")
         preference.isEnabled = false
         lifecycleScope.launch {
             val result = logUploadRepository.uploadLogs(appContext.getExternalFilesDir(null))
             if (result.success) {
+                AppLogStore.appendCritical("SettingFragment", "reportLogs: upload success message=${result.message}")
                 Toast.makeText(appContext, appContext.getString(R.string.upload_log_success), Toast.LENGTH_SHORT).show()
             } else {
+                AppLogStore.appendCritical("SettingFragment", "reportLogs: upload failed message=${result.message}")
                 Toast.makeText(
                     appContext,
                     "${appContext.getString(R.string.upload_log_failed)}: ${result.message}",

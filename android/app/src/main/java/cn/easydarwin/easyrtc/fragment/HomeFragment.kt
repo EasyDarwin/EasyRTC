@@ -1,14 +1,10 @@
 package cn.easydarwin.easyrtc.fragment
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
-import cn.easyrtc.model.VideoEncodeConfig
 import android.os.Bundle
-import android.os.Looper
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.MotionEvent
@@ -21,8 +17,6 @@ import android.media.AudioManager
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.Fragment
 import androidx.appcompat.widget.PopupMenu
 import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
@@ -33,6 +27,7 @@ import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCStreamTrack
 import cn.easyrtc.helper.MagicFileHelper
 import cn.easyrtc.media.MediaSession
+import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
 import cn.easydarwin.easyrtc.ui.hub.HubFragment
 import cn.easydarwin.easyrtc.ui.live.LiveSessionController
 import cn.easydarwin.easyrtc.ui.live.LiveUiState
@@ -44,8 +39,7 @@ import cn.easydarwin.easyrtc.utils.WebSocketManager
 import org.json.JSONObject
 import java.util.Locale
 
-
-class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
+class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     EasyRTCSdk.EasyRTCEventListener {
 
     companion object {
@@ -80,31 +74,22 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
 
     private var bandwidthTV: TextView? = null
 
-    private lateinit var session: MediaSession
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        session = MediaSession().apply{
-            create()
-            setDeviceId(SPUtil.getInstance().rtcUserUUID)
-            setInputKbpsStatsListener { stats ->
-                runOnMainThread {
-                    bandwidthTV?.text = String.format(
-                        Locale.getDefault(),
-                        "kbps: v:%.2f a:%.2f",
-                        stats.videoKbps,
-                        stats.audioKbps,
-                        stats.totalKbps
-                    )
-                }
+    override fun onMediaSessionCreated(session: MediaSession) {
+        session.setInputKbpsStatsListener { stats ->
+            runOnMainThread {
+                bandwidthTV?.text = String.format(
+                    Locale.getDefault(),
+                    "kbps: v:%.2f a:%.2f",
+                    stats.videoKbps,
+                    stats.audioKbps,
+                    stats.totalKbps
+                )
             }
         }
     }
 
-    override fun onDestroy() {
+    override fun onMediaSessionReleasing(session: MediaSession) {
         session.setInputKbpsStatsListener(null)
-        session.release()
-        super.onDestroy()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -242,15 +227,6 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         Log.d(TAG, "视图初始化完成")
     }
 
-    private fun getVideoEncodeConfig(): VideoEncodeConfig {
-        val useHevc = SPUtil.getInstance().getIsHevc()
-        val cameraId = SPUtil.getInstance().cameraId
-        val resolution = SPUtil.getInstance().getVideoResolution()
-        val bitRate = SPUtil.getInstance().getVideoBitRateKbps()
-        val frameRate = SPUtil.getInstance().getVideoFrameRate()
-        return VideoEncodeConfig(useHevc, frameRate, cameraId, resolution, VideoEncodeConfig.ORIENTATION_90, bitRate)
-    }
-
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         Log.d(TAG, "SurfaceTexture 可用: $width x $height")
 
@@ -348,7 +324,7 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         Log.d(TAG, "onDestroyView")
         stopEasyRTC()
         session.stopPreview()
-        EasyRTCSdk.setEventListener(null)
+        EasyRTCSdk.unsetEventListener(this)
         EasyRTCSdk.release()
         buttonHomeMenu = null
     }
@@ -560,17 +536,4 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         pipelineController.stop()
     }
 
-    private fun runOnMainThread(action: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            action()
-        } else {
-            activity?.runOnUiThread(action) ?: view?.post(action)
-        }
-    }
-
-    private fun hasCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            requireContext(), Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-    }
 }

@@ -1,5 +1,6 @@
 package cn.easydarwin.easyrtc.repository
 
+import cn.easydarwin.easyrtc.utils.AppLogStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -32,6 +33,7 @@ class LogUploadRepository(
 
     suspend fun uploadLogs(externalFilesDir: File?): LogUploadResult = withContext(Dispatchers.IO) {
         try {
+            AppLogStore.appendCritical("LogUploadRepository", "uploadLogs: start root=${externalFilesDir?.absolutePath ?: "null"}")
             if (externalFilesDir == null) {
                 return@withContext LogUploadResult(
                     success = false,
@@ -40,6 +42,7 @@ class LogUploadRepository(
             }
 
             val logFiles = collectLogFiles(externalFilesDir)
+            AppLogStore.appendCritical("LogUploadRepository", "uploadLogs: foundFiles=${logFiles.size}")
             if (logFiles.isEmpty()) {
                 return@withContext LogUploadResult(
                     success = false,
@@ -48,6 +51,7 @@ class LogUploadRepository(
             }
 
             val zipBytes = createZipBytes(externalFilesDir, logFiles)
+            AppLogStore.appendCritical("LogUploadRepository", "uploadLogs: zipBytes=${zipBytes.size}")
             val requestBody = zipBytes.toRequestBody("application/zip".toMediaType())
             val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -61,6 +65,10 @@ class LogUploadRepository(
 
             client.newCall(request).execute().use { response ->
                 val responseBody = response.body?.string().orEmpty()
+                AppLogStore.appendCritical(
+                    "LogUploadRepository",
+                    "uploadLogs: httpCode=${response.code} responseLength=${responseBody.length}"
+                )
                 if (!response.isSuccessful) {
                     return@withContext LogUploadResult(
                         success = false,
@@ -75,6 +83,7 @@ class LogUploadRepository(
                 )
             }
         } catch (e: IOException) {
+            AppLogStore.appendCritical("LogUploadRepository", "uploadLogs: network exception", e)
             return@withContext LogUploadResult(
                 success = false,
                 message = e.message ?: "网络错误"
@@ -84,7 +93,11 @@ class LogUploadRepository(
 
     private fun collectLogFiles(rootDir: File): List<File> {
         return rootDir.walkTopDown()
-            .filter { file -> file.isFile && file.extension.equals("log", ignoreCase = true) }
+            .filter { file ->
+                file.isFile &&
+                    file.extension.equals("log", ignoreCase = true) &&
+                    file.name != "message.log"
+            }
             .sortedBy { file -> file.relativeTo(rootDir).path }
             .toList()
     }
