@@ -386,17 +386,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     assert(surface && "Invalid session");
 
     session->previewWindow = std::shared_ptr<ANativeWindow>(ANativeWindow_fromSurface(env, surface), ANativeWindow_release);
-
-    // Explicitly set the camera output resolution on the preview window so the HAL doesn't
-    // pick an arbitrary size that mismatches the encoder resolution and causes stretching.
-    if (session->videoEncoder) {
-        const int32_t pw = session->videoEncoder->width;
-        const int32_t ph = session->videoEncoder->height;
-        const int32_t geoRet = ANativeWindow_setBuffersGeometry(session->previewWindow.get(), pw, ph, 0);
-        LOGI("[CRITICAL] nativeStartPreview: setBuffersGeometry(%dx%d) ret=%d", pw, ph, geoRet);
-    } else {
-        LOGI("[CRITICAL] nativeStartPreview: encoder not yet configured, skipping geometry hint");
-    }
+    LOGI("[CRITICAL] nativeStartPreview: previewWindow acquired, letting camera HAL choose buffer size naturally");
 
     ACameraManager *cameraMgr = ACameraManager_create();
     if (!cameraMgr) {
@@ -711,9 +701,9 @@ static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, 
     if (!session->cameraInputWindow) {
         return false;
     }
-    LOGI("[CRITICAL] EncoderRotate camera input ST created: st=%p window=%p tex=%u",
+    LOGI("[CRITICAL] EncoderRotate camera input ST created: st=%p window=%p tex=%u bufferSize=%dx%d",
          session->cameraInputSurfaceTexture, session->cameraInputWindow.get(),
-         session->encoderGlBridge->cameraOesTex);
+         session->encoderGlBridge->cameraOesTex, width, height);
     return true;
 }
 
@@ -809,7 +799,9 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     }
     LOGI("[CRITICAL] EncoderRotate start send: rotation=%d swapWH=%d",
          session->encoderRotation, session->encoderSwapWH ? 1 : 0);
-    if (!ensureCameraInputSurfaceTexture(env, session, p->width, p->height)) {
+    if (!ensureCameraInputSurfaceTexture(env, session,
+            session->encoderSwapWH ? p->height : p->width,
+            session->encoderSwapWH ? p->width : p->height)) {
         LOGW("[CRITICAL] EncoderRotate failed to create camera input surface texture");
     }
     LOGI("[CRITICAL] nativeStartSend: before startRenderThread");
@@ -830,14 +822,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     // pthread_setschedparam(th, SCHED_FIFO, &sch_params);
     if (session->cameraDevice) {
         std::lock_guard<std::mutex> lock(session->cameraMutex);
-        // Sync preview window geometry to the (post-swap) encoder resolution so the camera
-        // HAL outputs matching frames to both surfaces, eliminating aspect-ratio mismatch.
-        if (session->previewWindow) {
-            const int32_t geoRet = ANativeWindow_setBuffersGeometry(
-                    session->previewWindow.get(), p->width, p->height, 0);
-            LOGI("[CRITICAL] StartSend: previewWindow setBuffersGeometry(%dx%d) ret=%d",
-                 p->width, p->height, geoRet);
-        }
         releaseCaptureSession(session);
         if (!createCaptureSession(session, true)) {
             LOGE("Failed to recreate capture session with encoder");

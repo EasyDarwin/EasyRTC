@@ -560,9 +560,7 @@ void encoderGlSetInputTransform(const std::shared_ptr<EncoderGlBridge>& bridge, 
     if (!bridge || !matrix4x4) {
         return;
     }
-    for (int i = 0; i < 16; ++i) {
-        bridge->inputTransform[i] = matrix4x4[i];
-    }
+    memcpy(bridge->inputTransform, matrix4x4, 16 * sizeof(float));
 }
 
 void encoderGlRelease(std::shared_ptr<EncoderGlBridge>& bridge) {

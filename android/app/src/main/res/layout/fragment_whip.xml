@@ -5,12 +5,14 @@
     android:background="@android:color/black">
 
     <!-- Fullscreen camera preview -->
+
+    <!-- Top overlay: title -->
     <TextureView
         android:id="@+id/local_preview_"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_gravity="bottom"
+        android:layout_height="wrap_content" />
 
-    <!-- Top overlay: title -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

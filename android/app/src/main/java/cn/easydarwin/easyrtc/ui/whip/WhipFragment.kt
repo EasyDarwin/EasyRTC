@@ -14,6 +14,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import cn.easydarwin.easyrtc.R
+import cn.easydarwin.easyrtc.fragment.HomeFragment
 import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCPeerConnectionState
 import cn.easyrtc.EasyRTCSdk
@@ -59,6 +60,9 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         btnStart = view.findViewById(R.id.btn_start)
         btnStop = view.findViewById(R.id.btn_stop)
         localPreview = view.findViewById(R.id.local_preview_)
+        localPreview.post {
+            localPreview.layoutParams.height = localPreview.layoutParams.width * cameraVideoHeight /cameraVideoWidth;
+        }
 
         etWhipUrl.setText(DEFAULT_WHIP_URL)
         tvStatus.movementMethod = ScrollingMovementMethod()
@@ -74,26 +78,37 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         AppLogStore.appendCritical(TAG, "EasyRTCSdk listener attached for WHIP")
     }
 
-    /** Camera video size — portrait (post-rotation) dimensions matching the encoder output. */
-    private var cameraVideoWidth = 720
-    private var cameraVideoHeight = 1280
+    /** Camera video size — landscape (native sensor) dimensions. */
+    private var cameraVideoWidth = 1280
+    private var cameraVideoHeight = 720
 
-    /** Scale the TextureView so the camera image fills the view with correct aspect ratio (center-crop). */
+    /**
+     * Apply rotation + aspect-ratio-preserving scale on the TextureView.
+     *
+     * The preview SurfaceTexture buffer is set to landscape (e.g. 1280×720) to match
+     * standard camera resolutions. The camera delivers landscape frames, so we rotate
+     * 90° CW and center-crop scale to fill the portrait view.
+     */
     private fun updatePreviewTransform(viewWidth: Int, viewHeight: Int) {
-        if (viewWidth == 0 || viewHeight == 0) return
-        val videoAspect = cameraVideoWidth.toFloat() / cameraVideoHeight.toFloat()
-        val viewAspect = viewWidth.toFloat() / viewHeight.toFloat()
-        val matrix = Matrix()
-        if (videoAspect > viewAspect) {
-            // Video is wider — scale height to match, crop sides
-            val scale = videoAspect / viewAspect
-            matrix.setScale(scale, 1f, viewWidth / 2f, viewHeight / 2f)
-        } else {
-            // Video is taller — scale width to match, crop top/bottom
-            val scale = viewAspect / videoAspect
-            matrix.setScale(1f, scale, viewWidth / 2f, viewHeight / 2f)
-        }
-        localPreview.setTransform(matrix)
+//        if (viewWidth == 0 || viewHeight == 0) return
+//        val cx = viewWidth / 2f
+//        val cy = viewHeight / 2f
+//        val bufW = cameraVideoWidth.toFloat()   // 1280
+//        val bufH = cameraVideoHeight.toFloat()  // 720
+//
+//        val matrix = Matrix()
+//        // 1) Undo the default stretch (TextureView maps 1280×720 → viewW×viewH)
+//        //    This restores the buffer to its native 1280×720 pixel aspect, centered.
+//        matrix.setScale(bufW / viewWidth, bufH / viewHeight, cx, cy)
+//        // 2) Rotate 90° CW around center → content becomes 720 wide × 1280 tall
+//        matrix.postRotate(90f, cx, cy)
+//        // 3) Uniformly scale to fill the view (center-crop)
+//        val fillScale = maxOf(viewWidth / bufH, viewHeight / bufW)
+//        matrix.postScale(fillScale, fillScale, cx, cy)
+//
+//        AppLogStore.appendCritical(TAG,
+//            "updatePreviewTransform: view=${viewWidth}x${viewHeight} buf=${bufW.toInt()}x${bufH.toInt()} fillScale=$fillScale")
+//        localPreview.setTransform(matrix)
     }
 
     private fun startWhipPush() {
@@ -127,11 +142,8 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
             EasyRTCSdk.bindMediaSession(session)
             session.removeTransceivers()
             val encodeConfig = getVideoEncodeConfig()
-            // MediaSession.setupVideoEncoder always uses encoderRotation=90, which swaps W↔H
-            // so the camera feeds the preview in portrait (e.g. 720 wide × 1280 tall).
-            // Use the swapped dimensions so updatePreviewTransform produces the correct scale.
-            cameraVideoWidth = encodeConfig.getHeight()
-            cameraVideoHeight = encodeConfig.getWidth()
+            cameraVideoWidth = encodeConfig.getWidth()
+            cameraVideoHeight = encodeConfig.getHeight()
             localPreview.post {
                 updatePreviewTransform(localPreview.width, localPreview.height)
             }
@@ -235,6 +247,9 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         if (surface == localPreview.surfaceTexture) {
+            val config = getVideoEncodeConfig()
+            surface.setDefaultBufferSize(config.getWidth(), config.getHeight())  // 1280×720 landscape
+            AppLogStore.appendCritical(TAG,"主视频 SurfaceTexture 已创建, buffer=${config.getWidth()}x${config.getHeight()}")
             localSurfaceTexture = surface
             updatePreviewTransform(width, height)
             startLocalPreviewIfAvailable()
