@@ -1,214 +1,155 @@
 package cn.easydarwin.easyrtc.fragment
 
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.util.Log
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.TextView
+import android.text.InputType
 import android.widget.Toast
-import androidx.core.view.isVisible
-import androidx.core.widget.doOnTextChanged
-import androidx.fragment.app.Fragment
+import androidx.preference.EditTextPreference
+import androidx.preference.ListPreference
+import androidx.preference.Preference
+import androidx.preference.PreferenceFragmentCompat
 import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.repository.LogUploadRepository
 import cn.easydarwin.easyrtc.ui.settings.SettingsValidator
-import cn.easydarwin.easyrtc.utils.CommonSpinnerHelper
 import cn.easydarwin.easyrtc.utils.SPUtil
-import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
-class SettingFragment : Fragment() {
+class SettingFragment : PreferenceFragmentCompat() {
 
-    private var mEtDeviceId: EditText? = null
-    private var tvDeviceIdError: TextView? = null
-
-    // 视频设置相关视图
-    private var tvVideoEncoded: TextView? = null
-    private var tvVideoResolution: TextView? = null
-    private var tvFrameRate: TextView? = null
-    private var tvVideoCodeRate: TextView? = null
-
-    // 音频设置相关视图
-    private var tvAudioEncoded: TextView? = null
-    private var tvAudioSampleRate: TextView? = null
-    private var tvAudioChannel: TextView? = null
-    private var tvAudioRate: TextView? = null
-
-    // 关于相关视图
-    private var tvAppVersion: TextView? = null
-    private var uploadLogsItem: View? = null
     private val logUploadRepository = LogUploadRepository()
+    private var uploadLogsPreference: Preference? = null
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        return inflater.inflate(R.layout.fragment_setting, container, false)
-    }
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        setPreferencesFromResource(R.xml.settings_preferences, rootKey)
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        initViews(view)
-        initDeviceId()
-        initVideoSettings(view)
-        initAudioSettings(view)
-        initLogUploadSection(view)
-        initAboutSection(view)
-    }
+        bindDeviceIdPreference()
+        bindIndexedListPreference(
+            key = KEY_VIDEO_CODEC,
+            entriesResId = R.array.videocodearr,
+            currentIndex = SPUtil.getInstance().hevcCodec,
+        ) { SPUtil.getInstance().hevcCodec = it }
+        bindIndexedListPreference(
+            key = KEY_VIDEO_RESOLUTION,
+            entriesResId = R.array.resolutionarr,
+            currentIndex = SPUtil.getInstance().videoResolution,
+        ) { SPUtil.getInstance().videoResolution = it }
+        bindIndexedListPreference(
+            key = KEY_VIDEO_FRAME_RATE,
+            entriesResId = R.array.frameratearr,
+            currentIndex = SPUtil.getInstance().frameRate,
+        ) { SPUtil.getInstance().frameRate = it }
+        bindIndexedListPreference(
+            key = KEY_VIDEO_BIT_RATE,
+            entriesResId = R.array.videocoderatearr,
+            currentIndex = SPUtil.getInstance().bitRateKbps,
+        ) { SPUtil.getInstance().bitRateKbps = it }
+        bindIndexedListPreference(
+            key = KEY_AUDIO_CODEC,
+            entriesResId = R.array.audiocodearr,
+            currentIndex = SPUtil.getInstance().aacCodec,
+        ) { SPUtil.getInstance().aacCodec = it }
+        bindIndexedListPreference(
+            key = KEY_AUDIO_SAMPLE_RATE,
+            entriesResId = R.array.samplingratearr,
+            currentIndex = SPUtil.getInstance().samplingRate,
+        ) { SPUtil.getInstance().samplingRate = it }
+        bindIndexedListPreference(
+            key = KEY_AUDIO_CHANNEL,
+            entriesResId = R.array.audiochannelarr,
+            currentIndex = SPUtil.getInstance().audioChannel,
+        ) { SPUtil.getInstance().audioChannel = it }
+        bindIndexedListPreference(
+            key = KEY_AUDIO_BIT_RATE,
+            entriesResId = R.array.audiocoderatearr,
+            currentIndex = SPUtil.getInstance().audioCodeRate,
+        ) { SPUtil.getInstance().audioCodeRate = it }
 
-    private fun initViews(view: View) {
-        mEtDeviceId = view.findViewById(R.id.et_device_id)
-        tvDeviceIdError = view.findViewById(R.id.tv_device_id_error)
-
-        // 视频设置视图
-        tvVideoEncoded = view.findViewById(R.id.tv_video_encoded)
-        tvVideoResolution = view.findViewById(R.id.tv_video_resolution)
-        tvFrameRate = view.findViewById(R.id.tv_frame_rate)
-        tvVideoCodeRate = view.findViewById(R.id.tv_video_code_rate)
-
-        // 音频设置视图
-        tvAudioEncoded = view.findViewById(R.id.tv_audio_encoded)
-        tvAudioSampleRate = view.findViewById(R.id.tv_audio_sample_rate)
-        tvAudioChannel = view.findViewById(R.id.tv_audio_channel)
-        tvAudioRate = view.findViewById(R.id.tv_audio_rate)
-
-
-        mEtDeviceId?.doOnTextChanged { text, _, _, _ ->
-            val rawValue = text?.toString().orEmpty()
-            val validated = SettingsValidator.validateDeviceId(rawValue)
-            tvDeviceIdError?.isVisible = !validated.isValid
-            tvDeviceIdError?.text = validated.errorMessageResId?.let { getString(it) }.orEmpty()
-            if (validated.isValid) {
-                SPUtil.getInstance().rtcUserUUID = validated.normalized
-            }
+        uploadLogsPreference = findPreference(KEY_UPLOAD_LOGS)
+        uploadLogsPreference?.setOnPreferenceClickListener {
+            reportLogs()
+            true
         }
+
+        findPreference<Preference>(KEY_ABOUT_VERSION)?.summary = getAppVersionNameOrUnknown()
     }
 
-    private fun initDeviceId() {
+    override fun onDestroy() {
+        super.onDestroy()
+        uploadLogsPreference = null
+    }
+
+    private fun bindDeviceIdPreference() {
+        val preference = findPreference<EditTextPreference>(KEY_DEVICE_ID) ?: return
         val storedValue = SPUtil.getInstance().rtcUserUUID
         val validated = SettingsValidator.validateDeviceId(storedValue)
-        mEtDeviceId?.setText(validated.normalized)
-        tvDeviceIdError?.isVisible = !validated.isValid
-        tvDeviceIdError?.text = validated.errorMessageResId?.let { getString(it) }.orEmpty()
-        if (validated.isValid && validated.normalized != storedValue) {
-            SPUtil.getInstance().rtcUserUUID = validated.normalized
+        preference.text = validated.normalized
+        preference.summary = validated.normalized.ifBlank { getString(R.string.settings_device_id_helper) }
+        preference.setOnBindEditTextListener { editText ->
+            editText.inputType = InputType.TYPE_CLASS_TEXT
+        }
+        preference.setOnPreferenceChangeListener { pref, newValue ->
+            val result = SettingsValidator.validateDeviceId(newValue.toString())
+            if (!result.isValid) {
+                Toast.makeText(requireContext(), getString(result.errorMessageResId ?: R.string.settings_device_id_error_format), Toast.LENGTH_SHORT).show()
+                return@setOnPreferenceChangeListener false
+            }
+            SPUtil.getInstance().rtcUserUUID = result.normalized
+            (pref as EditTextPreference).text = result.normalized
+            pref.summary = result.normalized
+            true
         }
     }
 
-    private fun initVideoSettings(view: View) {
-        // 视频编码 - 默认选中第一个 (H264)
-        view.findViewById<View>(R.id.ll_video_encoded)?.let { anchorView ->
-            val valueView = tvVideoEncoded ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.videocodearr, SPUtil.getInstance().hevcCodec // 默认选中第一个
-            ) { selectedValue, position ->
-                Log.d(TAG, "视频编码选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().hevcCodec = position
-            }
-        }
+    private fun bindIndexedListPreference(
+        key: String,
+        entriesResId: Int,
+        currentIndex: Int,
+        onValueChanged: (Int) -> Unit,
+    ) {
+        val preference = findPreference<ListPreference>(key) ?: return
+        val entries = resources.getStringArray(entriesResId)
+        val entryValues = Array(entries.size) { index -> index.toString() }
+        val safeIndex = currentIndex.coerceIn(entryValues.indices)
 
-        // 视频分辨率 - 默认选中第一个 (1920*1080)
-        view.findViewById<View>(R.id.ll_video_resolution)?.let { anchorView ->
-            val valueView = tvVideoResolution ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.resolutionarr, SPUtil.getInstance().videoResolution // 默认选中第一个
-            ) { selectedValue, position ->
-                Log.d(TAG, "分辨率选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().videoResolution = position
-            }
-        }
-
-        // 帧率 - 默认选中第三个 (20)
-        view.findViewById<View>(R.id.ll_frame_rate)?.let { anchorView ->
-            val valueView = tvFrameRate ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.frameratearr, SPUtil.getInstance().frameRate // 默认选中第三个 (20fps)
-            ) { selectedValue, position ->
-                Log.d(TAG, "帧率选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().frameRate = position
-            }
-        }
-
-        // 视频码率 - 默认选中第三个 (4096)
-        view.findViewById<View>(R.id.ll_video_code_rate)?.let { anchorView ->
-            val valueView = tvVideoCodeRate ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.videocoderatearr, SPUtil.getInstance().bitRateKbps// 默认选中第三个 (4096)
-            ) { selectedValue, position ->
-                Log.d(TAG, "视频码率选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().bitRateKbps = position
-            }
+        preference.entries = entries
+        preference.entryValues = entryValues
+        preference.value = safeIndex.toString()
+        preference.summary = entries[safeIndex]
+        preference.setOnPreferenceChangeListener { pref, newValue ->
+            val index = newValue.toString().toIntOrNull() ?: return@setOnPreferenceChangeListener false
+            if (index !in entries.indices) return@setOnPreferenceChangeListener false
+            onValueChanged(index)
+            (pref as ListPreference).summary = entries[index]
+            true
         }
     }
 
-
-    private fun initAudioSettings(view: View) {
-        // 音频编码
-        view.findViewById<View>(R.id.ll_audio_encoded)?.let { anchorView ->
-            val valueView = tvAudioEncoded ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.audiocodearr, SPUtil.getInstance().aacCodec
-            ) { selectedValue, position ->
-                Log.d(TAG, "音频编码选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().aacCodec = position
+    private fun reportLogs() {
+        val preference = uploadLogsPreference ?: return
+        val appContext = requireContext().applicationContext
+        preference.isEnabled = false
+        lifecycleScope.launch {
+            val result = logUploadRepository.uploadLogs(appContext.getExternalFilesDir(null))
+            if (result.success) {
+                Toast.makeText(appContext, appContext.getString(R.string.upload_log_success), Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(
+                    appContext,
+                    "${appContext.getString(R.string.upload_log_failed)}: ${result.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
-        }
-
-        // 采样率
-        view.findViewById<View>(R.id.ll_audio_sample_rate)?.let { anchorView ->
-            val valueView = tvAudioSampleRate ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.samplingratearr, SPUtil.getInstance().samplingRate
-            ) { selectedValue, position ->
-                Log.d(TAG, "采样率选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().samplingRate = position
-            }
-        }
-
-        // 声道
-        view.findViewById<View>(R.id.ll_audio_channel)?.let { anchorView ->
-            val valueView = tvAudioChannel ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.audiochannelarr, SPUtil.getInstance().audioChannel
-            ) { selectedValue, position ->
-                Log.d(TAG, "声道选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().audioChannel = position
-            }
-        }
-
-        // 音频码率
-        view.findViewById<View>(R.id.ll_audio_rate)?.let { anchorView ->
-            val valueView = tvAudioRate ?: return@let
-            CommonSpinnerHelper.initSpinner(
-                requireContext(), anchorView, valueView, R.array.audiocoderatearr, SPUtil.getInstance().audioCodeRate
-            ) { selectedValue, position ->
-                Log.d(TAG, "音频码率选择: $selectedValue, 位置: $position")
-                SPUtil.getInstance().audioCodeRate = position
-            }
-        }
-    }
-
-    private fun initAboutSection(view: View) {
-        tvAppVersion = view.findViewById(R.id.tv_app_version)
-        val versionName = getAppVersionNameOrUnknown()
-        tvAppVersion?.text = getString(R.string.about_version_value, versionName)
-    }
-
-    private fun initLogUploadSection(view: View) {
-        uploadLogsItem = view.findViewById(R.id.layout_upload_logs)
-        uploadLogsItem?.setOnClickListener {
-            reportLogs()
+            preference.isEnabled = true
         }
     }
 
     private fun getAppVersionNameOrUnknown(): String {
         return try {
             val context = requireContext()
-            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
                 context.packageManager.getPackageInfo(
                     context.packageName,
-                    PackageManager.PackageInfoFlags.of(0),
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0),
                 )
             } else {
                 @Suppress("DEPRECATION")
@@ -216,59 +157,22 @@ class SettingFragment : Fragment() {
             }
             packageInfo.versionName?.takeIf { it.isNotBlank() }
                 ?: getString(R.string.about_version_unknown)
-        } catch (_: PackageManager.NameNotFoundException) {
+        } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
             getString(R.string.about_version_unknown)
         }
     }
 
-    private fun reportLogs() {
-        uploadLogsItem?.isEnabled = false
-        lifecycleScope.launch {
-            try {
-                val result = logUploadRepository.uploadLogs(requireContext().getExternalFilesDir(null))
-                if (result.success) {
-                    Toast.makeText(requireContext(), getString(R.string.upload_log_success), Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(
-                        requireContext(),
-                        "${getString(R.string.upload_log_failed)}: ${result.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            } finally {
-                uploadLogsItem?.isEnabled = true
-            }
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        Log.d(TAG, "onPause")
-    }
-
-    override fun onResume() {
-        super.onResume()
-        Log.d(TAG, "onResume")
-    }
-
-    override fun onDestroyView() {
-        super.onDestroyView()
-        mEtDeviceId = null
-        tvDeviceIdError = null
-        tvVideoEncoded = null
-        tvVideoResolution = null
-        tvFrameRate = null
-        tvVideoCodeRate = null
-        tvAudioEncoded = null
-        tvAudioSampleRate = null
-        tvAudioChannel = null
-        tvAudioRate = null
-        tvAppVersion = null
-        uploadLogsItem = null
-        Log.d(TAG, "onDestroyView")
-    }
-
-    companion object {
-        private const val TAG = "SettingFragment"
+    private companion object {
+        const val KEY_DEVICE_ID = "pref_device_id"
+        const val KEY_VIDEO_CODEC = "pref_video_codec"
+        const val KEY_VIDEO_RESOLUTION = "pref_video_resolution"
+        const val KEY_VIDEO_FRAME_RATE = "pref_video_frame_rate"
+        const val KEY_VIDEO_BIT_RATE = "pref_video_bit_rate"
+        const val KEY_AUDIO_CODEC = "pref_audio_codec"
+        const val KEY_AUDIO_SAMPLE_RATE = "pref_audio_sample_rate"
+        const val KEY_AUDIO_CHANNEL = "pref_audio_channel"
+        const val KEY_AUDIO_BIT_RATE = "pref_audio_bit_rate"
+        const val KEY_UPLOAD_LOGS = "pref_upload_logs"
+        const val KEY_ABOUT_VERSION = "pref_about_version"
     }
 }

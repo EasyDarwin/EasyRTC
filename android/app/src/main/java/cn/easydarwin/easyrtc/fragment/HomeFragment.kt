@@ -349,9 +349,9 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener,
         Log.d(TAG, "onDestroyView")
         stopEasyRTC()
         session.stopPreview()
+        EasyRTCSdk.setEventListener(null)
         EasyRTCSdk.release()
         buttonHomeMenu = null
-        EasyRTCSdk.setEventListener(null)
     }
 
     override fun onHiddenChanged(hidden: Boolean) {

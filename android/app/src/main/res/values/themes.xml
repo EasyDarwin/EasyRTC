@@ -47,6 +47,7 @@
         <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Small</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Medium</item>
         <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Large</item>
+        <item name="preferenceTheme">@style/ThemeOverlay.EasyRTCDevice.Preference</item>
 
         <!-- 字体 -->
         <item name="textAppearanceHeadline6">@style/TextAppearance.MyApp.Headline6</item>
@@ -82,6 +83,11 @@
 
         <!-- 输入框样式 -->
         <item name="textInputStyle">@style/Widget.EasyRTC.TextInput.Outlined</item>
+    </style>
+
+    <style name="ThemeOverlay.EasyRTCDevice.Preference" parent="ThemeOverlay.MaterialComponents.Light">
+        <item name="materialButtonStyle">@style/Widget.MaterialComponents.Button.TextButton</item>
+        <item name="buttonBarButtonStyle">@style/Widget.AppCompat.Button.ButtonBar.AlertDialog</item>
     </style>
 
     <!-- 主按钮样式 -->

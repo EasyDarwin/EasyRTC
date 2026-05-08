@@ -11,7 +11,7 @@ import java.util.Locale
 object AppLogStore {
 
     private const val TAG = "AppLogStore"
-    private const val MESSAGE_FILE_NAME = "message.txt"
+    private const val MESSAGE_FILE_NAME = "message.log"
     private const val MAX_LOG_LENGTH = 100 * 1024
     private val lock = Any()
     private val builder = StringBuilder()

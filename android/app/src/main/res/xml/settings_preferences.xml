@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="@string/settings_section_identity"
+        app:iconSpaceReserved="false">
+
+        <EditTextPreference
+            android:key="pref_device_id"
+            android:title="@string/rtc_device_id_label"
+            android:dialogTitle="@string/rtc_device_id_label"
+            android:summary="@string/settings_device_id_helper"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/settings_section_video"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:key="pref_video_codec"
+            android:title="@string/settings_label_codec"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="pref_video_resolution"
+            android:title="@string/settings_label_resolution"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="pref_video_frame_rate"
+            android:title="@string/settings_label_frame_rate"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="pref_video_bit_rate"
+            android:title="@string/settings_label_bitrate"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/settings_section_audio"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:key="pref_audio_codec"
+            android:title="@string/settings_label_codec"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="pref_audio_sample_rate"
+            android:title="@string/settings_label_sample_rate"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="pref_audio_channel"
+            android:title="@string/settings_label_channel"
+            app:iconSpaceReserved="false" />
+
+        <ListPreference
+            android:key="pref_audio_bit_rate"
+            android:title="@string/settings_label_bitrate"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/settings_section_logs"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="pref_upload_logs"
+            android:title="@string/upload_log"
+            android:summary="@string/settings_upload_logs_desc"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/about_title"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            android:key="pref_about_version"
+            android:title="@string/about_build_label"
+            app:iconSpaceReserved="false" />
+
+        <Preference
+            android:title="@string/about_company_name"
+            android:summary="@string/about_company_note"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

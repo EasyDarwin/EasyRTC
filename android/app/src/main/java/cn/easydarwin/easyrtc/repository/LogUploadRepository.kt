@@ -39,15 +39,15 @@ class LogUploadRepository(
                 )
             }
 
-            val txtFiles = collectTextFiles(externalFilesDir)
-            if (txtFiles.isEmpty()) {
+            val logFiles = collectLogFiles(externalFilesDir)
+            if (logFiles.isEmpty()) {
                 return@withContext LogUploadResult(
                     success = false,
-                    message = "暂无可上传的 txt 文件"
+                    message = "暂无可上传的 log 文件"
                 )
             }
 
-            val zipBytes = createZipBytes(externalFilesDir, txtFiles)
+            val zipBytes = createZipBytes(externalFilesDir, logFiles)
             val requestBody = zipBytes.toRequestBody("application/zip".toMediaType())
             val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -82,9 +82,9 @@ class LogUploadRepository(
         }
     }
 
-    private fun collectTextFiles(rootDir: File): List<File> {
+    private fun collectLogFiles(rootDir: File): List<File> {
         return rootDir.walkTopDown()
-            .filter { file -> file.isFile && file.extension.equals("txt", ignoreCase = true) }
+            .filter { file -> file.isFile && file.extension.equals("log", ignoreCase = true) }
             .sortedBy { file -> file.relativeTo(rootDir).path }
             .toList()
     }
