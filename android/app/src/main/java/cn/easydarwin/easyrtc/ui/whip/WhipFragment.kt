@@ -184,7 +184,16 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
                 username = "",
                 credential = ""
             )
-
+            EasyRTCSdk.bindMediaSession(session)
+            session.removeTransceivers()
+            val encodeConfig = getVideoEncodeConfig()
+            cameraVideoWidth = encodeConfig.getWidth()
+            cameraVideoHeight = encodeConfig.getHeight()
+            session.setupVideoEncoder(encodeConfig)
+            session.addSendOnlyTransceivers(
+                videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264,
+                audioCodec = EasyRTCCodec.ALAW
+            )
             appendLog("创建 Offer SDP...")
             EasyRTCSdk.createOffer()
 
@@ -227,25 +236,17 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     override fun onSDPCallback(isOffer: Int, sdp: String) {
         if (isOffer != 1) return
         appendLog("发送 Offer SDP 到服务器...")
+        AppLogStore.appendCritical(TAG, "Offer SDP length=${sdp.length}\n$sdp")
         whipModule?.postOffer(
             offerSdp = sdp,
             onSuccess = { answerSdp ->
                 appendLog("收到 Answer SDP，长度: ${answerSdp.length}")
-                AppLogStore.appendCritical(TAG, "onSDPCallback: answer received length=${answerSdp.length}")
+                AppLogStore.appendCritical(TAG, "onSDPCallback: answer received length=${answerSdp.length}\n$answerSdp")
                 runOnMainThread {
-                    EasyRTCSdk.bindMediaSession(session)
-                    session.removeTransceivers()
-                    val encodeConfig = getVideoEncodeConfig()
-                    cameraVideoWidth = encodeConfig.getWidth()
-                    cameraVideoHeight = encodeConfig.getHeight()
-                    session.setupVideoEncoder(encodeConfig)
-                    session.addSendOnlyTransceivers(
-                        videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264,
-                        audioCodec = EasyRTCCodec.ALAW
-                    )
+
                     AppLogStore.appendCritical(
                         TAG,
-                        "WHIP transceivers ready: videoCodec=${if (SPUtil.getInstance().getIsHevc()) "H265" else "H264"} audioCodec=OPUS"
+                        "WHIP transceivers ready: videoCodec=${if (SPUtil.getInstance().getIsHevc()) "H265" else "H264"} audioCodec=ALAW"
                     )
                     EasyRTCSdk.setRemoteDescription(answerSdp)
                     appendLog("设置远端描述完成")

@@ -1,6 +1,7 @@
 package cn.easydarwin.easyrtc.repository
 
 import cn.easydarwin.easyrtc.utils.AppLogStore
+import cn.easydarwin.easyrtc.utils.SPUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -55,7 +56,7 @@ class LogUploadRepository(
             val requestBody = zipBytes.toRequestBody("application/zip".toMediaType())
             val multipartBody = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
-                .addFormDataPart("file", "logs.zip", requestBody)
+                .addFormDataPart("file", "${SPUtil.getInstance().rtcUserUUID}.zip", requestBody)
                 .build()
 
             val request = Request.Builder()
