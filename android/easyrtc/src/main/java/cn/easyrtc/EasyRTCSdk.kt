@@ -151,7 +151,6 @@ object EasyRTCSdk {
     }
 
     fun bindMediaSession(session:MediaSession) {
-        assert(mPeerConnection != 0L);
         session.setPeerConnection(mPeerConnection)
         EasyRTCLog.i(TAG, "bindMediaSession: peer=$mPeerConnection")
     }

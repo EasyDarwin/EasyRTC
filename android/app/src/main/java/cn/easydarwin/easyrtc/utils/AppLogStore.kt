@@ -54,11 +54,7 @@ object AppLogStore {
             if (builder.length > MAX_LOG_LENGTH) {
                 builder.delete(0, builder.length - MAX_LOG_LENGTH)
             }
-            try {
-                NativeLogBridge.dispatch(value)
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to dispatch native log", e)
-            }
+            NativeLogBridge.dispatch(value)
         }
     }
 }

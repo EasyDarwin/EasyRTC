@@ -40,10 +40,7 @@ class WhipSmokeTest {
                 "WHIP fragment should be attached"
             }
             val root = requireNotNull(fragment.view) { "WHIP fragment view missing" }
-            val urlInput = root.findViewById<android.widget.EditText>(R.id.et_whip_url)
-            val startButton = root.findViewById<android.widget.Button>(R.id.btn_start)
-            val statusView = root.findViewById<android.widget.TextView>(R.id.tv_status)
-            urlInput.setText("https://demo.easygbs.com:10010/live/456_01.whip")
+            val startButton = root.findViewById<android.widget.Button>(R.id.btn_toggle_stream)
             startButton.performClick()
         }
 

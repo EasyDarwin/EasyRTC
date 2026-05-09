@@ -15,6 +15,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
 import androidx.appcompat.widget.PopupMenu
+import androidx.preference.PreferenceManager
 import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.fragment.HomeFragment
@@ -93,13 +94,13 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     private var cameraVideoHeight = 720
 
     private fun updateServerAddressDisplay() {
-        val sharedPrefs = requireContext().getSharedPreferences("EasyRTC", android.content.Context.MODE_PRIVATE)
+        val sharedPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
         val serverAddr = sharedPrefs.getString(PREF_WHIP_SERVER, DEFAULT_WHIP_URL) ?: DEFAULT_WHIP_URL
         tvWhipServer.text = serverAddr
     }
 
     private fun getWhipServerUrl(): String {
-        val sharedPrefs = requireContext().getSharedPreferences("EasyRTC", android.content.Context.MODE_PRIVATE)
+        val sharedPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
         return sharedPrefs.getString(PREF_WHIP_SERVER, DEFAULT_WHIP_URL) ?: DEFAULT_WHIP_URL
     }
 
@@ -184,24 +185,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
                 credential = ""
             )
 
-            EasyRTCSdk.bindMediaSession(session)
-            session.removeTransceivers()
-            val encodeConfig = getVideoEncodeConfig()
-            cameraVideoWidth = encodeConfig.getWidth()
-            cameraVideoHeight = encodeConfig.getHeight()
-            localPreview.post {
-                updatePreviewTransform(localPreview.width, localPreview.height)
-            }
-            session.setupVideoEncoder(encodeConfig)
-            session.addSendOnlyTransceivers(
-                videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264,
-                audioCodec = EasyRTCCodec.ALAW
-            )
-            AppLogStore.appendCritical(
-                TAG,
-                "WHIP transceivers ready: videoCodec=${if (SPUtil.getInstance().getIsHevc()) "H265" else "H264"} audioCodec=OPUS"
-            )
-            startLocalPreviewIfAvailable()
             appendLog("创建 Offer SDP...")
             EasyRTCSdk.createOffer()
 
@@ -223,17 +206,12 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         updateButtonState()
         appendLog("停止推流...")
         AppLogStore.appendCritical(TAG, "stopWhipPush: stopping WHIP stream")
-
-        try {
-            session.removeTransceivers()
-            stopLocalPreviewIfStarted()
-            EasyRTCSdk.release()
-            whipModule = null
-            appendLog("=== 推流已停止 ===")
-        } catch (e: Exception) {
-            appendLog("停止推流出错: ${e.message}")
-            AppLogStore.appendCritical(TAG, "stopWhipPush failed", e)
-        }
+        session.removeTransceivers()
+        whipModule?.cancel();
+        whipModule = null
+        EasyRTCSdk.release()
+        EasyRTCSdk.bindMediaSession(session)
+        appendLog("=== 推流已停止 ===")
     }
 
     override fun connectionStateChange(state: Int) {
@@ -255,14 +233,23 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
                 appendLog("收到 Answer SDP，长度: ${answerSdp.length}")
                 AppLogStore.appendCritical(TAG, "onSDPCallback: answer received length=${answerSdp.length}")
                 runOnMainThread {
-                    try {
-                        EasyRTCSdk.setRemoteDescription(answerSdp)
-                        appendLog("设置远端描述完成")
-                        AppLogStore.appendCritical(TAG, "setRemoteDescription success")
-                    } catch (e: Exception) {
-                        appendLog("设置远端描述失败: ${e.message}")
-                        AppLogStore.appendCritical(TAG, "setRemoteDescription failed", e)
-                    }
+                    EasyRTCSdk.bindMediaSession(session)
+                    session.removeTransceivers()
+                    val encodeConfig = getVideoEncodeConfig()
+                    cameraVideoWidth = encodeConfig.getWidth()
+                    cameraVideoHeight = encodeConfig.getHeight()
+                    session.setupVideoEncoder(encodeConfig)
+                    session.addSendOnlyTransceivers(
+                        videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264,
+                        audioCodec = EasyRTCCodec.ALAW
+                    )
+                    AppLogStore.appendCritical(
+                        TAG,
+                        "WHIP transceivers ready: videoCodec=${if (SPUtil.getInstance().getIsHevc()) "H265" else "H264"} audioCodec=OPUS"
+                    )
+                    EasyRTCSdk.setRemoteDescription(answerSdp)
+                    appendLog("设置远端描述完成")
+                    AppLogStore.appendCritical(TAG, "setRemoteDescription success")
                 }
             },
             onError = { error ->
@@ -351,19 +338,8 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     private fun appendLog(message: String) {
         AppLogStore.appendTimestamped("[WHIP][$TAG] $message")
         runOnMainThread {
-            val currentText = tvStatus.text.toString()
-            val newText = if (currentText.isEmpty()) message else "$currentText\n$message"
-            tvStatus.text = newText
-            tvStatus.post {
-                tvStatus.layout(
-                    tvStatus.left, tvStatus.top,
-                    tvStatus.right, tvStatus.bottom
-                )
-                val amount = tvStatus.layout?.height ?: 0
-                if (amount > 0) {
-                    tvStatus.scrollTo(0, tvStatus.height)
-                }
-            }
+            tvStatus.append(message)
+            tvStatus.append("\n")
         }
     }
 
@@ -377,18 +353,14 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     override fun onDestroyView() {
-        try {
-            AppLogStore.appendCritical(TAG, "onDestroyView: releasing WHIP resources, isRunning=$isRunning")
-            if (isRunning) {
-                session.removeTransceivers()
-                stopLocalPreviewIfStarted()
-            }
-            EasyRTCSdk.unsetEventListener(this)
-            EasyRTCSdk.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "release failed", e)
-            AppLogStore.appendCritical(TAG, "onDestroyView release failed", e)
+        AppLogStore.appendCritical(TAG, "onDestroyView: releasing WHIP resources, isRunning=$isRunning")
+        if (isRunning) {
+            stopWhipPush()
+            session.removeTransceivers()
+            stopLocalPreviewIfStarted()
         }
+        EasyRTCSdk.unsetEventListener(this)
+        EasyRTCSdk.release()
         super.onDestroyView()
     }
 

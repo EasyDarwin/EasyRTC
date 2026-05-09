@@ -13,6 +13,8 @@ class WhipModule(private val whipUrl: String) {
         private const val TAG = "WhipModule"
     }
 
+    private  var isCanceled = false
+
     private val client = OkHttpClient()
     fun postOffer(
         offerSdp: String,
@@ -30,19 +32,22 @@ class WhipModule(private val whipUrl: String) {
                     .build()
 
                 val response = client.newCall(request).execute()
-                EasyRTCLog.i(TAG, "postOffer response: code=${response.code} message=${response.message}")
-                if (response.isSuccessful) {
-                    val answerSdp = response.body?.string().orEmpty()
-                    if (answerSdp.isBlank()) {
-                        EasyRTCLog.w(TAG, "postOffer: empty answer sdp")
-                        onError("WHIP 响应为空")
+
+                EasyRTCLog.i(TAG, "postOffer response: code=${response.code} message=${response.message}, canceled:${isCanceled}")
+                if (!isCanceled){
+                    if (response.isSuccessful) {
+                        val answerSdp = response.body?.string().orEmpty()
+                        if (answerSdp.isBlank()) {
+                            EasyRTCLog.w(TAG, "postOffer: empty answer sdp")
+                            onError("WHIP 响应为空")
+                        } else {
+                            EasyRTCLog.i(TAG, "postOffer success: answerSdpLength=${answerSdp.length}")
+                            onSuccess(answerSdp)
+                        }
                     } else {
-                        EasyRTCLog.i(TAG, "postOffer success: answerSdpLength=${answerSdp.length}")
-                        onSuccess(answerSdp)
+                        EasyRTCLog.e(TAG, "postOffer failed: code=${response.code} bodyMessage=${response.message}")
+                        onError("服务器返回错误: ${response.code} ${response.message}")
                     }
-                } else {
-                    EasyRTCLog.e(TAG, "postOffer failed: code=${response.code} bodyMessage=${response.message}")
-                    onError("服务器返回错误: ${response.code} ${response.message}")
                 }
                 response.close()
             } catch (e: Exception) {
@@ -51,5 +56,9 @@ class WhipModule(private val whipUrl: String) {
                 onError("发送 Offer 失败: ${e.message}")
             }
         }
+    }
+
+    fun cancel(){
+        isCanceled = true
     }
 }
