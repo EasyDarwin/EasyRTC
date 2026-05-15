@@ -144,6 +144,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // WebSocket Server
+    implementation(libs.java.websocket)
+
     testImplementation(libs.junit)
     testImplementation("androidx.arch.core:core-testing:2.2.0")
     androidTestImplementation(libs.androidx.junit)

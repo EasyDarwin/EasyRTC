@@ -42,6 +42,9 @@
     <string name="navigation_p2p_call">P2P呼叫</string>
     <string name="navigation_whip_push">WHIP推流</string>
     <string name="navigation_ip_direct">IP直连</string>
+    <string name="ip_direct_idle">等待连接…</string>
+    <string name="ip_direct_listening">监听中 %1$s</string>
+    <string name="ip_direct_connected">IP直连 [已连接]</string>
 
 
     <string name="rtc_device_id_label">设备ID</string>

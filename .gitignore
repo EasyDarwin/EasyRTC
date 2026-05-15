@@ -20,3 +20,4 @@ android/local.properties
 .cache/
 android/easyrtc/src/main/cpp/toolchain-android.cmake
 docs/files
+docs/浏览器 whip 推流.docx

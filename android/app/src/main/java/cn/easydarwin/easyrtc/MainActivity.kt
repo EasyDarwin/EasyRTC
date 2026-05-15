@@ -23,6 +23,7 @@ import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
 import cn.easydarwin.easyrtc.ui.hub.EmptyTabFragment
 import cn.easydarwin.easyrtc.ui.whip.WhipFragment
+import cn.easydarwin.easyrtc.ui.ipdirect.IpDirectContainerFragment
 import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
@@ -167,7 +168,7 @@ class MainActivity : AppCompatActivity() {
                 val fragment = when (tag) {
                     "p2p_call" -> LiveFragment.newInstance()
                     "whip_push" -> WhipFragment.newInstance()
-                    "ip_direct" -> EmptyTabFragment()
+                    "ip_direct" -> IpDirectContainerFragment.newInstance()
                     else -> return
                 }
                 transaction.add(R.id.fragment_container, fragment, tag)
@@ -218,6 +219,9 @@ class MainActivity : AppCompatActivity() {
                 supportFragmentManager.fragments.forEach {
                     if (it.tag == "p2p_call") {
                         LiveFragment.notifyPermissionGranted(it)
+                    }
+                    if (it.tag == "ip_direct") {
+                        IpDirectContainerFragment.notifyPermissionGranted(it)
                     }
                 }
 
