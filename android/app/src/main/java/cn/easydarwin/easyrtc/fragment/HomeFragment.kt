@@ -178,9 +178,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
     private fun initViews(view: View) {
         local_preview_ = view.findViewById(R.id.local_preview_)
-        local_preview_.post {
-            local_preview_.layoutParams.height = local_preview_.layoutParams.width * getVideoEncodeConfig().getHeight() /getVideoEncodeConfig().getWidth();
-        }
         tvFragmentUUID = view.findViewById(R.id.tvFragmentUUID)
         remote_preview_ = view.findViewById(R.id.remote_preview_)
         remote_preview_container = view.findViewById(R.id.remote_preview_container)
