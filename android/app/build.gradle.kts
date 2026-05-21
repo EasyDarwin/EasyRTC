@@ -41,7 +41,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "cn.easydarwin.easyrtc"
+        applicationId = "cn.easyrtc"
         minSdk = 28
         targetSdk = 36
         versionCode = computedVersionCode
