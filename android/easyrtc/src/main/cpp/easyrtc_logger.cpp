@@ -28,6 +28,7 @@ std::shared_ptr<spdlog::details::thread_pool> get_thread_pool() {
     }();
     return tp;
 }
+void fallback_logcat(int priority, const char* tag, const char* message);
 
 std::string log_dir() {
     static std::string dumpDir;
@@ -36,11 +37,17 @@ std::string log_dir() {
     }
     char cmdline[256] = {0};
     int fd = open("/proc/self/cmdline", O_RDONLY);
-    if (fd < 0) { return ""; }
+    if (fd < 0) {
+        fallback_logcat(ANDROID_LOG_ERROR, "EasyRTC.Native", "Failed to open /proc/self/cmdline");
+        return "";
+    }
     read(fd, cmdline, sizeof(cmdline) - 1);
     close(fd);
-    if (cmdline[0] == '\0') { return ""; }
-    dumpDir = std::string("/sdcard/Android/data/") + cmdline + "/files";
+    if (cmdline[0] == '\0') {
+        fallback_logcat(ANDROID_LOG_ERROR, "EasyRTC.Native", "Failed to read /proc/self/cmdline 2 ");
+        return "";
+    }
+    dumpDir = std::string("/data/data/") + cmdline + "/files";
     return dumpDir;
 }
 
@@ -76,6 +83,9 @@ std::shared_ptr<spdlog::logger> create_logger() {
                 true);
             fileSink->set_pattern("%Y-%m-%d %H:%M:%S.%e [%l] [pid:%P tid:%t] %v");
             sinks.push_back(fileSink);
+        }else {
+            auto msg = "Failed to create log directory: " + ec.message();
+            fallback_logcat(ANDROID_LOG_ERROR, "EasyRTC.Native", msg.c_str());
         }
     }
 
@@ -111,11 +121,6 @@ void easyrtc_log_print(int priority, const char* tag, const char* fmt, ...) {
     va_start(args, fmt);
     std::vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
-
-    try {
-        auto logger = get_logger();
-        logger->log(to_spdlog_level(priority), "[{}] {}", tag ? tag : "EasyRTC.Native", buf);
-    } catch (...) {
-        fallback_logcat(priority, tag, buf);
-    }
+    auto logger = get_logger();
+    logger->log(to_spdlog_level(priority), "[{}] {}", tag ? tag : "EasyRTC.Native", buf);
 }

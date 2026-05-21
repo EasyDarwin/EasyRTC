@@ -131,7 +131,7 @@ class SettingFragment : PreferenceFragmentCompat() {
         AppLogStore.appendCritical("SettingFragment", "reportLogs: triggered by user")
         preference.isEnabled = false
         lifecycleScope.launch {
-            val result = logUploadRepository.uploadLogs(appContext.getExternalFilesDir(null))
+            val result = logUploadRepository.uploadLogs(appContext.filesDir)
             if (result.success) {
                 AppLogStore.appendCritical("SettingFragment", "reportLogs: upload success message=${result.message}")
                 Toast.makeText(appContext, appContext.getString(R.string.upload_log_success), Toast.LENGTH_SHORT).show()
