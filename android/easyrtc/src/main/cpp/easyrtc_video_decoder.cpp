@@ -326,7 +326,7 @@ std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface,
     auto pipeline = std::make_shared<VideoDecoderPipeline>();
     pipeline->width = width;
     pipeline->height = height;
-    pipeline->currentCodecType = (codecType == 6) ? "video/hevc" : "video/avc";
+    pipeline->currentCodecType = (codecType == EasyRTC_CODEC_H265) ? "video/hevc" : "video/avc";
 
     if (surface) {
         pipeline->surface = surface;

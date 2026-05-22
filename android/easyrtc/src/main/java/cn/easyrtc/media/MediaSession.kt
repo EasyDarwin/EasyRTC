@@ -189,7 +189,7 @@ class MediaSession {
 
     companion object {
         const val CODEC_H264 = 1
-        const val CODEC_H265 = 6
+        const val CODEC_H265 = 7
 
         init {
             System.loadLibrary("easyrtc_media")

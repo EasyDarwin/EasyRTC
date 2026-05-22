@@ -1,6 +1,8 @@
 package cn.easydarwin.easyrtc.fragment
 
 import android.os.Bundle
+import android.media.MediaCodecList
+import android.media.MediaCodecInfo
 import android.text.InputType
 import android.widget.Toast
 import androidx.preference.EditTextPreference
@@ -22,6 +24,15 @@ class SettingFragment : PreferenceFragmentCompat() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.settings_preferences, rootKey)
+
+        // If device doesn't support HEVC encoding, force H264 and disable the selector
+        if (!isHevcEncoderSupported()) {
+            SPUtil.getInstance().hevcCodec = 0
+            findPreference<ListPreference>(KEY_VIDEO_CODEC)?.apply {
+                isEnabled = false
+                summary = "${entries[0]} (HEVC not supported)"
+            }
+        }
 
         bindDeviceIdPreference()
         bindIndexedListPreference(
@@ -163,6 +174,17 @@ class SettingFragment : PreferenceFragmentCompat() {
                 ?: getString(R.string.about_version_unknown)
         } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
             getString(R.string.about_version_unknown)
+        }
+    }
+
+    private fun isHevcEncoderSupported(): Boolean {
+        return try {
+            val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            codecList.codecInfos.any { info ->
+                info.isEncoder && info.supportedTypes.contains("video/hevc")
+            }
+        } catch (_: Exception) {
+            false
         }
     }
 

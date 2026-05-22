@@ -96,9 +96,9 @@ typedef enum {
 	EasyRTC_CODEC_VP8 = 3,						// VP8
 	EasyRTC_CODEC_MULAW = 4,					// MULAW
 	EasyRTC_CODEC_ALAW = 5,						// ALAW
-	EasyRTC_CODEC_H265 = 6,                     // H265
-	EasyRTC_CODEC_AAC = 7,                      // AAC
-	EasyRTC_CODEC_UNKNOWN = 8,
+	EasyRTC_CODEC_H265 = 7,                     // H265
+	EasyRTC_CODEC_AAC = 8,                      // AAC
+	EasyRTC_CODEC_UNKNOWN = 9,
 } EasyRTC_CODEC;
 
 typedef struct {

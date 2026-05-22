@@ -15,9 +15,9 @@ object EasyRTCCodec {
     const val VP8 = 3
     const val MULAW = 4
     const val ALAW = 5
-    const val H265 = 6
-    const val AAC = 7
-    const val UNKNOWN = 8
+    const val H265 = 7
+    const val AAC = 8
+    const val UNKNOWN = 9
 }
 
 object EasyRTCStreamTrack {

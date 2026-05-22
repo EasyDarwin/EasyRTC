@@ -585,7 +585,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
-    const char *mime = (codec == 6) ? "video/hevc" : "video/avc";
+    const char *mime = (codec == EasyRTC_CODEC_H265) ? "video/hevc" : "video/avc";
     const bool swapWH = session->encoderSwapWH;
     const int encoderWidth = swapWH ? height : width;
     const int encoderHeight = swapWH ? width : height;

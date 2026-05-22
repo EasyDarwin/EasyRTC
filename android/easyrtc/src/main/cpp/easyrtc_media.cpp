@@ -52,7 +52,6 @@ bool MediaPipeline::initEncoder()
     AMediaCodec* encoder = AMediaCodec_createEncoderByType(mime.c_str());
     if (!encoder) {
         LOGE("[CRITICAL] initEncoder: createEncoderByType FAILED for %s", mime.c_str());
-        assert(false);
         return false;
     }
     assert(format);
@@ -61,7 +60,6 @@ bool MediaPipeline::initEncoder()
     if (status != AMEDIA_OK) {
         LOGE("[CRITICAL] initEncoder: configure FAILED status=%d", status);
         AMediaCodec_delete(encoder);
-        assert(false);
         return false;
     }
 
@@ -71,7 +69,6 @@ bool MediaPipeline::initEncoder()
     if (surfStatus != AMEDIA_OK || !inputWindow) {
         LOGE("[CRITICAL] initEncoder: createInputSurface FAILED status=%d", surfStatus);
         AMediaCodec_delete(encoder);
-        assert(false);
         return false;
     }
     this->encoderInputSurface = std::shared_ptr<ANativeWindow>(inputWindow, ANativeWindow_release);
