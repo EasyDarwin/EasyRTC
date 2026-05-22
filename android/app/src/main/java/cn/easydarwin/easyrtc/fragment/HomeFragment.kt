@@ -323,12 +323,11 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     override fun onDestroyView() {
-        super.onDestroyView()
         Log.d(TAG, "onDestroyView")
+        EasyRTCSdk.unsetEventListener(this)
         stopEasyRTC()
         session.stopPreview()
-        EasyRTCSdk.unsetEventListener(this)
-        EasyRTCSdk.release()
+        super.onDestroyView()
         buttonHomeMenu = null
     }
 
@@ -534,8 +533,10 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         }
     }
 
-    private fun stopEasyRTC() {        
-        session.removeTransceivers()
+    private fun stopEasyRTC() {
+        session.stopSend()
+        EasyRTCSdk.release()
+        session.stopRecv()
         pipelineController.stop()
     }
 

@@ -68,6 +68,16 @@ class MediaSession {
         nativeRemoveTransceivers(nativePtr);
     }
 
+    fun stopSend() {
+        EasyRTCLog.i("MediaSession", "stopSend: nativePtr=$nativePtr")
+        nativeStopSend(nativePtr)
+    }
+
+    fun stopRecv() {
+        EasyRTCLog.i("MediaSession", "stopRecv: nativePtr=$nativePtr")
+        nativeStopRecv(nativePtr)
+    }
+
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
         val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
         setEncoderRotation(90)
