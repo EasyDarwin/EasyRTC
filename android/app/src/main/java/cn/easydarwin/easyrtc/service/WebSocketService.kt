@@ -7,6 +7,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
 import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPNTIWEBRTCOFFERINFO2
@@ -114,6 +115,7 @@ class WebSocketService : Service() {
         if (event.callout)
         {
             val sdp = manager.handlerPeerConnection(event.data, true)
+            AppLogStore.appendTimestamped("offer from remote:\n$sdp")
             if (sdp.isEmpty()) {
                 Log.w("WebSocketService", "sdp is empty")
                 return

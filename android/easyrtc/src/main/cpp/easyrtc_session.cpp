@@ -258,6 +258,8 @@ static void closeCamera(MediaSession *s) {
     }
 }
 
+static void onRemoteVideoSizeCallback(void *userPtr, int width, int height);
+
 static int mediaTransceiverCallback(void *userPtr,
                                     EASYRTC_TRANSCEIVER_CALLBACK_TYPE_E type,
                                     EasyRTC_CODEC codecID,
@@ -273,9 +275,30 @@ static int mediaTransceiverCallback(void *userPtr,
             assert(frame->frameData && "invalid frame data in video callback");
             assert(frame->size >= 0 && "invalid frame size in video callback");
 
-            FLOGI("VIDEO_CB codec=%d size=%u pts=%lld", codecID,
+            FLOGI("VIDEO_CB codec=%d keyFlag=%d size=%u pts=%lld", codecID,
+                 frame ? frame->flags : 0,
                  frame ? frame->size : 0,
                  static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
+            // Lazy-create video decoder on first frame using actual remote codec
+            if (!session->videoDecoder && !session->videoDecoderInitAttempted && session->decoderSurface) {
+                session->videoDecoderInitAttempted = true;
+                int dw = 720, dh = 1280;
+                if (session->videoEncoder) { dw = session->videoEncoder->width; dh = session->videoEncoder->height; }
+                session->videoDecoder = videoDecoderCreate(session->decoderSurface,
+                                                           static_cast<int>(codecID), dw, dh);
+                if (session->videoDecoder) {
+                    session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
+                    session->videoDecoder->onVideoSizeUserPtr = session;
+                    if (videoDecoderStart(session->videoDecoder) == 0) {
+                        LOGI("[CRITICAL] Recv: video decoder lazily created codec=%d %dx%d",
+                             codecID, dw, dh);
+                    } else {
+                        videoDecoderRelease(session->videoDecoder);
+                        session->videoDecoder = nullptr;
+                    }
+                }
+            }
+
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
                 
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
@@ -298,9 +321,14 @@ static int mediaTransceiverCallback(void *userPtr,
             FLOGI("AUDIO_CB codec=%d size=%u pts=%lld", codecID,
                  frame ? frame->size : 0,
                  static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
-//            LOGD("mediaTransceiverCallback AUDIO codec=%d size=%u pts=%llu", codecID,
-//                    frame ? frame->size : 0,
-//                    static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
+
+            // Lazy-create audio playback on first frame using actual remote codec
+            if (!session->audioPlayback && !session->audioPlaybackInitAttempted) {
+                session->audioPlaybackInitAttempted = true;
+                session->audioPlayback = audioPlaybackCreate(static_cast<int>(codecID));
+                LOGI("[CRITICAL] Recv: audio playback lazily created codec=%d", codecID);
+            }
+
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData,
                                frame->size, frame->flags);
@@ -573,6 +601,8 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
         }
         LOGI("MediaSession stats thread exiting");
     });
+    session->audioPlaybackInitAttempted = false;
+    session->videoDecoderInitAttempted = false;
     return 0;
 }
 
@@ -842,43 +872,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
 }
 
 JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStartRecv(JNIEnv *env, jobject thiz, jlong sessionPtr) {
-    LOGI("[CRITICAL] nativeStartRecv ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    assert(session && "Invalid session");
-
-    LOGI("[CRITICAL] StartRecv: creating audio playback and video decoder codec=%d", session->videoCodec);
-
-    session->audioPlayback = audioPlaybackCreate(session->audioCodec);
-
-    int decoderWidth = 720;
-    int decoderHeight = 1280;
-    if (session->videoEncoder) {
-        decoderWidth = session->videoEncoder->width;
-        decoderHeight = session->videoEncoder->height;
-    }
-
-    session->videoDecoder = videoDecoderCreate(session->decoderSurface,
-                                               session->videoCodec,
-                                               decoderWidth,
-                                               decoderHeight);
-    if (!session->videoDecoder) {
-        LOGE("[CRITICAL] StartRecv: videoDecoderCreate FAILED");
-        return;
-    }
-    session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
-    session->videoDecoder->onVideoSizeUserPtr = session;
-    if (videoDecoderStart(session->videoDecoder) != 0) {
-        LOGE("[CRITICAL] StartRecv: videoDecoderStart FAILED");
-        videoDecoderRelease(session->videoDecoder);
-        session->videoDecoder = nullptr;
-        return;
-    }
-    LOGI("[CRITICAL] StartRecv: DONE playback=%p decoder=%p",
-         session->audioPlayback.get(), session->videoDecoder.get());
-}
-
-JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlong sessionPtr) {
     LOGI("[CRITICAL] nativeStopSend ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
@@ -938,10 +931,12 @@ Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv *env, jobject thiz, jlo
     LOGI("[CRITICAL] StopRecv: releasing audio playback and video decoder");
 
     if (session->audioPlayback) {
+        assert(!session->peerConnection && "PC should have been released!");
         audioPlaybackRelease(session->audioPlayback);
         session->audioPlayback = nullptr;
     }
     if (session->videoDecoder) {
+        assert(!session->peerConnection && "PC should have been released!");
         videoDecoderRelease(session->videoDecoder);
         session->videoDecoder = nullptr;
     }

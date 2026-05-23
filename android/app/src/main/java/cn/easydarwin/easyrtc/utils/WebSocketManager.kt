@@ -219,6 +219,7 @@ public class WebSocketManager(private val url: String, private val token: String
             this.uuidClientB = byteArrayToUuid(data.copyOfRange(8, 24))   //16字节
             val sdplen = bytesToIntLE(data.copyOfRange(24, 26))           //2字节
             val answerSdp = String(data.copyOfRange(26, 26 + sdplen), Charsets.UTF_8)
+            AppLogStore.appendTimestamped("answer from remote:\n$answerSdp")
             EasyRTCSdk.setRemoteDescription(answerSdp)
         } else if (HPACKGETONLINEDEVICESINFO == type) {
             val users = mutableListOf<EasyRTCUser>()

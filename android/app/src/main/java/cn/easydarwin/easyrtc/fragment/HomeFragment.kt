@@ -409,8 +409,8 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
     override fun onSDPCallback(isOffer: Int, sdp: String) {
         webSocketService?.sendOfferSDP(sdp, isOffer == 1)
-        if (isOffer == 1) appendLog(sdp) else {
-            appendLog("======= answer ====== \n $sdp")
+        if (isOffer == 1) appendLog("======= offer from local ====== \n $sdp") else {
+            appendLog("======= answer from local ====== \n $sdp")
         }
     }
 
@@ -536,7 +536,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     private fun stopEasyRTC() {
         session.stopSend()
         EasyRTCSdk.release()
-        session.stopRecv()
+        EasyRTCSdk.bindMediaSession(session)
         pipelineController.stop()
     }
 

@@ -58,6 +58,8 @@ struct MediaSession {
     std::shared_ptr<AudioPlaybackPipeline> audioPlayback = nullptr;
     struct AudioDecoderPipeline *audioDecoder = nullptr;
     std::shared_ptr<VideoDecoderPipeline> videoDecoder = nullptr;
+    bool videoDecoderInitAttempted = false;
+    bool audioPlaybackInitAttempted = false;
     ANativeWindow *decoderSurface = nullptr;
 
     JavaVM *jvm = nullptr;

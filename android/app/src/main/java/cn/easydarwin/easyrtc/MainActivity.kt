@@ -60,13 +60,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_EasyRTCDevice_Device)
+        SPUtil.init(this)
         super.onCreate(savedInstanceState)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.statusBarColor = Color.WHITE
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
 
-        SPUtil.init(this)
         AppLogStore.init(this)
         EasyRTCLog.setSink { level, tag, message, throwable ->
             val logLine = "[${level.name}][$tag] $message"

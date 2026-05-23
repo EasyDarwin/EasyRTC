@@ -47,9 +47,8 @@ class MediaSession {
     fun addTransceivers(videoCodec: Int, audioCodec: Int): Int {
         val i = nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
         val send = nativeStartSend(nativePtr)
-        val recv = nativeStartRecv(nativePtr)
-        Log.i("MS", "addTrans:$i, startSend:$send, startRecv:$recv")
-        EasyRTCLog.i("MediaSession", "addTransceivers: nativePtr=$nativePtr videoCodec=$videoCodec audioCodec=$audioCodec add=$i send=$send recv=started")
+        Log.i("MS", "addTrans:$i, startSend:$send")
+        EasyRTCLog.i("MediaSession", "addTransceivers: nativePtr=$nativePtr videoCodec=$videoCodec audioCodec=$audioCodec add=$i send=$send")
         return i;
     }
 
@@ -63,7 +62,6 @@ class MediaSession {
 
     fun removeTransceivers() {
         EasyRTCLog.i("MediaSession", "removeTransceivers: nativePtr=$nativePtr")
-        nativeStopRecv(nativePtr)
         nativeStopSend(nativePtr)
         nativeRemoveTransceivers(nativePtr);
     }
@@ -71,11 +69,6 @@ class MediaSession {
     fun stopSend() {
         EasyRTCLog.i("MediaSession", "stopSend: nativePtr=$nativePtr")
         nativeStopSend(nativePtr)
-    }
-
-    fun stopRecv() {
-        EasyRTCLog.i("MediaSession", "stopRecv: nativePtr=$nativePtr")
-        nativeStopRecv(nativePtr)
     }
 
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
@@ -180,7 +173,6 @@ class MediaSession {
 
     private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeStartSend(sessionPtr: Long): Int
-    private external fun nativeStartRecv(sessionPtr: Long)
     private external fun nativeStopSend(sessionPtr: Long)
     private external fun nativeStopRecv(sessionPtr: Long)
     private external fun nativeSwitchCamera(sessionPtr: Long)

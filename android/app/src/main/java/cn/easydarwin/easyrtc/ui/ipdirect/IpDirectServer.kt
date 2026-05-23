@@ -12,7 +12,7 @@ import java.net.InetSocketAddress
 /**
  * WebSocket server for IP直连 mode.
  *
- * Listens on [port] (default 9000) and accepts a single active client.
+ * Listens on [port] (default 19005) and accepts a single active client.
  * Signaling uses a simple JSON protocol:
  *   Client → Server: {"type":"offer",  "sdp":"..."}
  *   Server → Client: {"type":"answer", "sdp":"..."}
@@ -25,7 +25,7 @@ class IpDirectServer(
 
     companion object {
         private const val TAG = "IpDirectServer"
-        const val DEFAULT_PORT = 9000
+        const val DEFAULT_PORT = 19005
     }
 
     interface Listener {
