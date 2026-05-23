@@ -57,8 +57,6 @@ object EasyRTCSdk {
 
     interface EasyRTCEventListener {
         fun connectionStateChange(state: Int)
-        fun onSDPCallback(isOffer: Int, sdp: String)
-        fun onTransceiverCallback(track: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long)
         fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int)
         fun onRemoteVideoSize(width: Int, height: Int) {}
     }
@@ -100,24 +98,14 @@ object EasyRTCSdk {
     @Keep
     @JvmStatic
     fun onSDPCallback(userPtr: Long, isOffer: Int, sdp: String): Int {
-        EasyRTCLog.i(TAG, "onSDPCallback: userPtr=$userPtr isOffer=$isOffer sdpLength=${sdp.length}")
-        executor.execute {
-            mainHandler.post {
-                eventListener?.onSDPCallback(isOffer, sdp)
-            }
-        }
+        EasyRTCLog.w(TAG, "onSDPCallback called via legacy path — SDP should go through MediaSession lambdas")
         return 0
     }
 
     @Keep
     @JvmStatic
     fun onTransceiverCallback(userPtr: Long, type: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long, bandwidthEstimation: Int): Int {
-        EasyRTCLog.d(TAG, "onTransceiverCallback: userPtr=$userPtr type=$type codec=$codecId")
-        executor.execute {
-            mainHandler.post {
-                eventListener?.onTransceiverCallback(type, codecId, frameType, frameData, frameSize, pts)
-            }
-        }
+        // Frames processed entirely in native mediaTransceiverCallback now
         return 0
     }
 

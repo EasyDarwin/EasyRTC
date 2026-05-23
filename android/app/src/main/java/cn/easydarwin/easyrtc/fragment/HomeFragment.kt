@@ -406,16 +406,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         }
     }
 
-    override fun onSDPCallback(isOffer: Int, sdp: String) {
-        webSocketService?.sendOfferSDP(sdp, isOffer == 1)
-        if (isOffer == 1) appendLog("======= offer from local ====== \n $sdp") else {
-            appendLog("======= answer from local ====== \n $sdp")
-        }
-    }
-
-    override fun onTransceiverCallback(track: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long) {
-    }
-
     override fun onRemoteVideoSize(width: Int, height: Int) {
         activity?.runOnUiThread {
             val density = resources.displayMetrics.density

@@ -223,7 +223,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         }
 
         appendLog("创建 Answer...")
-        session.createAnswer(offerSdp)
+        session.createAnswer(offerSdp) { server?.sendAnswer(it) }
     }
 
     private fun stopCall() {
@@ -252,19 +252,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             }
         }
     }
-
-    override fun onSDPCallback(isOffer: Int, sdp: String) {
-        if (isOffer == 0) {
-            // Answer SDP generated — send to client via WebSocket
-            appendLog("Answer SDP 已生成, 发送到客户端")
-            server?.sendAnswer(sdp)
-        }
-    }
-
-    override fun onTransceiverCallback(
-        track: Int, codecId: Int, frameType: Int,
-        frameData: ByteArray, frameSize: Int, pts: Long
-    ) {}
 
     override fun onRemoteVideoSize(width: Int, height: Int) {
         activity?.runOnUiThread {

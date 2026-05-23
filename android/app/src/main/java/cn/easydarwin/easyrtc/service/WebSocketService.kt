@@ -160,7 +160,7 @@ class WebSocketService : Service() {
             session.addTransceivers(videoCodec, audioCodec)
 
             if (sdp.contains("webrtc-datachannel", ignoreCase = true)) session.addDataChannel("")
-            session.createAnswer(sdp)  //创建 Answer 的 SDP
+            session.createAnswer(sdp) { manager.sendOfferSDP(it, false) }  //创建 Answer 的 SDP
 
             _events.postValue(Event.Logs(sdp))
             return;
@@ -173,6 +173,6 @@ class WebSocketService : Service() {
 //      try to clean old first
         session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
         session.addDataChannel("123") //name 设备端随机字符串
-        session.createOffer()  //创建  Offer  sdp
+        session.createOffer { manager.sendOfferSDP(it, true) }  //创建  Offer  sdp
     }
 }

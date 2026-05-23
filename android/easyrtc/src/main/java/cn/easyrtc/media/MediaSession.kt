@@ -7,6 +7,7 @@ import androidx.annotation.Keep
 import cn.easyrtc.EasyRTCLog
 import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.model.VideoEncodeConfig
+import java.lang.ref.WeakReference
 
 class MediaSession {
 
@@ -18,6 +19,8 @@ class MediaSession {
 
     private var nativePtr: Long = 0
     private var inputKbpsStatsListener: ((InputKbpsStats) -> Unit)? = null
+    private var onOfferCallback: WeakReference<(String) -> Unit>? = null
+    private var onAnswerCallback: WeakReference<(String) -> Unit>? = null
 
     fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
         inputKbpsStatsListener = listener
@@ -51,12 +54,14 @@ class MediaSession {
         nativeReleasePeerConnection(nativePtr)
     }
 
-    fun createOffer() {
+    fun createOffer(onSdp: (sdp: String) -> Unit) {
+        onOfferCallback = WeakReference(onSdp)
         EasyRTCLog.i("MediaSession", "createOffer: nativePtr=$nativePtr")
         nativeCreateOffer(nativePtr)
     }
 
-    fun createAnswer(offerSdp: String) {
+    fun createAnswer(offerSdp: String, onSdp: (sdp: String) -> Unit) {
+        onAnswerCallback = WeakReference(onSdp)
         EasyRTCLog.i("MediaSession", "createAnswer: nativePtr=$nativePtr")
         nativeCreateAnswer(nativePtr, offerSdp)
     }
@@ -176,7 +181,13 @@ class MediaSession {
 
     @Keep
     private fun onSdpEvent(isOffer: Int, sdp: String) {
-        EasyRTCSdk.onSDPCallback(0L, isOffer, sdp)
+        if (isOffer == 1) {
+            val cb = onOfferCallback; onOfferCallback = null
+            cb?.get()?.invoke(sdp)
+        } else {
+            val cb = onAnswerCallback; onAnswerCallback = null
+            cb?.get()?.invoke(sdp)
+        }
     }
 
     @Keep

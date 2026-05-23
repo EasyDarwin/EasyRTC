@@ -187,7 +187,22 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
                 audioCodec = EasyRTCCodec.ALAW
             )
             appendLog("创建 Offer SDP...")
-            session.createOffer()
+            session.createOffer { sdp ->
+                appendLog("发送 Offer SDP 到服务器...")
+                whipModule?.postOffer(
+                    offerSdp = sdp,
+                    onSuccess = { answerSdp ->
+                        appendLog("收到 Answer SDP，长度: ${answerSdp.length}")
+                        runOnMainThread {
+                            session.setRemoteDescription(answerSdp)
+                            appendLog("设置远端描述完成")
+                        }
+                    },
+                    onError = { error ->
+                        appendLog(error)
+                    }
+                )
+            }
 
         } catch (e: Exception) {
             appendLog("启动失败: ${e.message}")
@@ -221,44 +236,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
             EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED -> appendLog("连接关闭")
         }
         AppLogStore.appendCritical(TAG, "connectionStateChange: state=$state")
-    }
-
-    override fun onSDPCallback(isOffer: Int, sdp: String) {
-        if (isOffer != 1) return
-        appendLog("发送 Offer SDP 到服务器...")
-        AppLogStore.appendCritical(TAG, "Offer SDP length=${sdp.length}\n$sdp")
-        whipModule?.postOffer(
-            offerSdp = sdp,
-            onSuccess = { answerSdp ->
-                appendLog("收到 Answer SDP，长度: ${answerSdp.length}")
-                AppLogStore.appendCritical(TAG, "onSDPCallback: answer received length=${answerSdp.length}\n$answerSdp")
-                runOnMainThread {
-
-                    AppLogStore.appendCritical(
-                        TAG,
-                        "WHIP transceivers ready: videoCodec=${if (SPUtil.getInstance().getIsHevc()) "H265" else "H264"} audioCodec=ALAW"
-                    )
-                    session.setRemoteDescription(answerSdp)
-                    appendLog("设置远端描述完成")
-                    AppLogStore.appendCritical(TAG, "setRemoteDescription success")
-                }
-            },
-            onError = { error ->
-                appendLog(error)
-                AppLogStore.appendCritical(TAG, "postOffer failed: $error")
-            }
-        )
-    }
-
-    override fun onTransceiverCallback(
-        track: Int,
-        codecId: Int,
-        frameType: Int,
-        frameData: ByteArray,
-        frameSize: Int,
-        pts: Long,
-    ) {
-        // WHIP 推流仅发送本地媒体，不处理远端音视频帧
     }
 
     override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
