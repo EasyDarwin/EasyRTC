@@ -536,7 +536,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     private fun stopEasyRTC() {
         session.stopSend()
         EasyRTCSdk.release()
-        EasyRTCSdk.bindMediaSession(session)
+        session.stopRecv()
         pipelineController.stop()
     }
 

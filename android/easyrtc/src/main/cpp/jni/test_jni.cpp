@@ -1,8 +1,8 @@
 #include "EasyRTCAPI.h"
-#include "easyrtc_video_decoder.h"
-#include "easyrtc_audio_playback.h"
-#include "easyrtc_audio_decoder.h"
-#include "easyrtc_frame_reader.h"
+#include "codec/video_decoder.h"
+#include "codec/audio_playback.h"
+#include "codec/audio_decoder.h"
+#include "util/frame_reader.h"
 #include <jni.h>
 #include <android/native_window_jni.h>
 #include <thread>

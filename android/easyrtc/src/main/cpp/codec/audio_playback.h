@@ -1,14 +1,14 @@
 #ifndef EASYRTC_AUDIO_PLAYBACK_H
 #define EASYRTC_AUDIO_PLAYBACK_H
 
-#include "easyrtc_common.h"
+#include "session/common.h"
 #include <aaudio/AAudio.h>
 #include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <mutex>
 #include <vector>
-#include "easyrtc_audio_decoder.h"
+#include "codec/audio_decoder.h"
 #include "sonic.h"
 
 struct AudioPlaybackPipeline {

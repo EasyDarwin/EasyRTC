@@ -1,5 +1,5 @@
-#include "easyrtc_video_decoder.h"
-#include "easyrtc_common.h"
+#include "codec/video_decoder.h"
+#include "session/common.h"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <atomic>
 #include <chrono>
-#include "easyrtc_session.h"
+#include "session/media_session.h"
 
 namespace {
 std::atomic<uint64_t> gDecQueued{0};

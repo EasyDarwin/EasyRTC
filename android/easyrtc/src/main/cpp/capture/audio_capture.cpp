@@ -1,12 +1,12 @@
-#include "easyrtc_audio.h"
+#include "capture/audio_capture.h"
 #include <aaudio/AAudio.h>
 #include <cstring>
 #include <time.h>
 #include <assert.h>
 #include <thread>
 #include <chrono>
-#include "easyrtc_common.h"
-#include "easyrtc_session.h"
+#include "session/common.h"
+#include "session/media_session.h"
 #include "g711.h"
 
 static constexpr int32_t SAMPLE_RATE = 8000;

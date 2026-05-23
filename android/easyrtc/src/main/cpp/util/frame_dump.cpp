@@ -1,5 +1,5 @@
-#include "easyrtc_frame_dump.h"
-#include "easyrtc_common.h"
+#include "util/frame_dump.h"
+#include "session/common.h"
 #include <sys/system_properties.h>
 #include <unistd.h>
 #include <fcntl.h>

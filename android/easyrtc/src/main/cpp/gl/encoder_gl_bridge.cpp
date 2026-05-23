@@ -1,5 +1,5 @@
-#include "easyrtc_encoder_gl.h"
-#include "easyrtc_common.h"
+#include "gl/encoder_gl_bridge.h"
+#include "session/common.h"
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <android/surface_texture.h>

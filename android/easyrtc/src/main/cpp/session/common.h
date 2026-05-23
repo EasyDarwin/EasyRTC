@@ -2,7 +2,7 @@
 #define EASYRTC_COMMON_H
 
 #include "EasyRTCAPI.h"
-#include "easyrtc_logger.h"
+#include "util/logger.h"
 
 #define LOG_TAG "EasyRTCMedia"
 #define LOGD(...) easyrtc_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)

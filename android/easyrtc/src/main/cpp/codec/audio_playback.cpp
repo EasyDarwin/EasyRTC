@@ -1,6 +1,6 @@
-#include "easyrtc_audio_playback.h"
-#include "easyrtc_session.h"
-#include "easyrtc_common.h"
+#include "codec/audio_playback.h"
+#include "session/media_session.h"
+#include "session/common.h"
 #include "sonic.h"
 #include <aaudio/AAudio.h>
 #include <algorithm>

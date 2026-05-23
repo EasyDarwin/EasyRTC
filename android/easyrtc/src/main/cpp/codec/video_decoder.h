@@ -1,9 +1,9 @@
 #ifndef EASYRTC_VIDEO_DECODER_H
 #define EASYRTC_VIDEO_DECODER_H
 
-#include "easyrtc_audio_playback.h"
-#include "easyrtc_common.h"
-#include "easyrtc_packet.hpp"
+#include "codec/audio_playback.h"
+#include "session/common.h"
+#include "util/packet.hpp"
 #include <android/native_window_jni.h>
 #include <atomic>
 #include <cstdint>

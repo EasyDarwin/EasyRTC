@@ -1,8 +1,8 @@
 #ifndef EASYRTC_SESSION_H
 #define EASYRTC_SESSION_H
 
-#include "easyrtc_common.h"
-#include "easyrtc_frame_dump.h"
+#include "session/common.h"
+#include "util/frame_dump.h"
 #include <android/native_window_jni.h>
 #include <android/surface_texture.h>
 #include <camera/NdkCameraDevice.h>

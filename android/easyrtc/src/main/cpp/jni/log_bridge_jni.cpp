@@ -1,4 +1,4 @@
-#include "easyrtc_logger.h"
+#include "util/logger.h"
 #include <jni.h>
 
 extern "C" JNIEXPORT void JNICALL

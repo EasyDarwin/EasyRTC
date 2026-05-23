@@ -1,7 +1,7 @@
-#include "easyrtc_media.h"
+#include "codec/video_encoder.h"
 #include "EasyRTCAPI.h"
-#include "easyrtc_common.h"
-#include "easyrtc_session.h"
+#include "session/common.h"
+#include "session/media_session.h"
 #include <cassert>
 #include <cstring>
 #include <string>

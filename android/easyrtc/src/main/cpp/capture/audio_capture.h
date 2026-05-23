@@ -1,7 +1,7 @@
 #ifndef EASYRTC_AUDIO_H
 #define EASYRTC_AUDIO_H
 
-#include "easyrtc_common.h"
+#include "session/common.h"
 #include <aaudio/AAudio.h>
 #include <atomic>
 #include <cstdint>

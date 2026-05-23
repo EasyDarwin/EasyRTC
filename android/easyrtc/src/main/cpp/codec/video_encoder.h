@@ -1,7 +1,7 @@
 #ifndef EASYRTC_MEDIA_H
 #define EASYRTC_MEDIA_H
 
-#include "easyrtc_common.h"
+#include "session/common.h"
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
 #include <atomic>
