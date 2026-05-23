@@ -3,6 +3,43 @@ package cn.easyrtc.model
 import android.util.Size
 import android.hardware.Camera
 import android.util.Log
+import androidx.lifecycle.MutableLiveData
+
+sealed class LiveUiState {
+    data object Idle : LiveUiState()
+    data class Connected(val user: String?) : LiveUiState()
+    data class Disconnected(val user: String?) : LiveUiState()
+    data class Failed(val user: String?, val reason: String?) : LiveUiState()
+}
+object LiveSessionController: MutableLiveData<LiveUiState>(LiveUiState.Idle) {
+    private var currentUser: String? = null
+
+    fun onConnected(user: String?) {
+        currentUser = user
+        postValue(
+            LiveUiState.Connected(
+                currentUser
+            )
+        )
+    }
+
+    fun onClosed() {
+        postValue(
+            LiveUiState.Disconnected(
+                currentUser
+            )
+        )
+    }
+
+    fun onFailed(reason: String? = null) {
+        postValue(
+            LiveUiState.Failed(
+                currentUser,
+                reason
+            )
+        )
+    }
+}
 
 data class VideoEncodeConfig(
     private val useHevc: Boolean = false,

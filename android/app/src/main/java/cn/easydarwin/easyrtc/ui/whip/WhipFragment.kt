@@ -228,15 +228,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         appendLog("=== 推流已停止 ===")
     }
 
-    override fun connectionStateChange(state: Int) {
-
-        when (state) {
-            EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED -> appendLog("连接成功，推流中...")
-            EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED -> appendLog("连接失败")
-            EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED -> appendLog("连接关闭")
-        }
-        AppLogStore.appendCritical(TAG, "connectionStateChange: state=$state")
-    }
 
     override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
     }

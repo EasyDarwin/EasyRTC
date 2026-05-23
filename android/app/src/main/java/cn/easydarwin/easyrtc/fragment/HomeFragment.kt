@@ -29,13 +29,14 @@ import cn.easyrtc.helper.MagicFileHelper
 import cn.easyrtc.media.MediaSession
 import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
 import cn.easydarwin.easyrtc.ui.hub.HubFragment
-import cn.easydarwin.easyrtc.ui.live.LiveSessionController
-import cn.easydarwin.easyrtc.ui.live.LiveUiState
+
 import cn.easydarwin.easyrtc.ui.live.NativePipelineController
 import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
+import cn.easyrtc.model.LiveSessionController
+import cn.easyrtc.model.LiveUiState
 import org.json.JSONObject
 import java.util.Locale
 
@@ -69,7 +70,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
     private val pipelineController = NativePipelineController()
 
-    private val liveSessionController = LiveSessionController()
     private var activeSessionUser: String? = null
 
     private var bandwidthTV: TextView? = null
@@ -132,7 +132,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun observeLiveSessionState() {
-        liveSessionController.state.observe(viewLifecycleOwner) { state ->
+        LiveSessionController.observe(viewLifecycleOwner) { state ->
             when (state) {
                 is LiveUiState.Idle -> {
                     requireActivity().runOnUiThread {
@@ -390,20 +390,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         return "连接模式($desc)"
     }
 
-    override fun connectionStateChange(state: Int) {
-        Log.d(TAG, "connectionStateChange state =$state  ${state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED}")
-        if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
-            activity?.runOnUiThread {
-                session.requestKeyFrame()
-                liveSessionController.onConnected(activeSessionUser ?: SPUtil.getInstance().rtcUserUUID)
-            }
-
-        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED) {
-            liveSessionController.onFailed()
-        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED) {
-            liveSessionController.onClosed()
-        }
-    }
 
     override fun onRemoteVideoSize(width: Int, height: Int) {
         activity?.runOnUiThread {

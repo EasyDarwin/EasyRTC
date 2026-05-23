@@ -395,7 +395,7 @@ static void onRemoteVideoSizeCallback(void *userPtr, int width, int height) {
 
 static int connectionStateChangeCallback(void *userPtr, EASYRTC_PEER_CONNECTION_STATE state) {
     auto *session = static_cast<MediaSession *>(userPtr);
-    if (!session) return 0;
+    assert(session && "Invalid session in connectionStateChangeCallback");
     LOGI("[CRITICAL] PC state: session=%p state=%d", session, state);
     session->connectState = state;
     bool becameConnected = (state == 3 && session->videoEncoder);

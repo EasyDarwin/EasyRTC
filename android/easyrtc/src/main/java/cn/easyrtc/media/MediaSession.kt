@@ -5,9 +5,12 @@ import android.graphics.SurfaceTexture
 import android.view.Surface
 import androidx.annotation.Keep
 import cn.easyrtc.EasyRTCLog
+import cn.easyrtc.EasyRTCPeerConnectionState
 import cn.easyrtc.EasyRTCSdk
+import cn.easyrtc.model.LiveSessionController
 import cn.easyrtc.model.VideoEncodeConfig
 import java.lang.ref.WeakReference
+
 
 class MediaSession {
 
@@ -170,7 +173,13 @@ class MediaSession {
 
     @Keep
     private fun onConnectionStateChangeEvent(state: Int) {
-        EasyRTCSdk.connectionStateChange(0L, state)
+        if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
+            LiveSessionController.onConnected("")
+        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED) {
+            LiveSessionController.onFailed()
+        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED) {
+            LiveSessionController.onClosed()
+        }
     }
 
     @Keep

@@ -21,8 +21,8 @@ import cn.easyrtc.EasyRTCIceTransportPolicy
 import cn.easyrtc.EasyRTCPeerConnectionState
 import cn.easyrtc.EasyRTCSdk
 import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
-import cn.easydarwin.easyrtc.ui.live.LiveSessionController
-import cn.easydarwin.easyrtc.ui.live.LiveUiState
+import cn.easyrtc.model.LiveSessionController
+import cn.easyrtc.model.LiveUiState
 import cn.easydarwin.easyrtc.ui.live.NativePipelineController
 import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.AppLogStore
@@ -64,7 +64,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     // Pipeline & session state
     private val pipelineController = NativePipelineController()
-    private val liveSessionController = LiveSessionController()
 
     // WebSocket server
     private var server: IpDirectServer? = null
@@ -229,27 +228,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     private fun stopCall() {
         session.releasePeerConnection()
         pipelineController.stop()
-        liveSessionController.onClosed()
-    }
-
-    // ─── EasyRTCSdk.EasyRTCEventListener ─────────────────────────────────
-
-    override fun connectionStateChange(state: Int) {
-        Log.d(TAG, "connectionStateChange state=$state")
-        when (state) {
-            EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED -> {
-                activity?.runOnUiThread {
-                    session.requestKeyFrame()
-                    liveSessionController.onConnected("IP直连")
-                }
-            }
-            EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED -> {
-                liveSessionController.onFailed()
-            }
-            EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED -> {
-                liveSessionController.onClosed()
-            }
-        }
     }
 
     override fun onRemoteVideoSize(width: Int, height: Int) {
@@ -298,7 +276,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     // ─── LiveSession state observation ───────────────────────────────────
 
     private fun observeLiveSessionState() {
-        liveSessionController.state.observe(viewLifecycleOwner) { state ->
+        LiveSessionController.observe(viewLifecycleOwner) { state ->
             when (state) {
                 is LiveUiState.Idle -> {
                     requireActivity().runOnUiThread {

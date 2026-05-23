@@ -56,7 +56,7 @@ object EasyRTCSdk {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     interface EasyRTCEventListener {
-        fun connectionStateChange(state: Int)
+//        fun connectionStateChange(state: Int)
         fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int)
         fun onRemoteVideoSize(width: Int, height: Int) {}
     }
@@ -87,27 +87,6 @@ object EasyRTCSdk {
 
     // ─── Legacy JNI dispatch (kept for peerconnection.java / libEasyRTC.so compatibility) ───
 
-    @Keep
-    @JvmStatic
-    fun connectionStateChange(userPtr: Long, state: Int): Int {
-        EasyRTCLog.i(TAG, "connectionStateChange: userPtr=$userPtr state=$state")
-        eventListener?.connectionStateChange(state)
-        return 0
-    }
-
-    @Keep
-    @JvmStatic
-    fun onSDPCallback(userPtr: Long, isOffer: Int, sdp: String): Int {
-        EasyRTCLog.w(TAG, "onSDPCallback called via legacy path — SDP should go through MediaSession lambdas")
-        return 0
-    }
-
-    @Keep
-    @JvmStatic
-    fun onTransceiverCallback(userPtr: Long, type: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long, bandwidthEstimation: Int): Int {
-        // Frames processed entirely in native mediaTransceiverCallback now
-        return 0
-    }
 
     @Keep
     @JvmStatic
