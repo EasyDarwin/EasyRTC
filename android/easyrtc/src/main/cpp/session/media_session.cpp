@@ -1172,6 +1172,7 @@ Java_cn_easyrtc_media_MediaSession_nativeCreatePeerConnection(
         jstring stunUrl, jstring turnUrl, jstring turnUser, jstring turnPass) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session) return 0;
+    assert(!session->peerConnection && "PeerConnection already exists");
 
     EasyRTC_Configuration config{};
     config.iceTransportPolicy = EasyRTC_ICE_TRANSPORT_POLICY_ALL;
@@ -1212,6 +1213,11 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session || !session->peerConnection) return;
+    // Free data channel before releasing PC
+    if (session->dataChannel) {
+        EasyRTC_FreeDataChannel(&session->dataChannel);
+        session->dataChannel = nullptr;
+    }
     EasyRTC_ReleasePeerConnection(&session->peerConnection);
     session->peerConnection = nullptr;
     LOGI("[CRITICAL] PC released: session=%p", session);
@@ -1223,27 +1229,20 @@ Java_cn_easyrtc_media_MediaSession_nativeAddDataChannel(
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     if (!session || !session->peerConnection) return 0;
     const char *cname = env->GetStringUTFChars(name, nullptr);
-    EasyRTC_DataChannel dc = nullptr;
-    EasyRTC_AddDataChannel(&dc, session->peerConnection, cname, dataChannelCallback, session);
+    EasyRTC_AddDataChannel(&session->dataChannel, session->peerConnection, cname, dataChannelCallback, session);
     env->ReleaseStringUTFChars(name, cname);
-    return reinterpret_cast<jlong>(dc);
-}
-
-JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeFreeDataChannel(
-        JNIEnv *env, jobject thiz, jlong dcPtr) {
-    auto dc = reinterpret_cast<EasyRTC_DataChannel>(dcPtr);
-    if (dc) EasyRTC_FreeDataChannel(&dc);
+    LOGI("[CRITICAL] Data channel added: session=%p dc=%p", session, session->dataChannel);
+    return reinterpret_cast<jlong>(session->dataChannel);
 }
 
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeDataChannelSend(
-        JNIEnv *env, jobject thiz, jlong dcPtr, jboolean isBinary, jbyteArray data) {
-    auto dc = reinterpret_cast<EasyRTC_DataChannel>(dcPtr);
-    if (!dc) return -1;
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jboolean isBinary, jbyteArray data) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session || !session->dataChannel) return -1;
     jsize len = env->GetArrayLength(data);
     jbyte *bytes = env->GetByteArrayElements(data, nullptr);
-    int result = EasyRTC_DataChannelSend(dc, isBinary ? TRUE : FALSE,
+    int result = EasyRTC_DataChannelSend(session->dataChannel, isBinary ? TRUE : FALSE,
                                          reinterpret_cast<const char *>(bytes), len);
     env->ReleaseByteArrayElements(data, bytes, JNI_ABORT);
     return result;

@@ -19,7 +19,6 @@ import cn.easyrtc.media.MediaSession
 class WebSocketService : Service() {
 
     private var currentSession: MediaSession? = null
-    private var dataChannel: Long = 0L
 
     sealed class Event {
         data object Connected : Event()
@@ -101,9 +100,7 @@ class WebSocketService : Service() {
     }
 
     fun hangup() {
-        if (dataChannel != 0L) currentSession?.freeDataChannel(dataChannel)
         currentSession?.releasePeerConnection()
-        dataChannel = 0L
     }
 
     fun sendOfferSDP(sdp: String, isOffer: Boolean) {
@@ -172,6 +169,7 @@ class WebSocketService : Service() {
         manager.handlerPeerConnection(event.data)
         currentSession = session
         manager.session = session
+        manager.createPeerConnection()
         val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
 //      try to clean old first
         session.removeTransceivers()

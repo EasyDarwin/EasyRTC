@@ -37,6 +37,7 @@ struct MediaSession {
     EasyRTC_PeerConnection peerConnection = nullptr;
     EasyRTC_Transceiver videoTransceiver = nullptr;
     EasyRTC_Transceiver audioTransceiver = nullptr;
+    EasyRTC_DataChannel dataChannel = nullptr;
 
     ACameraDevice *cameraDevice = nullptr;
     int cameraFacing = 0;

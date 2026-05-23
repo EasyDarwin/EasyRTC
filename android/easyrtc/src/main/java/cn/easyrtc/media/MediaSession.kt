@@ -19,9 +19,6 @@ class MediaSession {
     private var nativePtr: Long = 0
     private var inputKbpsStatsListener: ((InputKbpsStats) -> Unit)? = null
 
-    var dataChannel: Long = 0L
-        private set
-
     fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
         inputKbpsStatsListener = listener
     }
@@ -70,22 +67,13 @@ class MediaSession {
     }
 
     fun addDataChannel(name: String): Long {
-        dataChannel = nativeAddDataChannel(nativePtr, name)
-        EasyRTCLog.i("MediaSession", "addDataChannel: nativePtr=$nativePtr name=$name dc=$dataChannel")
-        return dataChannel
+        val dc = nativeAddDataChannel(nativePtr, name)
+        EasyRTCLog.i("MediaSession", "addDataChannel: nativePtr=$nativePtr name=$name dc=$dc")
+        return dc
     }
 
     fun sendDataChannelMsg(isBinary: Boolean, data: ByteArray): Int {
-        if (dataChannel == 0L) return -1
-        return nativeDataChannelSend(dataChannel, isBinary, data)
-    }
-
-    fun freeDataChannel(dcPtr: Long) {
-        nativeFreeDataChannel(dcPtr)
-    }
-
-    fun dataChannelSend(dcPtr: Long, isBinary: Boolean, data: ByteArray): Int {
-        return nativeDataChannelSend(dcPtr, isBinary, data)
+        return nativeDataChannelSend(nativePtr, isBinary, data)
     }
 
     fun getIceCandidateType(): Int {
@@ -258,8 +246,7 @@ class MediaSession {
     private external fun nativeCreateAnswer(sessionPtr: Long, offerSdp: String)
     private external fun nativeSetRemoteDescription(sessionPtr: Long, sdp: String)
     private external fun nativeAddDataChannel(sessionPtr: Long, name: String): Long
-    private external fun nativeFreeDataChannel(dcPtr: Long)
-    private external fun nativeDataChannelSend(dcPtr: Long, isBinary: Boolean, data: ByteArray): Int
+    private external fun nativeDataChannelSend(sessionPtr: Long, isBinary: Boolean, data: ByteArray): Int
     private external fun nativeGetIceCandidateType(sessionPtr: Long): Int
 
     companion object {

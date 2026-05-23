@@ -229,7 +229,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     private fun stopCall() {
         session.removeTransceivers()
-        session.freeDataChannel(session.dataChannel)
         session.releasePeerConnection()
         pipelineController.stop()
         liveSessionController.onClosed()
