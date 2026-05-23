@@ -554,23 +554,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
 
 
 JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeSetState(
-        JNIEnv *env, jobject thiz, jlong sessionPtr,
-        jint state) {
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    assert(session && "Invalid session");
-    LOGI("[CRITICAL] nativeSetState ENTRY: session=%p %d -> %d", session, session->connectState,
-         state);
-    const bool becameConnected = (session->connectState != 3 && state == 3);
-    session->connectState = state;
-    auto p = session->videoEncoder;
-    if (becameConnected && p) {
-        p->requestKeyFramePending.store(true);
-        LOGI("[CRITICAL] nativeSetState: queued key frame request after connected");
-    }
-}
-
-JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeStopPreview(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
     LOGI("[CRITICAL] nativeStopPreview ENTRY: sessionPtr=%p",

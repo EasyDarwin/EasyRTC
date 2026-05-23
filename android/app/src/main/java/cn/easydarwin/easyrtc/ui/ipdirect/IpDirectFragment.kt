@@ -236,7 +236,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     override fun connectionStateChange(state: Int) {
         Log.d(TAG, "connectionStateChange state=$state")
-        session.setConnectState(state)
         when (state) {
             EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED -> {
                 activity?.runOnUiThread {

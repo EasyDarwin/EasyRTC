@@ -127,12 +127,6 @@ class MediaSession {
         nativeSetDeviceId(nativePtr, deviceId)
     }
 
-    fun setConnectState(state: Int) {
-        if (nativePtr == 0L) return;
-        EasyRTCLog.i("MediaSession", "setConnectState: nativePtr=$nativePtr state=$state")
-        nativeSetState(nativePtr, state);
-    }
-
     fun setDecoderSurface(surface: Surface?) {
         nativeSetDecoderSurface(nativePtr, surface)
     }
@@ -199,7 +193,6 @@ class MediaSession {
     private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
     private external fun nativeStopPreview(sessionPtr: Long)
 
-    private external fun nativeSetState(sessionPtr: Long, state: Int)
     private external fun nativeAddTransceivers(
         sessionPtr: Long,
         videoCodec: Int,

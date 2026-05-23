@@ -229,7 +229,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     override fun connectionStateChange(state: Int) {
-        session.setConnectState(state)
+
         when (state) {
             EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED -> appendLog("连接成功，推流中...")
             EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED -> appendLog("连接失败")
