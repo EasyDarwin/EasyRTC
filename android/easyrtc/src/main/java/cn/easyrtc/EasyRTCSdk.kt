@@ -53,10 +53,13 @@ object EasyRTCIceTransportPolicy {
 object EasyRTCSdk {
     private const val TAG = "EasyRTCSdk"
     private var mUserPtr: Long = 0
-    private var mPeerConnection: Long = 0L
     private var data_channel: Long = 0L
 
-    private var peerConnection: peerconnection? = peerconnection()
+    private var mediaSession: MediaSession? = null
+    private var pendingStun: String = ""
+    private var pendingTurn: String = ""
+    private var pendingTurnUser: String = ""
+    private var pendingTurnPass: String = ""
 
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -86,10 +89,9 @@ object EasyRTCSdk {
 
     }
 
-    fun getInstance(): peerconnection {
-        if (peerConnection == null) peerConnection = peerconnection()
-        EasyRTCLog.d(TAG, "getInstance: peerConnection=${peerConnection != null}")
-        return peerConnection!!
+    fun getInstance(): EasyRTCSdk {
+        EasyRTCLog.d(TAG, "getInstance")
+        return this
     }
     
     @JvmStatic
@@ -103,65 +105,55 @@ object EasyRTCSdk {
 
     fun connection(stun: String, turn: String, username: String, credential: String, version: Int = 0, iceTransportPolicy: Int = 2, userPtr: Long = 0) {
         this.mUserPtr = userPtr
-        this.mPeerConnection = peerConnection!!.create(version, iceTransportPolicy, stun, turn, username, credential, userPtr)
-        EasyRTCLog.i(
-            TAG,
-            "connection: peer=$mPeerConnection userPtr=$mUserPtr version=$version policy=$iceTransportPolicy stun=$stun turn=${turn.isNotBlank()}"
-        )
+        this.pendingStun = stun
+        this.pendingTurn = turn
+        this.pendingTurnUser = username
+        this.pendingTurnPass = credential
+        EasyRTCLog.i(TAG, "connection: storing ICE config userPtr=$userPtr stun=$stun turn=${turn.isNotBlank()}")
     }
 
     fun addDataChannel(name: String = "") {
-        this.data_channel = peerConnection?.AddDataChannel(this.mPeerConnection, name, this.mUserPtr)!!
+        this.data_channel = mediaSession?.addDataChannel(name) ?: 0L
         EasyRTCLog.i(TAG, "addDataChannel: name=$name handle=$data_channel")
-    }
-
-    fun addTransceiver(codecId: Int, streamId: String, trackId: String, streamTrackType: Int, direction: Int) {
-        val handle = peerConnection?.AddTransceiver(this.mPeerConnection, codecId, streamId, trackId, streamTrackType, direction, this.mUserPtr)
-        EasyRTCLog.i(
-            TAG,
-            "addTransceiver: codec=$codecId stream=$streamId track=$trackId type=$streamTrackType direction=$direction handle=$handle"
-        )
     }
 
     fun createAnswer(sdp: String) {
         EasyRTCLog.i(TAG, "createAnswer: offerSdpLength=${sdp.length}")
-        peerConnection?.CreateAnswer(this.mPeerConnection, sdp, this.mUserPtr)
+        mediaSession?.createAnswer(sdp)
     }
 
-    fun getIceCandidateType() : Int {
-       val type = peerConnection!!.GetIceCandidateType(this.mPeerConnection)
-       EasyRTCLog.i(TAG, "getIceCandidateType: $type")
-       return type
+    fun getIceCandidateType(): Int {
+        val type = mediaSession?.getIceCandidateType() ?: -1
+        EasyRTCLog.i(TAG, "getIceCandidateType: $type")
+        return type
     }
 
     fun createOffer() {
-        EasyRTCLog.i(TAG, "createOffer: peer=$mPeerConnection userPtr=$mUserPtr")
-        peerConnection?.CreateOffer(this.mPeerConnection, this.mUserPtr)
+        EasyRTCLog.i(TAG, "createOffer")
+        mediaSession?.createOffer()
     }
 
     fun setRemoteDescription(sdp: String) {
         EasyRTCLog.i(TAG, "setRemoteDescription: sdpLength=${sdp.length}")
-        peerConnection?.SetRemoteDescription(this.mPeerConnection, sdp)
+        mediaSession?.setRemoteDescription(sdp)
     }
 
     fun sendMsg(isBinary: Int, data: ByteArray = ByteArray(0)) {
         if (this.data_channel == 0L) return
         EasyRTCLog.d(TAG, "sendMsg: isBinary=$isBinary size=${data.size} channel=$data_channel")
-        peerConnection?.DataChannelSend(this.data_channel!!, isBinary, data, data.size)
+        mediaSession?.dataChannelSend(this.data_channel, isBinary != 0, data)
     }
 
-    fun bindMediaSession(session:MediaSession) {
-        session.setPeerConnection(mPeerConnection)
-        EasyRTCLog.i(TAG, "bindMediaSession: peer=$mPeerConnection")
+    fun bindMediaSession(session: MediaSession) {
+        this.mediaSession = session
+        val pc = session.createPeerConnection(pendingStun, pendingTurn, pendingTurnUser, pendingTurnPass)
+        EasyRTCLog.i(TAG, "bindMediaSession: session=$session pc=$pc")
     }
 
     fun release() {
-        EasyRTCLog.i(TAG, "release: peer=$mPeerConnection dataChannel=$data_channel")
-
-        if (this.data_channel != 0L) peerConnection?.FreeDataChannel(this.data_channel)
-        if (this.mPeerConnection != 0L) peerConnection?.release(this.mPeerConnection)
-
-        this.mPeerConnection = 0L
+        EasyRTCLog.i(TAG, "release: dataChannel=$data_channel")
+        if (this.data_channel != 0L) mediaSession?.freeDataChannel(this.data_channel)
+        mediaSession?.releasePeerConnection()
         this.data_channel = 0L
     }
 

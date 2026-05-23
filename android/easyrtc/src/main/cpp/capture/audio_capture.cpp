@@ -146,26 +146,14 @@ static aaudio_data_callback_result_t dataCallback(
     frame.frameData = pipeline->audioBuffer;
     frame.trackId = 0;
 
-#if 0
-    FILE *fp = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_audio_capture.pcm", "ab");
-    if (fp) {
-        fwrite(frame.frameData, 1, frame.size, fp);
-        fclose(fp);
-    }
-#endif
-
-    // LOGD("Audio capture callback: frames=%d, size=%d, pts=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts));
-    
     int result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
     if (result != 0) {
         LOGE("EasyRTC_SendFrame (audio) failed: %d", result);
     }else {
         FLOGI("[AO] EasyRTC_SendFrame (audio) success: size=%u, pts=%llu", frame.size, static_cast<unsigned long long>(frame.presentationTs));
     }
-#else 
-    Java_cn_easyrtc_peerconnection_SendAudioFrame(nullptr, nullptr, reinterpret_cast<jlong>(pipeline->audioTransceiver), reinterpret_cast<jbyteArray>(pcmData), static_cast<jint>(dataSize), static_cast<jint>(pts));
 #endif
-    
+
 
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }

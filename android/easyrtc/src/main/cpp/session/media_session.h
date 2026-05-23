@@ -94,5 +94,4 @@ struct MediaSession {
     int connectState{};
     std::string deviceId;
 };
-
 #endif

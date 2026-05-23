@@ -391,6 +391,86 @@ static void onRemoteVideoSizeCallback(void *userPtr, int width, int height) {
     }
 }
 
+// ─── Native callbacks for libEasyRTC ─────────────────────────────────────────
+
+static int connectionStateChangeCallback(void *userPtr, EASYRTC_PEER_CONNECTION_STATE state) {
+    auto *session = static_cast<MediaSession *>(userPtr);
+    if (!session) return 0;
+    LOGI("[CRITICAL] PC state: session=%p state=%d", session, state);
+    session->connectState = state;
+    bool becameConnected = (state == 3 && session->videoEncoder);
+    if (becameConnected) session->videoEncoder->requestKeyFramePending.store(true);
+    // Notify Java
+    if (session->jvm && session->javaObj) {
+        JNIEnv *env = nullptr; bool attached = false;
+        if (session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
+            if (session->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+        }
+        if (env) {
+            jclass clazz = env->GetObjectClass(session->javaObj);
+            if (clazz) {
+                jmethodID mid = env->GetMethodID(clazz, "onConnectionStateChangeEvent", "(I)V");
+                if (mid) env->CallVoidMethod(session->javaObj, mid, static_cast<jint>(state));
+            }
+            if (attached) session->jvm->DetachCurrentThread();
+        }
+    }
+    return 0;
+}
+
+static int sdpCallback(void *userPtr, const int isOffer, const char *sdp) {
+    auto *session = static_cast<MediaSession *>(userPtr);
+    if (!session || !session->jvm || !session->javaObj) return 0;
+    LOGI("[CRITICAL] PC sdp: session=%p isOffer=%d len=%zu", session, isOffer, sdp ? strlen(sdp) : 0);
+    JNIEnv *env = nullptr;
+    bool attached = false;
+    if (session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        if (session->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+    }
+    if (env) {
+        jclass clazz = env->GetObjectClass(session->javaObj);
+        if (clazz) {
+            jmethodID mid = env->GetMethodID(clazz, "onSdpEvent", "(ILjava/lang/String;)V");
+            if (mid) {
+                jstring jsdp = env->NewStringUTF(sdp ? sdp : "");
+                env->CallVoidMethod(session->javaObj, mid, static_cast<jint>(isOffer), jsdp);
+                env->DeleteLocalRef(jsdp);
+            }
+        }
+        if (attached) session->jvm->DetachCurrentThread();
+    }
+    return 0;
+}
+
+static int dataChannelCallback(void *userPtr, EASYRTC_DATACHANNEL_CALLBACK_TYPE_E type,
+                                BOOL isBinary, const char *msgData, int msgLen) {
+    auto *session = static_cast<MediaSession *>(userPtr);
+    if (!session || !session->jvm || !session->javaObj) return 0;
+    LOGI("[CRITICAL] PC dataChannel: session=%p type=%d", session, type);
+    JNIEnv *env = nullptr;
+    bool attached = false;
+    if (session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        if (session->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+    }
+    if (env) {
+        jclass clazz = env->GetObjectClass(session->javaObj);
+        if (clazz) {
+            jmethodID mid = env->GetMethodID(clazz, "onDataChannelEvent", "(II[B)V");
+            if (mid) {
+                jbyteArray jdata = env->NewByteArray(msgLen > 0 ? msgLen : 0);
+                if (msgData && msgLen > 0) {
+                    env->SetByteArrayRegion(jdata, 0, msgLen, reinterpret_cast<const jbyte *>(msgData));
+                }
+                env->CallVoidMethod(session->javaObj, mid,
+                                    static_cast<jint>(type), static_cast<jint>(isBinary), jdata);
+                env->DeleteLocalRef(jdata);
+            }
+        }
+        if (attached) session->jvm->DetachCurrentThread();
+    }
+    return 0;
+}
+
 extern "C" {
 
 JNIEXPORT jlong JNICALL
@@ -1082,6 +1162,130 @@ Java_cn_easyrtc_media_MediaSession_nativeRelease(
 
     delete session;
     LOGD("MediaSession released");
+}
+
+// ─── PeerConnection lifecycle ────────────────────────────────────────────────
+
+JNIEXPORT jlong JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeCreatePeerConnection(
+        JNIEnv *env, jobject thiz, jlong sessionPtr,
+        jstring stunUrl, jstring turnUrl, jstring turnUser, jstring turnPass) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session) return 0;
+
+    EasyRTC_Configuration config{};
+    config.iceTransportPolicy = EasyRTC_ICE_TRANSPORT_POLICY_ALL;
+
+    const char *stun = env->GetStringUTFChars(stunUrl, nullptr);
+    const char *turn = env->GetStringUTFChars(turnUrl, nullptr);
+    const char *user = env->GetStringUTFChars(turnUser, nullptr);
+    const char *pass = env->GetStringUTFChars(turnPass, nullptr);
+
+    if (stun && strlen(stun) > 0) {
+        strncpy(config.iceServers[0].urls, stun, MAX_ICE_CONFIG_URI_LEN);
+    }
+    if (turn && strlen(turn) > 0) {
+        strncpy(config.iceServers[1].urls, turn, MAX_ICE_CONFIG_URI_LEN);
+        if (user) strncpy(config.iceServers[1].username, user, MAX_ICE_CONFIG_USER_NAME_LEN);
+        if (pass) strncpy(config.iceServers[1].credential, pass, MAX_ICE_CONFIG_CREDENTIAL_LEN);
+    }
+
+    env->ReleaseStringUTFChars(stunUrl, stun);
+    env->ReleaseStringUTFChars(turnUrl, turn);
+    env->ReleaseStringUTFChars(turnUser, user);
+    env->ReleaseStringUTFChars(turnPass, pass);
+
+    EasyRTC_PeerConnection pc = nullptr;
+    int result = EasyRTC_CreatePeerConnection(&pc, &config, connectionStateChangeCallback, session);
+    if (result != 0 || !pc) {
+        LOGE("[CRITICAL] EasyRTC_CreatePeerConnection FAILED: %d", result);
+        return 0;
+    }
+    session->peerConnection = pc;
+    session->connectState = 1; // NEW
+    LOGI("[CRITICAL] PC created: session=%p pc=%p", session, pc);
+    return reinterpret_cast<jlong>(pc);
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session || !session->peerConnection) return;
+    EasyRTC_ReleasePeerConnection(&session->peerConnection);
+    session->peerConnection = nullptr;
+    LOGI("[CRITICAL] PC released: session=%p", session);
+}
+
+JNIEXPORT jlong JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeAddDataChannel(
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jstring name) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session || !session->peerConnection) return 0;
+    const char *cname = env->GetStringUTFChars(name, nullptr);
+    EasyRTC_DataChannel dc = nullptr;
+    EasyRTC_AddDataChannel(&dc, session->peerConnection, cname, dataChannelCallback, session);
+    env->ReleaseStringUTFChars(name, cname);
+    return reinterpret_cast<jlong>(dc);
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeFreeDataChannel(
+        JNIEnv *env, jobject thiz, jlong dcPtr) {
+    auto dc = reinterpret_cast<EasyRTC_DataChannel>(dcPtr);
+    if (dc) EasyRTC_FreeDataChannel(&dc);
+}
+
+JNIEXPORT jint JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeDataChannelSend(
+        JNIEnv *env, jobject thiz, jlong dcPtr, jboolean isBinary, jbyteArray data) {
+    auto dc = reinterpret_cast<EasyRTC_DataChannel>(dcPtr);
+    if (!dc) return -1;
+    jsize len = env->GetArrayLength(data);
+    jbyte *bytes = env->GetByteArrayElements(data, nullptr);
+    int result = EasyRTC_DataChannelSend(dc, isBinary ? TRUE : FALSE,
+                                         reinterpret_cast<const char *>(bytes), len);
+    env->ReleaseByteArrayElements(data, bytes, JNI_ABORT);
+    return result;
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeCreateOffer(
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session || !session->peerConnection) return;
+    EasyRTC_CreateOffer(session->peerConnection, sdpCallback, session);
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeCreateAnswer(
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jstring offerSdp) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session || !session->peerConnection) return;
+    const char *osdp = env->GetStringUTFChars(offerSdp, nullptr);
+    EasyRTC_CreateAnswer(session->peerConnection, osdp, sdpCallback, session);
+    env->ReleaseStringUTFChars(offerSdp, osdp);
+}
+
+JNIEXPORT void JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeSetRemoteDescription(
+        JNIEnv *env, jobject thiz, jlong sessionPtr, jstring sdp) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session || !session->peerConnection) return;
+    const char *sdpc = env->GetStringUTFChars(sdp, nullptr);
+    EasyRTC_SetRemoteDescription(session->peerConnection, sdpc);
+    env->ReleaseStringUTFChars(sdp, sdpc);
+}
+
+JNIEXPORT jint JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeGetIceCandidateType(
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session || !session->peerConnection) return -1;
+    EasyRTC_IceCandidatePairStats stats{};
+    int ret = EasyRTC_GetIceCandidatePairStats(session->peerConnection, &stats);
+    if (ret != 0) return -1;
+    return static_cast<jint>(stats.local_iceCandidateType);
 }
 
 }

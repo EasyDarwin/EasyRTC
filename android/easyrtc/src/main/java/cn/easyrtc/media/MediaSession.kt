@@ -5,6 +5,7 @@ import android.graphics.SurfaceTexture
 import android.view.Surface
 import androidx.annotation.Keep
 import cn.easyrtc.EasyRTCLog
+import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.model.VideoEncodeConfig
 
 class MediaSession {
@@ -39,9 +40,48 @@ class MediaSession {
         nativeStopPreview(nativePtr)
     }
 
-    fun setPeerConnection(peerConnectionHandle: Long) {
-        EasyRTCLog.i("MediaSession", "setPeerConnection: nativePtr=$nativePtr peer=$peerConnectionHandle")
-        nativeSetPeerConnection(nativePtr, peerConnectionHandle)
+    fun createPeerConnection(stunUrl: String, turnUrl: String, turnUser: String, turnPass: String): Long {
+        val pc = nativeCreatePeerConnection(nativePtr, stunUrl, turnUrl, turnUser, turnPass)
+        EasyRTCLog.i("MediaSession", "createPeerConnection: nativePtr=$nativePtr pc=$pc")
+        return pc
+    }
+
+    fun releasePeerConnection() {
+        EasyRTCLog.i("MediaSession", "releasePeerConnection: nativePtr=$nativePtr")
+        nativeReleasePeerConnection(nativePtr)
+    }
+
+    fun createOffer() {
+        EasyRTCLog.i("MediaSession", "createOffer: nativePtr=$nativePtr")
+        nativeCreateOffer(nativePtr)
+    }
+
+    fun createAnswer(offerSdp: String) {
+        EasyRTCLog.i("MediaSession", "createAnswer: nativePtr=$nativePtr")
+        nativeCreateAnswer(nativePtr, offerSdp)
+    }
+
+    fun setRemoteDescription(sdp: String) {
+        EasyRTCLog.i("MediaSession", "setRemoteDescription: nativePtr=$nativePtr")
+        nativeSetRemoteDescription(nativePtr, sdp)
+    }
+
+    fun addDataChannel(name: String): Long {
+        val dc = nativeAddDataChannel(nativePtr, name)
+        EasyRTCLog.i("MediaSession", "addDataChannel: nativePtr=$nativePtr name=$name dc=$dc")
+        return dc
+    }
+
+    fun freeDataChannel(dcPtr: Long) {
+        nativeFreeDataChannel(dcPtr)
+    }
+
+    fun dataChannelSend(dcPtr: Long, isBinary: Boolean, data: ByteArray): Int {
+        return nativeDataChannelSend(dcPtr, isBinary, data)
+    }
+
+    fun getIceCandidateType(): Int {
+        return nativeGetIceCandidateType(nativePtr)
     }
 
     fun addTransceivers(videoCodec: Int, audioCodec: Int): Int {
@@ -69,6 +109,11 @@ class MediaSession {
     fun stopSend() {
         EasyRTCLog.i("MediaSession", "stopSend: nativePtr=$nativePtr")
         nativeStopSend(nativePtr)
+    }
+
+    fun stopRecv() {
+        EasyRTCLog.i("MediaSession", "stopRecv: nativePtr=$nativePtr")
+        nativeStopRecv(nativePtr)
     }
 
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
@@ -146,12 +191,26 @@ class MediaSession {
         inputKbpsStatsListener?.invoke(InputKbpsStats(videoKbps, audioKbps, totalKbps))
     }
 
+    @Keep
+    private fun onConnectionStateChangeEvent(state: Int) {
+        EasyRTCSdk.connectionStateChange(0L, state)
+    }
+
+    @Keep
+    private fun onSdpEvent(isOffer: Int, sdp: String) {
+        EasyRTCSdk.onSDPCallback(0L, isOffer, sdp)
+    }
+
+    @Keep
+    private fun onDataChannelEvent(type: Int, binary: Int, data: ByteArray) {
+        EasyRTCSdk.onDataChannelCallback(0L, type, binary, data, data.size)
+    }
+
     private external fun nativeCreate(): Long
     private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
     private external fun nativeStopPreview(sessionPtr: Long)
 
     private external fun nativeSetState(sessionPtr: Long, state: Int)
-    private external fun nativeSetPeerConnection(sessionPtr: Long, peerConnectionHandle: Long)
     private external fun nativeAddTransceivers(
         sessionPtr: Long,
         videoCodec: Int,
@@ -178,6 +237,22 @@ class MediaSession {
     private external fun nativeSwitchCamera(sessionPtr: Long)
     private external fun nativeRequestKeyFrame(sessionPtr: Long)
     private external fun nativeRelease(sessionPtr: Long)
+
+    private external fun nativeCreatePeerConnection(
+        sessionPtr: Long,
+        stunUrl: String,
+        turnUrl: String,
+        turnUser: String,
+        turnPass: String
+    ): Long
+    private external fun nativeReleasePeerConnection(sessionPtr: Long)
+    private external fun nativeCreateOffer(sessionPtr: Long)
+    private external fun nativeCreateAnswer(sessionPtr: Long, offerSdp: String)
+    private external fun nativeSetRemoteDescription(sessionPtr: Long, sdp: String)
+    private external fun nativeAddDataChannel(sessionPtr: Long, name: String): Long
+    private external fun nativeFreeDataChannel(dcPtr: Long)
+    private external fun nativeDataChannelSend(dcPtr: Long, isBinary: Boolean, data: ByteArray): Int
+    private external fun nativeGetIceCandidateType(sessionPtr: Long): Int
 
     companion object {
         const val CODEC_H264 = 1
