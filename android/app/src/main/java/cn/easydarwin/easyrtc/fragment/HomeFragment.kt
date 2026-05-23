@@ -125,7 +125,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
             }
         }
 
-        EasyRTCSdk.getInstance()
         EasyRTCSdk.setEventListener(this)
 
         initViews(view)
@@ -386,7 +385,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     fun getIceCandidateTypeDesc(): String {
-        val type = EasyRTCSdk.getIceCandidateType()
+        val type = session.getIceCandidateType()
         val desc = if (type == 1) "P2P直连" else "Relay中转"
         return "连接模式($desc)"
     }
@@ -457,7 +456,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
         if (type == 1) {
             val data1 = "Hello EasyRTC!!!".toByteArray(Charsets.UTF_8)
-            EasyRTCSdk.sendMsg(0, data1)
+            session.sendDataChannelMsg(false, data1)
         } else if (type == 2) {
             if (binary == 0) {
                 requireActivity().runOnUiThread {
@@ -523,7 +522,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         val message = text.trim()
         if (message.isEmpty()) return
         appendLog(message)
-        EasyRTCSdk.sendMsg(0, message.toByteArray(Charsets.UTF_8))
+        session.sendDataChannelMsg(false, message.toByteArray(Charsets.UTF_8))
     }
 
     fun onPermissionGranted() {
@@ -535,7 +534,8 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
     private fun stopEasyRTC() {
         session.stopSend()
-        EasyRTCSdk.release()
+        session.freeDataChannel(session.dataChannel)
+        session.releasePeerConnection()
         session.stopRecv()
         pipelineController.stop()
     }

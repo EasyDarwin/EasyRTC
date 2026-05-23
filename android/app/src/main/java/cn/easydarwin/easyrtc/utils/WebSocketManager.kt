@@ -6,9 +6,8 @@ import android.util.Log
 import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCDirection
 import cn.easyrtc.EasyRTCIceTransportPolicy
-import cn.easyrtc.EasyRTCSdk
-import cn.easyrtc.EasyRTCStreamTrack
 import cn.easyrtc.EasyRTCUser
+import cn.easyrtc.media.MediaSession
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -28,6 +27,16 @@ public class WebSocketManager(private val url: String, private val token: String
 
     var uuidClientA = ""
     var uuidClientB = ""
+
+    var session: MediaSession? = null
+    private var stunUrl = ""
+    private var turnUrl = ""
+    private var turnUser = ""
+    private var turnPass = ""
+
+    fun createPeerConnection() {
+        session?.createPeerConnection(stunUrl, turnUrl, turnUser, turnPass)
+    }
 
     private val handler = Handler(Looper.getMainLooper())
     private var onlineTask: Runnable? = null
@@ -180,15 +189,10 @@ public class WebSocketManager(private val url: String, private val token: String
         }
 //        Log.d(TAG, " mStunTurnInfo= ${mStunTurnInfo.toString()},uuid = $uuid")
         this.uuidClientB = uuid
-        EasyRTCSdk.connection(
-            "stun:${mStunTurnInfo.stunServer}",
-            "turn:${mStunTurnInfo.turnServer}",
-            mStunTurnInfo.turnUsername,
-            mStunTurnInfo.turnPassword,
-            1,
-            EasyRTCIceTransportPolicy.EaSyRTC_ICE_TRANSPORT_POLICY_ALL,
-            0L
-        );
+        stunUrl = "stun:${mStunTurnInfo.stunServer}"
+        turnUrl = "turn:${mStunTurnInfo.turnServer}"
+        turnUser = mStunTurnInfo.turnUsername
+        turnPass = mStunTurnInfo.turnPassword
         if (isCaller) return String(data.copyOfRange(37 + strDataLen, data.size), Charsets.UTF_8)
         return ""
     }
@@ -220,7 +224,7 @@ public class WebSocketManager(private val url: String, private val token: String
             val sdplen = bytesToIntLE(data.copyOfRange(24, 26))           //2字节
             val answerSdp = String(data.copyOfRange(26, 26 + sdplen), Charsets.UTF_8)
             AppLogStore.appendTimestamped("answer from remote:\n$answerSdp")
-            EasyRTCSdk.setRemoteDescription(answerSdp)
+            session?.setRemoteDescription(answerSdp)
         } else if (HPACKGETONLINEDEVICESINFO == type) {
             val users = mutableListOf<EasyRTCUser>()
             if (data.size < 12) return

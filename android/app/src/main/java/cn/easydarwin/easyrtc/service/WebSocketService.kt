@@ -13,11 +13,13 @@ import cn.easydarwin.easyrtc.utils.WebSocketManager
 import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPNTIWEBRTCOFFERINFO2
 import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPREQGETWEBRTCOFFERINFO
 import cn.easyrtc.EasyRTCCodec
-import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCUser
 import cn.easyrtc.media.MediaSession
 
 class WebSocketService : Service() {
+
+    private var currentSession: MediaSession? = null
+    private var dataChannel: Long = 0L
 
     sealed class Event {
         data object Connected : Event()
@@ -99,7 +101,9 @@ class WebSocketService : Service() {
     }
 
     fun hangup() {
-        EasyRTCSdk.release()
+        if (dataChannel != 0L) currentSession?.freeDataChannel(dataChannel)
+        currentSession?.releasePeerConnection()
+        dataChannel = 0L
     }
 
     fun sendOfferSDP(sdp: String, isOffer: Boolean) {
@@ -152,24 +156,27 @@ class WebSocketService : Service() {
                 return
             }
 
-            EasyRTCSdk.bindMediaSession(session)
+            currentSession = session
+            manager.session = session
+            manager.createPeerConnection()
             //      try to clean old first
             session.removeTransceivers()
             session.addTransceivers(videoCodec, audioCodec)
-            
-            if (sdp.contains("webrtc-datachannel", ignoreCase = true)) EasyRTCSdk.addDataChannel()
-            EasyRTCSdk.createAnswer(sdp)  //创建 Answer 的 SDP
+
+            if (sdp.contains("webrtc-datachannel", ignoreCase = true)) session.addDataChannel("")
+            session.createAnswer(sdp)  //创建 Answer 的 SDP
 
             _events.postValue(Event.Logs(sdp))
             return;
         }
         manager.handlerPeerConnection(event.data)
-        EasyRTCSdk.bindMediaSession(session)
+        currentSession = session
+        manager.session = session
         val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
 //      try to clean old first
         session.removeTransceivers()
         session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
-        EasyRTCSdk.addDataChannel("123") //name 设备端随机字符串
-        EasyRTCSdk.createOffer()  //创建  Offer  sdp
+        session.addDataChannel("123") //name 设备端随机字符串
+        session.createOffer()  //创建  Offer  sdp
     }
 }

@@ -19,6 +19,9 @@ class MediaSession {
     private var nativePtr: Long = 0
     private var inputKbpsStatsListener: ((InputKbpsStats) -> Unit)? = null
 
+    var dataChannel: Long = 0L
+        private set
+
     fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
         inputKbpsStatsListener = listener
     }
@@ -67,9 +70,14 @@ class MediaSession {
     }
 
     fun addDataChannel(name: String): Long {
-        val dc = nativeAddDataChannel(nativePtr, name)
-        EasyRTCLog.i("MediaSession", "addDataChannel: nativePtr=$nativePtr name=$name dc=$dc")
-        return dc
+        dataChannel = nativeAddDataChannel(nativePtr, name)
+        EasyRTCLog.i("MediaSession", "addDataChannel: nativePtr=$nativePtr name=$name dc=$dataChannel")
+        return dataChannel
+    }
+
+    fun sendDataChannelMsg(isBinary: Boolean, data: ByteArray): Int {
+        if (dataChannel == 0L) return -1
+        return nativeDataChannelSend(dataChannel, isBinary, data)
     }
 
     fun freeDataChannel(dcPtr: Long) {

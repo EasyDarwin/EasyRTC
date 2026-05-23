@@ -84,7 +84,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
         updateButtonState()
 
-        EasyRTCSdk.getInstance()
         EasyRTCSdk.setEventListener(this)
         AppLogStore.appendCritical(TAG, "EasyRTCSdk listener attached for WHIP")
     }
@@ -178,13 +177,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         try {
             whipModule = WhipModule(url)
 
-            EasyRTCSdk.connection(
-                stun = "",
-                turn = "",
-                username = "",
-                credential = ""
-            )
-            EasyRTCSdk.bindMediaSession(session)
+            session.createPeerConnection("", "", "", "")
             session.removeTransceivers()
             val encodeConfig = getVideoEncodeConfig()
             cameraVideoWidth = encodeConfig.getWidth()
@@ -195,7 +188,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
                 audioCodec = EasyRTCCodec.ALAW
             )
             appendLog("创建 Offer SDP...")
-            EasyRTCSdk.createOffer()
+            session.createOffer()
 
         } catch (e: Exception) {
             appendLog("启动失败: ${e.message}")
@@ -218,8 +211,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         session.removeTransceivers()
         whipModule?.cancel();
         whipModule = null
-        EasyRTCSdk.release()
-        EasyRTCSdk.bindMediaSession(session)
+        session.releasePeerConnection()
         appendLog("=== 推流已停止 ===")
     }
 
@@ -248,7 +240,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
                         TAG,
                         "WHIP transceivers ready: videoCodec=${if (SPUtil.getInstance().getIsHevc()) "H265" else "H264"} audioCodec=ALAW"
                     )
-                    EasyRTCSdk.setRemoteDescription(answerSdp)
+                    session.setRemoteDescription(answerSdp)
                     appendLog("设置远端描述完成")
                     AppLogStore.appendCritical(TAG, "setRemoteDescription success")
                 }
@@ -361,7 +353,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
             stopLocalPreviewIfStarted()
         }
         EasyRTCSdk.unsetEventListener(this)
-        EasyRTCSdk.release()
+        session.releasePeerConnection()
         super.onDestroyView()
     }
 

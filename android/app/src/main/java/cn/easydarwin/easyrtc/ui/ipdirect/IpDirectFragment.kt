@@ -93,7 +93,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        EasyRTCSdk.getInstance()
         EasyRTCSdk.setEventListener(this)
 
         initViews(view)
@@ -194,15 +193,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     private fun handleIncomingOffer(offerSdp: String) {
         // IP直连 — no STUN/TURN needed, direct LAN connection
-        EasyRTCSdk.connection(
-            "",  // stun
-            "",  // turn
-            "",  // username
-            "",  // credential
-            1,
-            EasyRTCIceTransportPolicy.EaSyRTC_ICE_TRANSPORT_POLICY_ALL,
-            0L
-        )
+        session.createPeerConnection("", "", "", "")
 
         // Parse codecs from offer SDP
         var videoCodec = 0
@@ -225,20 +216,21 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             return
         }
 
-        EasyRTCSdk.bindMediaSession(session)
         session.removeTransceivers()
         session.addTransceivers(videoCodec, audioCodec)
 
         if (offerSdp.contains("webrtc-datachannel", ignoreCase = true)) {
-            EasyRTCSdk.addDataChannel()
+            session.addDataChannel("")
         }
 
         appendLog("创建 Answer...")
-        EasyRTCSdk.createAnswer(offerSdp)
+        session.createAnswer(offerSdp)
     }
 
     private fun stopCall() {
         session.removeTransceivers()
+        session.freeDataChannel(session.dataChannel)
+        session.releasePeerConnection()
         pipelineController.stop()
         liveSessionController.onClosed()
     }
@@ -312,7 +304,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
         if (type == 1) {
-            EasyRTCSdk.sendMsg(0, "Hello EasyRTC IP直连!!!".toByteArray(Charsets.UTF_8))
+            session.sendDataChannelMsg(false, "Hello EasyRTC IP直连!!!".toByteArray(Charsets.UTF_8))
         } else if (type == 2 && binary == 0) {
             requireActivity().runOnUiThread {
                 appendLog(data.toString(Charsets.UTF_8))
@@ -440,7 +432,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         stopCall()
         session.stopPreview()
         EasyRTCSdk.unsetEventListener(this)
-        EasyRTCSdk.release()
         stopServer()
         buttonMenu = null
     }
