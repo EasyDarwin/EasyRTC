@@ -178,7 +178,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
             whipModule = WhipModule(url)
 
             session.createPeerConnection("", "", "", "")
-            session.removeTransceivers()
             val encodeConfig = getVideoEncodeConfig()
             cameraVideoWidth = encodeConfig.getWidth()
             cameraVideoHeight = encodeConfig.getHeight()
@@ -208,7 +207,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         updateButtonState()
         appendLog("停止推流...")
         AppLogStore.appendCritical(TAG, "stopWhipPush: stopping WHIP stream")
-        session.removeTransceivers()
         whipModule?.cancel();
         whipModule = null
         session.releasePeerConnection()
@@ -349,7 +347,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         AppLogStore.appendCritical(TAG, "onDestroyView: releasing WHIP resources, isRunning=$isRunning")
         if (isRunning) {
             stopWhipPush()
-            session.removeTransceivers()
             stopLocalPreviewIfStarted()
         }
         EasyRTCSdk.unsetEventListener(this)

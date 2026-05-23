@@ -585,20 +585,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStopPreview(
     LOGD("Preview stopped");
 }
 
-JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeSetPeerConnection(
-        JNIEnv *env, jobject thiz, jlong sessionPtr, jlong peerConnectionHandle) {
-    LOGI("[CRITICAL] nativeSetPeerConnection ENTRY: sessionPtr=%p peerConnectionHandle=%p",
-         reinterpret_cast<void *>(sessionPtr), reinterpret_cast<void *>(peerConnectionHandle));
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    assert(session && "Invalid session");
-
-
-    session->peerConnection = reinterpret_cast<EasyRTC_PeerConnection>(peerConnectionHandle);
-    session->transceiversAdded.store(false);
-    LOGD("MediaSession peerConnection updated: %p", session->peerConnection);
-}
-
 JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jint videoCodec, jint audioCodec) {
@@ -951,78 +937,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     return 0;
 }
 
-JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStopSend(JNIEnv *env, jobject thiz, jlong sessionPtr) {
-    LOGI("[CRITICAL] nativeStopSend ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    assert(session && "Invalid session");
-
-    LOGI("[CRITICAL] StopSend: stopping audio capture and video encoder");
-
-    audioCaptureStop(session);
-
-    // Must stop the render thread BEFORE releasing GL resources,
-    // otherwise the render thread may call glDrawElements on deleted VBO/IBO.
-    LOGI("[CRITICAL] nativeStopSend: before stopRenderThread");
-    stopRenderThread(session);
-    LOGI("[CRITICAL] nativeStopSend: before encoderGlRelease");
-    encoderGlRelease(session->encoderGlBridge);
-
-    if (session->videoEncoder) {
-      auto p = session->videoEncoder;
-      p->running.exchange(false);
-
-      LOGI("[CRITICAL] StopSend: signaling EOS and stopping encoder");
-      if (p->encoder) {
-        AMediaCodec_signalEndOfInputStream(p->encoder);
-      }
-      LOGI("[CRITICAL] StopSend: join output thread");
-      if (p->outputThread.joinable()) {
-        p->outputThread.join();
-      }
-      LOGI("[CRITICAL] StopSend: stopping encoder");
-      if (p->encoder) {
-        AMediaCodec_stop(p->encoder);
-      }
-      LOGI("[CRITICAL] StopSend: deleting encoder");
-      if (p->encoder) {
-        AMediaCodec_delete(p->encoder);
-      }
-      p->encoder = nullptr;
-    }
-
-    if (session->cameraDevice) {
-        std::lock_guard<std::mutex> lock(session->cameraMutex);
-        releaseCaptureSession(session);
-        if (session->previewWindow) {
-            createCaptureSession(session, false);
-        }
-    }
-
-    LOGI("[CRITICAL] StopSend: DONE");
-}
-
-JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeStopRecv(JNIEnv *env, jobject thiz, jlong sessionPtr) {
-    LOGI("[CRITICAL] nativeStopRecv ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    assert(session && "Invalid session");
-
-    LOGI("[CRITICAL] StopRecv: releasing audio playback and video decoder");
-
-    if (session->audioPlayback) {
-        assert(!session->peerConnection && "PC should have been released!");
-        audioPlaybackRelease(session->audioPlayback);
-        session->audioPlayback = nullptr;
-    }
-    if (session->videoDecoder) {
-        assert(!session->peerConnection && "PC should have been released!");
-        videoDecoderRelease(session->videoDecoder);
-        session->videoDecoder = nullptr;
-    }
-
-    LOGI("[CRITICAL] StopRecv: DONE");
-}
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
@@ -1077,51 +991,6 @@ Java_cn_easyrtc_media_MediaSession_nativeRequestKeyFrame(
     p->requestKeyFramePending.store(true);
 }
 
-JNIEXPORT jlong JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeGetVideoTransceiver(
-        JNIEnv *env, jobject thiz, jlong sessionPtr) {
-    LOGI("[CRITICAL] nativeGetVideoTransceiver ENTRY: sessionPtr=%p",
-         reinterpret_cast<void *>(sessionPtr));
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    return session ? reinterpret_cast<jlong>(session->videoTransceiver) : 0;
-}
-
-JNIEXPORT jlong JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeGetAudioTransceiver(
-        JNIEnv *env, jobject thiz, jlong sessionPtr) {
-    LOGI("[CRITICAL] nativeGetAudioTransceiver ENTRY: sessionPtr=%p",
-         reinterpret_cast<void *>(sessionPtr));
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    return session ? reinterpret_cast<jlong>(session->audioTransceiver) : 0;
-}
-
-JNIEXPORT void JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeRemoveTransceivers(
-        JNIEnv *env, jobject thiz, jlong sessionPtr) {
-    LOGI("[CRITICAL] nativeRemoveTransceivers ENTRY: sessionPtr=%p",
-         reinterpret_cast<void *>(sessionPtr));
-
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session) return;
-
-    LOGI("[CRITICAL] RemoveTransceivers: video=%p audio=%p",
-         session->videoTransceiver, session->audioTransceiver);
-
-    if (session->videoTransceiver) {
-        EasyRTC_FreeTransceiver(&session->videoTransceiver);
-        session->videoTransceiver = nullptr;
-    }
-    if (session->audioTransceiver) {
-        EasyRTC_FreeTransceiver(&session->audioTransceiver);
-        session->audioTransceiver = nullptr;
-    }
-    session->transceiversAdded.store(false);
-    if (session->statThread.joinable()) {
-        LOGI("[CRITICAL] RemoveTransceivers: joining stats thread");
-        session->statThread.join();
-    }
-    LOGI("[CRITICAL] RemoveTransceivers: DONE");
-}
 
 JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeRelease(
@@ -1171,7 +1040,7 @@ Java_cn_easyrtc_media_MediaSession_nativeCreatePeerConnection(
         JNIEnv *env, jobject thiz, jlong sessionPtr,
         jstring stunUrl, jstring turnUrl, jstring turnUser, jstring turnPass) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session) return 0;
+    assert(session && "Invalid session");
     assert(!session->peerConnection && "PeerConnection already exists");
 
     EasyRTC_Configuration config{};
@@ -1212,22 +1081,86 @@ JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->peerConnection) return;
-    // Free data channel before releasing PC
+    assert(session && "Invalid session");
+    session->transceiversAdded.store(false);
+
+    // 1. Stop send pipeline (render thread, encoder, audio capture)
+    LOGI("[CRITICAL] StopSend: stopping audio capture and video encoder");
+    audioCaptureStop(session);
+    LOGI("[CRITICAL] nativeStopSend: before stopRenderThread");
+    stopRenderThread(session);
+    LOGI("[CRITICAL] nativeStopSend: before encoderGlRelease");
+    encoderGlRelease(session->encoderGlBridge);
+
+    if (session->videoEncoder) {
+        auto p = session->videoEncoder;
+        p->running.exchange(false);
+        LOGI("[CRITICAL] StopSend: signaling EOS and stopping encoder");
+        if (p->encoder) AMediaCodec_signalEndOfInputStream(p->encoder);
+        LOGI("[CRITICAL] StopSend: join output thread");
+        if (p->outputThread.joinable()) p->outputThread.join();
+        LOGI("[CRITICAL] StopSend: stopping encoder");
+        if (p->encoder) AMediaCodec_stop(p->encoder);
+        LOGI("[CRITICAL] StopSend: deleting encoder");
+        if (p->encoder) AMediaCodec_delete(p->encoder);
+        p->encoder = nullptr;
+    }
+
+    //
+    if (session->peerConnection) {
+        EasyRTC_ReleasePeerConnection(&session->peerConnection);
+        session->peerConnection = nullptr;
+        LOGI("[CRITICAL] PC released: session=%p", session);
+    }
+
+    if (session->cameraDevice) {
+        std::lock_guard<std::mutex> lock(session->cameraMutex);
+        releaseCaptureSession(session);
+        if (session->previewWindow) createCaptureSession(session, false);
+    }
+    LOGI("[CRITICAL] StopSend: DONE");
+
+    // 2. Stop recv pipeline (audio playback, video decoder)
+    LOGI("[CRITICAL] StopRecv: releasing audio playback and video decoder");
+    if (session->audioPlayback) {
+        audioPlaybackRelease(session->audioPlayback);
+        session->audioPlayback = nullptr;
+    }
+    if (session->videoDecoder) {
+        videoDecoderRelease(session->videoDecoder);
+        session->videoDecoder = nullptr;
+    }
+    LOGI("[CRITICAL] StopRecv: DONE");
+
+    // 3. Join stats thread
+    if (session->statThread.joinable()) {
+        LOGI("[CRITICAL] RemoveTransceivers: joining stats thread");
+        session->statThread.join();
+    }
+
+    // 4. Free children BEFORE releasing parent PC
     if (session->dataChannel) {
         EasyRTC_FreeDataChannel(&session->dataChannel);
         session->dataChannel = nullptr;
     }
-    EasyRTC_ReleasePeerConnection(&session->peerConnection);
-    session->peerConnection = nullptr;
-    LOGI("[CRITICAL] PC released: session=%p", session);
+    if (session->videoTransceiver) {
+        EasyRTC_FreeTransceiver(&session->videoTransceiver);
+        session->videoTransceiver = nullptr;
+    }
+    if (session->audioTransceiver) {
+        EasyRTC_FreeTransceiver(&session->audioTransceiver);
+        session->audioTransceiver = nullptr;
+    }
+
 }
 
 JNIEXPORT jlong JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeAddDataChannel(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jstring name) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->peerConnection) return 0;
+    assert(session && "Invalid session");
+    assert(session->peerConnection && "Invalid peer connection");
+    assert(!session->dataChannel && "Data channel already exists");
     const char *cname = env->GetStringUTFChars(name, nullptr);
     EasyRTC_AddDataChannel(&session->dataChannel, session->peerConnection, cname, dataChannelCallback, session);
     env->ReleaseStringUTFChars(name, cname);
@@ -1239,7 +1172,8 @@ JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeDataChannelSend(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jboolean isBinary, jbyteArray data) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->dataChannel) return -1;
+    assert(session && "Invalid session");
+    assert(session->dataChannel && "Invalid data channel");
     jsize len = env->GetArrayLength(data);
     jbyte *bytes = env->GetByteArrayElements(data, nullptr);
     int result = EasyRTC_DataChannelSend(session->dataChannel, isBinary ? TRUE : FALSE,
@@ -1252,7 +1186,8 @@ JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeCreateOffer(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->peerConnection) return;
+    assert(session && "Invalid session");
+    assert(session->peerConnection && "Invalid peer connection");
     EasyRTC_CreateOffer(session->peerConnection, sdpCallback, session);
 }
 
@@ -1260,7 +1195,8 @@ JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeCreateAnswer(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jstring offerSdp) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->peerConnection) return;
+    assert(session && "Invalid session");
+    assert(session->peerConnection && "Invalid peer connection");
     const char *osdp = env->GetStringUTFChars(offerSdp, nullptr);
     EasyRTC_CreateAnswer(session->peerConnection, osdp, sdpCallback, session);
     env->ReleaseStringUTFChars(offerSdp, osdp);
@@ -1270,7 +1206,8 @@ JNIEXPORT void JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeSetRemoteDescription(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jstring sdp) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->peerConnection) return;
+    assert(session && "Invalid session");
+    assert(session->peerConnection && "Invalid peer connection");
     const char *sdpc = env->GetStringUTFChars(sdp, nullptr);
     EasyRTC_SetRemoteDescription(session->peerConnection, sdpc);
     env->ReleaseStringUTFChars(sdp, sdpc);
@@ -1280,7 +1217,8 @@ JNIEXPORT jint JNICALL
 Java_cn_easyrtc_media_MediaSession_nativeGetIceCandidateType(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session || !session->peerConnection) return -1;
+    assert(session && "Invalid session");
+    assert(session->peerConnection && "Invalid peer connection");
     EasyRTC_IceCandidatePairStats stats{};
     int ret = EasyRTC_GetIceCandidatePairStats(session->peerConnection, &stats);
     if (ret != 0) return -1;

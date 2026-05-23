@@ -157,7 +157,6 @@ class WebSocketService : Service() {
             manager.session = session
             manager.createPeerConnection()
             //      try to clean old first
-            session.removeTransceivers()
             session.addTransceivers(videoCodec, audioCodec)
 
             if (sdp.contains("webrtc-datachannel", ignoreCase = true)) session.addDataChannel("")
@@ -172,7 +171,6 @@ class WebSocketService : Service() {
         manager.createPeerConnection()
         val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
 //      try to clean old first
-        session.removeTransceivers()
         session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
         session.addDataChannel("123") //name 设备端随机字符串
         session.createOffer()  //创建  Offer  sdp

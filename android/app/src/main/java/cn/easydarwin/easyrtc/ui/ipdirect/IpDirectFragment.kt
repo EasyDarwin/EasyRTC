@@ -216,7 +216,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             return
         }
 
-        session.removeTransceivers()
         session.addTransceivers(videoCodec, audioCodec)
 
         if (offerSdp.contains("webrtc-datachannel", ignoreCase = true)) {
@@ -228,7 +227,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     private fun stopCall() {
-        session.removeTransceivers()
         session.releasePeerConnection()
         pipelineController.stop()
         liveSessionController.onClosed()

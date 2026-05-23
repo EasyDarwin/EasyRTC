@@ -96,22 +96,6 @@ class MediaSession {
         return i
     }
 
-    fun removeTransceivers() {
-        EasyRTCLog.i("MediaSession", "removeTransceivers: nativePtr=$nativePtr")
-        nativeStopSend(nativePtr)
-        nativeRemoveTransceivers(nativePtr);
-    }
-
-    fun stopSend() {
-        EasyRTCLog.i("MediaSession", "stopSend: nativePtr=$nativePtr")
-        nativeStopSend(nativePtr)
-    }
-
-    fun stopRecv() {
-        EasyRTCLog.i("MediaSession", "stopRecv: nativePtr=$nativePtr")
-        nativeStopRecv(nativePtr)
-    }
-
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
         val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
         setEncoderRotation(90)
@@ -169,9 +153,7 @@ class MediaSession {
     fun release() {
         if (nativePtr != 0L) {
             EasyRTCLog.i("MediaSession", "release: nativePtr=$nativePtr")
-            nativeStopRecv(nativePtr)
-            nativeStopSend(nativePtr)
-            nativeRemoveTransceivers(nativePtr);
+            nativeReleasePeerConnection(nativePtr)
             nativeRelease(nativePtr)
             nativePtr = 0L
         }
@@ -213,7 +195,6 @@ class MediaSession {
         audioCodec: Int
     ): Int
 
-    private external fun nativeRemoveTransceivers(sessionPtr: Long)
     private external fun nativeSetupVideoEncoder(
         sessionPtr: Long,
         codec: Int,
@@ -228,8 +209,6 @@ class MediaSession {
 
     private external fun nativeSetDecoderSurface(sessionPtr: Long, surface: Surface?)
     private external fun nativeStartSend(sessionPtr: Long): Int
-    private external fun nativeStopSend(sessionPtr: Long)
-    private external fun nativeStopRecv(sessionPtr: Long)
     private external fun nativeSwitchCamera(sessionPtr: Long)
     private external fun nativeRequestKeyFrame(sessionPtr: Long)
     private external fun nativeRelease(sessionPtr: Long)

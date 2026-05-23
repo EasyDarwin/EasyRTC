@@ -533,9 +533,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
     private fun stopEasyRTC() {
-        session.stopSend()
         session.releasePeerConnection()
-        session.stopRecv()
         pipelineController.stop()
     }
 
