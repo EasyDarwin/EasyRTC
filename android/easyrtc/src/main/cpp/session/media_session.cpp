@@ -279,6 +279,14 @@ static int mediaTransceiverCallback(void *userPtr,
                  frame ? frame->flags : 0,
                  frame ? frame->size : 0,
                  static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
+            if (frame && frame->frameData && frame->size > 0) {
+                int dumpLen = frame->size < 32 ? frame->size : 32;
+                char hex[128] = {0};
+                for (int i = 0; i < dumpLen; i++) {
+                    sprintf(hex + i * 3, "%02X ", ((uint8_t*)frame->frameData)[i]);
+                }
+                FLOGI("VIDEO_CB first %d bytes: %s", dumpLen, hex);
+            }
             // Lazy-create video decoder on first frame using actual remote codec
             if (!session->videoDecoder && !session->videoDecoderInitAttempted && session->decoderSurface) {
                 session->videoDecoderInitAttempted = true;
