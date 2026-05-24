@@ -129,16 +129,16 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
         initViews(view)
         observeLiveSessionState()
+        observeDataChannel()
+        observeRemoteVideoSize()
     }
 
     private fun observeLiveSessionState() {
         LiveSessionController.observe(viewLifecycleOwner) { state ->
             when (state) {
                 is LiveUiState.Idle -> {
-                    requireActivity().runOnUiThread {
-                        tvFragmentUUID.text = SPUtil.getInstance().rtcUserUUID
-                        endCallButton.visibility = View.GONE
-                    }
+                    tvFragmentUUID.text = SPUtil.getInstance().rtcUserUUID
+                    endCallButton.visibility = View.GONE
                 }
 
                 is LiveUiState.Connected -> {
@@ -147,29 +147,72 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
                     appendLog("连接成功")
                     appendLog(getIceCandidateTypeDesc())
 
-                    requireActivity().runOnUiThread {
-                        endCallButton.visibility = View.VISIBLE
-                        tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已连接]"
-                    }
+                    endCallButton.visibility = View.VISIBLE
+                    tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已连接]"
                 }
 
                 is LiveUiState.Disconnected -> {
                     appendLog("连接断开")
                     stopEasyRTC()
-                    requireActivity().runOnUiThread {
-                        tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已断开]"
-                        endCallButton.visibility = View.INVISIBLE
-                    }
+                    tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已断开]"
+                    endCallButton.visibility = View.INVISIBLE
                 }
 
                 is LiveUiState.Failed -> {
                     appendLog("连接失败")
                     state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("失败原因: $it") }
                     stopEasyRTC()
-                    requireActivity().runOnUiThread {
-                        tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [连接失败]"
-                        endCallButton.visibility = View.INVISIBLE
+                    tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [连接失败]"
+                    endCallButton.visibility = View.INVISIBLE
+                }
+            }
+        }
+    }
+
+    private fun observeDataChannel() {
+        DataChannelLiveData.observe(viewLifecycleOwner) { event ->
+            when (event) {
+                is DataChannelEvent.Open -> {
+                    val data1 = "Hello EasyRTC!!!".toByteArray(Charsets.UTF_8)
+                    session.sendDataChannelMsg(false, data1)
+                }
+                is DataChannelEvent.Message -> {
+                    if (event.binary == 0) appendLog(event.data.toString(Charsets.UTF_8))
+                }
+                else -> {}
+            }
+        }
+    }
+
+    private fun observeRemoteVideoSize() {
+        RemoteVideoSizeLiveData.observe(viewLifecycleOwner) { size ->
+            if (size.width == 0 && size.height == 0) return@observe
+            val density = resources.displayMetrics.density
+            val desiredWidthPx = remote_preview_container.width
+            val desiredHeightPx = desiredWidthPx * size.height / size.width
+            val lp = remote_preview_container.layoutParams
+            lp.width = desiredWidthPx
+            lp.height = desiredHeightPx
+            remote_preview_container.layoutParams = lp
+            Log.d(TAG, "Remote video size: ${size.width}x${size.height}, container: ${lp.width}x${lp.height}")
+
+            val desiredWidthDp = 120
+            local_preview_.layoutParams.width = Math.round(desiredWidthDp * density)
+            local_preview_.layoutParams.height = Math.round(local_preview_.layoutParams.width * 1280f / 720f)
+            local_preview_.requestLayout()
+            local_preview_.setOnTouchListener { view, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
+                        true
                     }
+                    MotionEvent.ACTION_MOVE -> {
+                        val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
+                        view.translationX = event.rawX - anchor[0]
+                        view.translationY = event.rawY - anchor[1]
+                        true
+                    }
+                    else -> false
                 }
             }
         }
@@ -390,42 +433,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
     }
 
 
-    fun onRemoteVideoSize(width: Int, height: Int) {
-        activity?.runOnUiThread {
-            val density = resources.displayMetrics.density
-            val isPortrait = height > width
-
-            val desiredWidthPx = remote_preview_container.width
-            val desiredHeightPx = desiredWidthPx * height / width
-            val lp = remote_preview_container.layoutParams
-            lp.width = desiredWidthPx
-            lp.height = desiredHeightPx
-            remote_preview_container.layoutParams = lp
-            Log.d(TAG, "Remote video size: ${width}x${height}, container: ${lp.width}x${lp.height}")
-
-
-
-            val desiredWidthDp = 120
-            local_preview_.layoutParams.width = Math.round(desiredWidthDp * density)
-            local_preview_.layoutParams.height = Math.round(local_preview_.layoutParams.width * 1280f/720f);
-            local_preview_.requestLayout()
-            local_preview_.setOnTouchListener { view, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
-                        view.translationX = event.rawX - anchor[0]
-                        view.translationY = event.rawY - anchor[1]
-                        true
-                    }
-                    else -> false
-                }
-            }
-        }
-    }
 
     fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
         if (type == 1) {

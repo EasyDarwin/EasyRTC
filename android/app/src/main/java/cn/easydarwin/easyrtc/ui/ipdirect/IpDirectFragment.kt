@@ -244,34 +244,32 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     fun onRemoteVideoSize(width: Int, height: Int) {
-        activity?.runOnUiThread {
-            val density = resources.displayMetrics.density
+        val density = resources.displayMetrics.density
 
-            val desiredWidthPx = remotePreviewContainer.width
-            val desiredHeightPx = desiredWidthPx * height / width
-            val lp = remotePreviewContainer.layoutParams
-            lp.width = desiredWidthPx
-            lp.height = desiredHeightPx
-            remotePreviewContainer.layoutParams = lp
+        val desiredWidthPx = remotePreviewContainer.width
+        val desiredHeightPx = desiredWidthPx * height / width
+        val lp = remotePreviewContainer.layoutParams
+        lp.width = desiredWidthPx
+        lp.height = desiredHeightPx
+        remotePreviewContainer.layoutParams = lp
 
-            val desiredWidthDp = 120
-            localPreview.layoutParams.width = Math.round(desiredWidthDp * density)
-            localPreview.layoutParams.height = Math.round(localPreview.layoutParams.width * 1280f / 720f)
-            localPreview.requestLayout()
-            localPreview.setOnTouchListener { view, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
-                        view.translationX = event.rawX - anchor[0]
-                        view.translationY = event.rawY - anchor[1]
-                        true
-                    }
-                    else -> false
+        val desiredWidthDp = 120
+        localPreview.layoutParams.width = Math.round(desiredWidthDp * density)
+        localPreview.layoutParams.height = Math.round(localPreview.layoutParams.width * 1280f / 720f)
+        localPreview.requestLayout()
+        localPreview.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
+                    true
                 }
+                MotionEvent.ACTION_MOVE -> {
+                    val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
+                    view.translationX = event.rawX - anchor[0]
+                    view.translationY = event.rawY - anchor[1]
+                    true
+                }
+                else -> false
             }
         }
     }
@@ -292,34 +290,26 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         LiveSessionController.observe(viewLifecycleOwner) { state ->
             when (state) {
                 is LiveUiState.Idle -> {
-                    requireActivity().runOnUiThread {
-                        val ip = getLocalIpAddress() ?: "unknown"
-                        tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
-                        endCallButton.visibility = View.GONE
-                    }
+                    val ip = getLocalIpAddress() ?: "unknown"
+                    tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
+                    endCallButton.visibility = View.GONE
                 }
                 is LiveUiState.Connected -> {
                     appendLog("连接成功")
-                    requireActivity().runOnUiThread {
-                        endCallButton.visibility = View.VISIBLE
-                        tvStatus.text = "IP直连 [已连接]"
-                    }
+                    endCallButton.visibility = View.VISIBLE
+                    tvStatus.text = "IP直连 [已连接]"
                 }
                 is LiveUiState.Disconnected -> {
                     appendLog("连接断开")
-                    requireActivity().runOnUiThread {
-                        val ip = getLocalIpAddress() ?: "unknown"
-                        tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT} [已断开]"
-                        endCallButton.visibility = View.INVISIBLE
-                    }
+                    val ip = getLocalIpAddress() ?: "unknown"
+                    tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT} [已断开]"
+                    endCallButton.visibility = View.INVISIBLE
                 }
                 is LiveUiState.Failed -> {
                     appendLog("连接失败")
                     state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("原因: $it") }
-                    requireActivity().runOnUiThread {
-                        tvStatus.text = "IP直连 [连接失败]"
-                        endCallButton.visibility = View.INVISIBLE
-                    }
+                    tvStatus.text = "IP直连 [连接失败]"
+                    endCallButton.visibility = View.INVISIBLE
                 }
             }
         }
