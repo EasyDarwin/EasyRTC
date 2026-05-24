@@ -6,8 +6,9 @@ import android.view.Surface
 import androidx.annotation.Keep
 import cn.easyrtc.EasyRTCLog
 import cn.easyrtc.EasyRTCPeerConnectionState
-import cn.easyrtc.EasyRTCSdk
+import cn.easyrtc.model.DataChannelLiveData
 import cn.easyrtc.model.LiveSessionController
+import cn.easyrtc.model.RemoteVideoSizeLiveData
 import cn.easyrtc.model.VideoEncodeConfig
 import java.lang.ref.WeakReference
 
@@ -163,7 +164,7 @@ class MediaSession {
 
     @Keep
     private fun onRemoteVideoSize(width: Int, height: Int) {
-        cn.easyrtc.EasyRTCSdk.notifyRemoteVideoSize(width, height)
+        RemoteVideoSizeLiveData.postValue(android.util.Size(width, height))
     }
 
     @Keep
@@ -195,7 +196,8 @@ class MediaSession {
 
     @Keep
     private fun onDataChannelEvent(type: Int, binary: Int, data: ByteArray) {
-        EasyRTCSdk.onDataChannelCallback(0L, type, binary, data, data.size)
+        if (type == 1) DataChannelLiveData.onOpen()
+        else DataChannelLiveData.onMessage(binary, data, data.size)
     }
 
     private external fun nativeCreate(): Long

@@ -23,7 +23,6 @@ import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easyrtc.EasyRTCUser
 import cn.easyrtc.EasyRTCPeerConnectionState
-import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.EasyRTCStreamTrack
 import cn.easyrtc.helper.MagicFileHelper
 import cn.easyrtc.media.MediaSession
@@ -35,13 +34,15 @@ import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
+import cn.easyrtc.model.DataChannelEvent
+import cn.easyrtc.model.DataChannelLiveData
+import cn.easyrtc.model.RemoteVideoSizeLiveData
 import cn.easyrtc.model.LiveSessionController
 import cn.easyrtc.model.LiveUiState
 import org.json.JSONObject
 import java.util.Locale
 
-class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
-    EasyRTCSdk.EasyRTCEventListener {
+class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
     companion object {
         private const val TAG = "HomeFragment"
@@ -125,7 +126,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
             }
         }
 
-        EasyRTCSdk.setEventListener(this)
 
         initViews(view)
         observeLiveSessionState()
@@ -323,7 +323,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
     override fun onDestroyView() {
         Log.d(TAG, "onDestroyView")
-        EasyRTCSdk.unsetEventListener(this)
         session.stopPreview()
         stopEasyRTC()
         super.onDestroyView()
@@ -391,7 +390,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
 
-    override fun onRemoteVideoSize(width: Int, height: Int) {
+    fun onRemoteVideoSize(width: Int, height: Int) {
         activity?.runOnUiThread {
             val density = resources.displayMetrics.density
             val isPortrait = height > width
@@ -428,7 +427,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
         }
     }
 
-    override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
+    fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
         if (type == 1) {
             val data1 = "Hello EasyRTC!!!".toByteArray(Charsets.UTF_8)
             session.sendDataChannelMsg(false, data1)

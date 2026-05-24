@@ -19,7 +19,6 @@ import cn.easydarwin.easyrtc.R
 import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCIceTransportPolicy
 import cn.easyrtc.EasyRTCPeerConnectionState
-import cn.easyrtc.EasyRTCSdk
 import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
 import cn.easyrtc.model.LiveSessionController
 import cn.easyrtc.model.LiveUiState
@@ -27,6 +26,9 @@ import cn.easydarwin.easyrtc.ui.live.NativePipelineController
 import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
+import cn.easyrtc.model.DataChannelEvent
+import cn.easyrtc.model.DataChannelLiveData
+import cn.easyrtc.model.RemoteVideoSizeLiveData
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Locale
@@ -36,8 +38,7 @@ import java.util.Locale
  * Accepts incoming calls from WS clients and handles bidirectional media.
  * No device list, no outgoing calls — passive answer only.
  */
-class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
-    EasyRTCSdk.EasyRTCEventListener, IpDirectServer.Listener {
+class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener, IpDirectServer.Listener {
 
     companion object {
         private const val TAG = "IpDirectFragment"
@@ -92,11 +93,23 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        EasyRTCSdk.setEventListener(this)
 
         initViews(view)
         observeLiveSessionState()
         startServer()
+
+        DataChannelLiveData.observe(viewLifecycleOwner) { event ->
+            if (event is DataChannelEvent.Open) {
+                session.sendDataChannelMsg(false, "Hello EasyRTC IP直连!!!".toByteArray(Charsets.UTF_8))
+            } else if (event is DataChannelEvent.Message) {
+                if (event.binary == 0) {
+                    runOnMainThread { appendLog(event.data.toString(Charsets.UTF_8)) }
+                }
+            }
+        }
+        RemoteVideoSizeLiveData.observe(viewLifecycleOwner) { size ->
+            if (size.width > 0 && size.height > 0) onRemoteVideoSize(size.width, size.height)
+        }
     }
 
     private fun initViews(view: View) {
@@ -230,7 +243,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         pipelineController.stop()
     }
 
-    override fun onRemoteVideoSize(width: Int, height: Int) {
+    fun onRemoteVideoSize(width: Int, height: Int) {
         activity?.runOnUiThread {
             val density = resources.displayMetrics.density
 
@@ -263,7 +276,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         }
     }
 
-    override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
+    fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
         if (type == 1) {
             session.sendDataChannelMsg(false, "Hello EasyRTC IP直连!!!".toByteArray(Charsets.UTF_8))
         } else if (type == 2 && binary == 0) {
@@ -392,7 +405,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         super.onDestroyView()
         stopCall()
         session.stopPreview()
-        EasyRTCSdk.unsetEventListener(this)
         stopServer()
         buttonMenu = null
     }

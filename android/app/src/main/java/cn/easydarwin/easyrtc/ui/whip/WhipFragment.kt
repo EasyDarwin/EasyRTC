@@ -21,13 +21,14 @@ import cn.easydarwin.easyrtc.R
 import cn.easydarwin.easyrtc.fragment.HomeFragment
 import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCPeerConnectionState
-import cn.easyrtc.EasyRTCSdk
 import cn.easyrtc.whip.WhipModule
 import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
+import cn.easyrtc.model.DataChannelEvent
+import cn.easyrtc.model.DataChannelLiveData
 
-class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener, EasyRTCSdk.EasyRTCEventListener {
+class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
     companion object {
         private const val TAG = "WhipFragment"
@@ -84,8 +85,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
 
         updateButtonState()
 
-        EasyRTCSdk.setEventListener(this)
-        AppLogStore.appendCritical(TAG, "EasyRTCSdk listener attached for WHIP")
     }
 
     /** Camera video size — landscape (native sensor) dimensions. */
@@ -229,10 +228,10 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
     }
 
 
-    override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
+    fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
     }
 
-    override fun onRemoteVideoSize(width: Int, height: Int) {
+    fun onRemoteVideoSize(width: Int, height: Int) {
         // WHIP 推流仅发送，不接收远端视频
     }
 
@@ -317,7 +316,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener,
             stopWhipPush()
             stopLocalPreviewIfStarted()
         }
-        EasyRTCSdk.unsetEventListener(this)
         session.releasePeerConnection()
         super.onDestroyView()
     }

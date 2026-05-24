@@ -41,6 +41,21 @@ object LiveSessionController: MutableLiveData<LiveUiState>(LiveUiState.Idle) {
     }
 }
 
+sealed class DataChannelEvent {
+    data object Open : DataChannelEvent()
+    data object Idle : DataChannelEvent()
+    data class Message(val binary: Int, val data: ByteArray, val size: Int) : DataChannelEvent() {
+        override fun equals(other: Any?): Boolean = other is Message
+    }
+}
+object DataChannelLiveData : MutableLiveData<DataChannelEvent>(DataChannelEvent.Idle) {
+    fun onOpen() { postValue(DataChannelEvent.Open) }
+    fun onMessage(binary: Int, data: ByteArray, size: Int) {
+        postValue(DataChannelEvent.Message(binary, data.copyOf(size), size))
+    }
+}
+object RemoteVideoSizeLiveData : MutableLiveData<android.util.Size>(android.util.Size(0, 0))
+
 data class VideoEncodeConfig(
     private val useHevc: Boolean = false,
     private val frameRate: Int = 25,
