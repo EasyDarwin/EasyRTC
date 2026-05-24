@@ -17,8 +17,6 @@ import androidx.appcompat.widget.PopupMenu
 import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
 import cn.easyrtc.EasyRTCCodec
-import cn.easyrtc.EasyRTCIceTransportPolicy
-import cn.easyrtc.EasyRTCPeerConnectionState
 import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
 import cn.easyrtc.model.LiveSessionController
 import cn.easyrtc.model.LiveUiState
@@ -186,56 +184,37 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     override fun onClientDisconnected(remoteAddress: String) {
         appendLog("客户端断开: $remoteAddress")
-        stopCall()
+        session.releasePeerConnection()
         val ip = getLocalIpAddress() ?: "unknown"
         tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
+        endCallButton.visibility = View.GONE
     }
 
-    override fun onOfferReceived(sdp: String) {
-        appendLog("收到 Offer SDP, 长度=${sdp.length}")
-        handleIncomingOffer(sdp)
+    override fun onClientReady() {
+        appendLog("客户端握手完成，创建 Offer...")
+        createAndSendOffer()
     }
 
-    override fun onHangup() {
-        appendLog("对方挂断")
-        stopCall()
+    override fun onAnswerReceived(sdp: String) {
+        appendLog("收到 Answer SDP, 长度=${sdp.length}")
+        session.setRemoteDescription(sdp)
     }
 
-    // ─── Call handling (passive answer) ──────────────────────────────────
+    // ─── Call handling (server creates offer, client answers) ────────────
 
-    private fun handleIncomingOffer(offerSdp: String) {
-        // IP直连 — no STUN/TURN needed, direct LAN connection
+    private fun createAndSendOffer() {
         session.createPeerConnection("", "", "", "")
 
-        // Parse codecs from offer SDP
-        var videoCodec = 0
-        var audioCodec = 0
+        val config = getVideoEncodeConfig()
+        val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
+        session.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
+        session.addDataChannel("")
 
-        if (offerSdp.contains("m=video", ignoreCase = true)) {
-            if (offerSdp.contains("H264/90000")) videoCodec = EasyRTCCodec.H264
-            else if (offerSdp.contains("H265/90000")) videoCodec = EasyRTCCodec.H265
-            else if (offerSdp.contains("VP8/90000")) videoCodec = EasyRTCCodec.VP8
+        appendLog("创建 Offer...")
+        session.createOffer { sdp ->
+            appendLog("Offer 创建完成, 长度=${sdp.length}")
+            server?.sendOffer(sdp)
         }
-
-        if (offerSdp.contains("m=audio", ignoreCase = true)) {
-            if (offerSdp.contains("PCMA/8000", ignoreCase = true)) audioCodec = EasyRTCCodec.ALAW
-            else if (offerSdp.contains("PCMU/8000", ignoreCase = true)) audioCodec = EasyRTCCodec.MULAW
-            else if (offerSdp.contains("opus/48000", ignoreCase = true)) audioCodec = EasyRTCCodec.OPUS
-        }
-
-        if (videoCodec == 0 && audioCodec == 0) {
-            appendLog("Offer SDP 中未发现可用编码")
-            return
-        }
-
-        session.addTransceivers(videoCodec, audioCodec)
-
-        if (offerSdp.contains("webrtc-datachannel", ignoreCase = true)) {
-            session.addDataChannel("")
-        }
-
-        appendLog("创建 Answer...")
-        session.createAnswer(offerSdp) { server?.sendAnswer(it) }
     }
 
     private fun stopCall() {

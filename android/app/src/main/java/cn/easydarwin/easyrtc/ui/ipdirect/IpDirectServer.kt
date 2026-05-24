@@ -6,17 +6,18 @@ import android.util.Log
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
-import org.json.JSONObject
 import java.net.InetSocketAddress
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * WebSocket server for IP直连 mode.
  *
  * Listens on [port] (default 19005) and accepts a single active client.
- * Signaling uses a simple JSON protocol:
- *   Client → Server: {"type":"offer",  "sdp":"..."}
- *   Server → Client: {"type":"answer", "sdp":"..."}
- *   Either  → Either: {"type":"hangup"}
+ * Binary signaling protocol (compatible with easyrtc.cn JS client):
+ *   Client → Server: 36-byte handshake (msgtype=0x00010005)
+ *   Server → Client: binary offer (SDP embedded, client finds "v=0")
+ *   Client → Server: NTI_WEBRTCANSWER_INFO binary answer
  */
 class IpDirectServer(
     private val port: Int = DEFAULT_PORT,
@@ -26,13 +27,19 @@ class IpDirectServer(
     companion object {
         private const val TAG = "IpDirectServer"
         const val DEFAULT_PORT = 19005
+
+        // Message types in binary protocol
+        private const val MSG_HANDSHAKE = 0x00010005
+        private const val MSG_ANSWER = 0x10008
     }
 
     interface Listener {
         fun onClientConnected(remoteAddress: String)
         fun onClientDisconnected(remoteAddress: String)
-        fun onOfferReceived(sdp: String)
-        fun onHangup()
+        /** Client sent handshake — server should create and send offer */
+        fun onClientReady()
+        /** Client sent answer SDP */
+        fun onAnswerReceived(sdp: String)
         fun onServerStarted(port: Int)
         fun onServerStopped()
         fun onServerError(message: String)
@@ -74,29 +81,67 @@ class IpDirectServer(
         postOnMain { listener.onServerStopped() }
     }
 
-    fun sendAnswer(sdp: String) {
+    /**
+     * Send offer SDP to client as raw binary (no wrapper).
+     * Client uses getPureSdpFromBuffer() which scans for "v=0"
+     * and extracts to end-of-buffer — sending raw SDP works directly.
+     */
+    fun sendOffer(sdp: String) {
         val client = activeClient
         if (client == null || !client.isOpen) {
-            Log.w(TAG, "No active client to send answer")
+            Log.w(TAG, "No active client to send offer")
             return
         }
-        val msg = JSONObject().apply {
-            put("type", "answer")
-            put("sdp", sdp)
-        }
-        client.send(msg.toString())
-        Log.d(TAG, "Answer SDP sent, length=${sdp.length}")
+        val sdpBytes = sdp.toByteArray(Charsets.UTF_8)
+        client.send(sdpBytes)
+        Log.d(TAG, "Offer sent, sdplen=${sdpBytes.size}")
     }
 
     fun sendHangup() {
         val client = activeClient
         if (client == null || !client.isOpen) return
-        val msg = JSONObject().apply { put("type", "hangup") }
-        client.send(msg.toString())
+        // Send hangup as a small binary message
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(8)
+        buf.putInt(0x10009)  // hangup msgtype
+        client.send(buf.array())
+        Log.d(TAG, "Hangup sent")
     }
 
     private fun postOnMain(action: () -> Unit) {
         mainHandler.post(action)
+    }
+
+    private fun parseBinaryMessage(data: ByteArray) {
+        if (data.size < 8) return
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        val msgtype = buf.getInt(4)
+
+        when (msgtype) {
+            MSG_HANDSHAKE -> {
+                Log.d(TAG, "Received handshake, size=${data.size}")
+                postOnMain { listener.onClientReady() }
+            }
+            MSG_ANSWER -> {
+                // NTI_WEBRTCANSWER_INFO format:
+                // [totalLen:4][msgtype:4][hisid:16][sdplen:2][SDP][0x0a00]
+                if (data.size < 28) {
+                    Log.w(TAG, "Answer too short: ${data.size}")
+                    return
+                }
+                val sdplen = buf.getShort(24).toInt() and 0xFFFF
+                if (sdplen <= 0 || 26 + sdplen > data.size) {
+                    Log.w(TAG, "Invalid sdplen=$sdplen, data.size=${data.size}")
+                    return
+                }
+                val sdp = String(data, 26, sdplen, Charsets.UTF_8)
+                Log.d(TAG, "Received answer, sdplen=$sdplen")
+                postOnMain { listener.onAnswerReceived(sdp) }
+            }
+            else -> {
+                Log.w(TAG, "Unknown msgtype: 0x${msgtype.toString(16)}")
+            }
+        }
     }
 
     private inner class InnerServer(address: InetSocketAddress) : WebSocketServer(address) {
@@ -110,7 +155,6 @@ class IpDirectServer(
             val addr = conn.remoteSocketAddress?.toString() ?: "unknown"
             Log.d(TAG, "Client connected: $addr")
 
-            // Only allow one active client
             if (activeClient != null && activeClient!!.isOpen) {
                 Log.w(TAG, "Rejecting second client, already have active session")
                 conn.close(4001, "Server busy")
@@ -130,24 +174,28 @@ class IpDirectServer(
             }
         }
 
+        override fun onMessage(conn: WebSocket, message: ByteBuffer) {
+            val bytes = ByteArray(message.remaining())
+            message.get(bytes)
+            Log.d(TAG, "Binary message: ${bytes.size} bytes")
+            parseBinaryMessage(bytes)
+        }
+
         override fun onMessage(conn: WebSocket, message: String) {
-            Log.d(TAG, "Message from client: ${message.take(200)}")
-            try {
-                val json = JSONObject(message)
-                when (json.optString("type")) {
-                    "offer" -> {
-                        val sdp = json.getString("sdp")
-                        postOnMain { listener.onOfferReceived(sdp) }
+            // Legacy text messages: treat "PING" as keepalive
+            if ("PING" == message) return
+            Log.d(TAG, "Text message: ${message.take(200)}")
+            if (message.startsWith("{")) {
+                // Fallback JSON parsing for backward compatibility
+                try {
+                    val json = org.json.JSONObject(message)
+                    when (json.optString("type")) {
+                        "offer" -> postOnMain { listener.onAnswerReceived(json.getString("sdp")) }
+                        else -> Log.w(TAG, "Unknown JSON type: ${json.optString("type")}")
                     }
-                    "hangup" -> {
-                        postOnMain { listener.onHangup() }
-                    }
-                    else -> {
-                        Log.w(TAG, "Unknown message type: ${json.optString("type")}")
-                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse text message: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to parse message: ${e.message}")
             }
         }
 
