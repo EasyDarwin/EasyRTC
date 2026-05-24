@@ -24,6 +24,12 @@ class HomeLogsBottomSheetFragment : BottomSheetDialogFragment() {
     private val refreshRunnable = object : Runnable {
         override fun run() {
             tvLogs?.text = AppLogStore.text()
+            tvLogs?.post {
+                val layout = tvLogs?.layout ?: return@post
+                val top = layout.getLineTop(tvLogs?.lineCount ?: 0)
+                val height = tvLogs?.height ?: 0
+                tvLogs?.scrollTo(0, (top - height).coerceAtLeast(0))
+            }
             handler.postDelayed(this, 500)
         }
     }
@@ -45,6 +51,12 @@ class HomeLogsBottomSheetFragment : BottomSheetDialogFragment() {
             (parentFragment as? HomeFragment)?.sendTextMessage(text)
             etMessage?.setText("")
             tvLogs?.text = AppLogStore.text()
+            tvLogs?.post {
+                val layout = tvLogs?.layout ?: return@post
+                val top = layout.getLineTop(tvLogs?.lineCount ?: 0)
+                val height = tvLogs?.height ?: 0
+                tvLogs?.scrollTo(0, (top - height).coerceAtLeast(0))
+            }
         }
     }
 

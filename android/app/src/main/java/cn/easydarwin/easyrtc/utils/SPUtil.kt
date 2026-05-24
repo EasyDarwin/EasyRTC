@@ -93,15 +93,14 @@ class SPUtil private constructor(context: Context) {
         get() {
             val savedUuid = preferences.getString(RTC_USER_UUID, null)
             return if (savedUuid.isNullOrEmpty()) {
-                val newUuid = UUID.randomUUID().toString()
-                // 自动保存生成的 UUID
+                val newUuid = UUID.randomUUID().toString().uppercase()
                 preferences.edit { putString(RTC_USER_UUID, newUuid) }
                 newUuid
             } else {
-                savedUuid
+                savedUuid.uppercase()
             }
         }
-        set(value) = preferences.edit { putString(RTC_USER_UUID, value) }
+        set(value) = preferences.edit { putString(RTC_USER_UUID, value.uppercase()) }
 
     var hevcCodec: Int
         get() = preferences.getInt(KEY_HEVC_CODEC, 0)
