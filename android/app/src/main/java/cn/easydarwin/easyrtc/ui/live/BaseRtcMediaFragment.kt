@@ -1,10 +1,7 @@
 package cn.easydarwin.easyrtc.ui.live
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Looper
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import cn.easyrtc.media.MediaSession
 import cn.easyrtc.model.VideoEncodeConfig
@@ -13,30 +10,30 @@ import cn.easydarwin.easyrtc.utils.SPUtil
 
 abstract class BaseRtcMediaFragment : Fragment() {
     protected lateinit var session: MediaSession
+        private set
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        AppLogStore.appendCritical("BaseRtcMediaFragment", "onCreate: fragment=${this::class.java.simpleName}")
+    protected fun createSession() {
         session = MediaSession().apply {
             create()
             setDeviceId(SPUtil.getInstance().rtcUserUUID)
+        }.also {
+            AppLogStore.appendCritical("BaseRtcMediaFragment", "MediaSession created: fragment=${this::class.java.simpleName}")
+            onMediaSessionCreated(it)
         }
-        AppLogStore.appendCritical("BaseRtcMediaFragment", "MediaSession created: fragment=${this::class.java.simpleName}")
-        onMediaSessionCreated(session)
+    }
+
+    protected fun releaseSession() {
+        AppLogStore.appendCritical("BaseRtcMediaFragment", "releasing MediaSession for ${this::class.java.simpleName}")
+        session.connectionState.removeObservers(viewLifecycleOwner)
+        session.dataChannel.removeObservers(viewLifecycleOwner)
+        session.remoteVideoSize.removeObservers(viewLifecycleOwner)
+        onMediaSessionReleasing(session)
+        session.release()
     }
 
     protected open fun onMediaSessionCreated(session: MediaSession) {}
 
     protected open fun onMediaSessionReleasing(session: MediaSession) {}
-
-    override fun onDestroy() {
-        if (::session.isInitialized) {
-            AppLogStore.appendCritical("BaseRtcMediaFragment", "onDestroy: releasing MediaSession for ${this::class.java.simpleName}")
-            onMediaSessionReleasing(session)
-            session.release()
-        }
-        super.onDestroy()
-    }
 
     protected fun getVideoEncodeConfig(): VideoEncodeConfig {
         val useHevc = SPUtil.getInstance().getIsHevc()
@@ -56,13 +53,6 @@ abstract class BaseRtcMediaFragment : Fragment() {
             orientation = VideoEncodeConfig.ORIENTATION_90,
             bitRate = bitRate
         )
-    }
-
-    protected fun hasCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            requireContext(),
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
     }
 
     protected fun runOnMainThread(action: () -> Unit) {

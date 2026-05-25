@@ -14,11 +14,8 @@ import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPNTIWEBRTCOFFERIN
 import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPREQGETWEBRTCOFFERINFO
 import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCUser
-import cn.easyrtc.media.MediaSession
 
 class WebSocketService : Service() {
-
-    private var currentSession: MediaSession? = null
 
     sealed class Event {
         data object Connected : Event()
@@ -28,6 +25,7 @@ class WebSocketService : Service() {
         data class OnlineUsers(val users: List<EasyRTCUser>) : Event()
         data class Logs(val text: String) : Event()
         data class IncomingCall(val uuid: String, val data: ByteArray, val callout: Boolean = false, var handled: Boolean = false) : Event()
+        data class AnswerSDP(val sdp: String, var handled: Boolean = false) : Event()
     }
 
     inner class LocalBinder : Binder() {
@@ -71,6 +69,10 @@ class WebSocketService : Service() {
 //                    _events.postValue(Event.IncomingCall(uuid))
                 }
 
+                override fun onWSAnswerSDP(sdp: String) {
+                    _events.postValue(Event.AnswerSDP(sdp))
+                }
+
                 override fun onTypeAndData(type: Int, data: ByteArray) {
                     if (HPREQGETWEBRTCOFFERINFO == type) {
                         //device 设备端逻辑
@@ -99,10 +101,6 @@ class WebSocketService : Service() {
         manager.call(uuid)
     }
 
-    fun hangup() {
-        currentSession?.releasePeerConnection()
-    }
-
     fun sendOfferSDP(sdp: String, isOffer: Boolean) {
         manager.sendOfferSDP(sdp, isOffer)
     }
@@ -111,68 +109,40 @@ class WebSocketService : Service() {
         manager.getOnlineClients()
     }
 
-    fun handleIncomingCall(event: Event.IncomingCall, session: MediaSession) {
-        event.handled = true
-        if (event.callout)
-        {
-            val sdp = manager.handlerPeerConnection(event.data, true)
+    data class CallSetup(
+        val callout: Boolean,
+        val sdp: String,
+        val videoCodec: Int,
+        val audioCodec: Int,
+        val hasDataChannel: Boolean,
+        val dataChannelName: String
+    )
+
+    fun prepareIncomingCall(data: ByteArray, callout: Boolean): CallSetup {
+        if (callout) {
+            val sdp = manager.handlerPeerConnection(data, true)
             AppLogStore.appendTimestamped("offer from remote:\n$sdp")
-            if (sdp.isEmpty()) {
-                Log.w("WebSocketService", "sdp is empty")
-                return
-            };
             var videoCodec = 0
             var audioCodec = 0
-
             if (sdp.contains("m=video", ignoreCase = true)) {
-                var codeID = 0;
-                if (sdp.contains("H264/90000")) {
-                    codeID = EasyRTCCodec.H264
-                } else if (sdp.contains("H265/90000")) {
-                    codeID = EasyRTCCodec.H265
-                } else if (sdp.contains("VP8/90000")) {
-                    codeID = EasyRTCCodec.VP8
+                when {
+                    sdp.contains("H264/90000") -> videoCodec = EasyRTCCodec.H264
+                    sdp.contains("H265/90000") -> videoCodec = EasyRTCCodec.H265
+                    sdp.contains("VP8/90000") -> videoCodec = EasyRTCCodec.VP8
                 }
-                if (codeID != 0) videoCodec = codeID
             }
-
             if (sdp.contains("m=audio", ignoreCase = true)) {
-                var codeID = 0;
-                if (sdp.contains("PCMA/8000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.ALAW
-                } else if (sdp.contains("PCMU/8000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.MULAW
-                } else if (sdp.contains("opus/48000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.OPUS
+                when {
+                    sdp.contains("PCMA/8000", ignoreCase = true) -> audioCodec = EasyRTCCodec.ALAW
+                    sdp.contains("PCMU/8000", ignoreCase = true) -> audioCodec = EasyRTCCodec.MULAW
+                    sdp.contains("opus/48000", ignoreCase = true) -> audioCodec = EasyRTCCodec.OPUS
                 }
-                if (codeID != 0) audioCodec = codeID
-
             }
-            if (videoCodec == 0 && audioCodec == 0) {
-                Log.w("WebSocketService", "sdp no video and audio codec")
-                return
-            }
-
-            currentSession = session
-            manager.session = session
-            manager.createPeerConnection()
-            //      try to clean old first
-            session.addTransceivers(videoCodec, audioCodec)
-
-            if (sdp.contains("webrtc-datachannel", ignoreCase = true)) session.addDataChannel("")
-            session.createAnswer(sdp) { manager.sendOfferSDP(it, false) }  //创建 Answer 的 SDP
-
-            _events.postValue(Event.Logs(sdp))
-            return;
+            val hasDC = sdp.contains("webrtc-datachannel", ignoreCase = true)
+            return CallSetup(callout = true, sdp = sdp, videoCodec = videoCodec, audioCodec = audioCodec, hasDataChannel = hasDC, dataChannelName = "")
         }
-        manager.handlerPeerConnection(event.data)
-        currentSession = session
-        manager.session = session
-        manager.createPeerConnection()
+        manager.handlerPeerConnection(data)
         val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-//      try to clean old first
-        session.addTransceivers(videoCodeID, EasyRTCCodec.ALAW)
-        session.addDataChannel("123") //name 设备端随机字符串
-        session.createOffer { manager.sendOfferSDP(it, true) }  //创建  Offer  sdp
+        return CallSetup(callout = false, sdp = "", videoCodec = videoCodeID, audioCodec = EasyRTCCodec.ALAW, hasDataChannel = true, dataChannelName = "123")
     }
 }

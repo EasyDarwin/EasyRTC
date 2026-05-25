@@ -26,7 +26,6 @@ import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easyrtc.model.DataChannelEvent
-import cn.easyrtc.model.DataChannelLiveData
 
 class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
@@ -238,10 +237,11 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         if (surface == localPreview.surfaceTexture) {
             val config = getVideoEncodeConfig()
-            surface.setDefaultBufferSize(config.getWidth(), config.getHeight())  // 1280×720 landscape
+            surface.setDefaultBufferSize(config.getWidth(), config.getHeight())
             AppLogStore.appendCritical(TAG,"主视频 SurfaceTexture 已创建, buffer=${config.getWidth()}x${config.getHeight()}")
             localSurfaceTexture = surface
             updatePreviewTransform(width, height)
+            createSession()
             startLocalPreviewIfAvailable()
         }
     }
@@ -255,7 +255,11 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         if (surface == localPreview.surfaceTexture) {
             localSurfaceTexture = null
-            stopLocalPreviewIfStarted()
+            session.stopPreview()
+            session.releasePeerConnection()
+            isRunning = false
+            isLocalPreviewStarted = false
+            releaseSession()
         }
         return true
     }
@@ -264,17 +268,12 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
     }
 
     private fun startLocalPreviewIfAvailable() {
-        if (!hasCameraPermission()) {
-            appendLog("无相机权限，无法启动预览")
-            AppLogStore.appendCritical(TAG, "startLocalPreviewIfAvailable: camera permission denied")
-            return
-        }
         if (localSurfaceTexture == null || !localPreview.isAvailable) return
         if (isLocalPreviewStarted) {
             AppLogStore.appendCritical(TAG, "startLocalPreviewIfAvailable skipped: preview already running")
             return
         }
-        val result = session.startPreview(Surface(localSurfaceTexture))
+        val result = session.startPreview(Surface(localSurfaceTexture)) ?: -1
         if (result != 0) {
             appendLog("本地预览启动失败: $result")
             Log.e(TAG, "startPreview failed: $result")
@@ -284,13 +283,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
             appendLog("本地预览已启动")
             AppLogStore.appendCritical(TAG, "startPreview success")
         }
-    }
-
-    private fun stopLocalPreviewIfStarted() {
-        if (!isLocalPreviewStarted) return
-        session.stopPreview()
-        isLocalPreviewStarted = false
-        AppLogStore.appendCritical(TAG, "stopPreview success")
     }
 
     private fun appendLog(message: String) {
@@ -313,10 +305,11 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
     override fun onDestroyView() {
         AppLogStore.appendCritical(TAG, "onDestroyView: releasing WHIP resources, isRunning=$isRunning")
         if (isRunning) {
-            stopWhipPush()
-            stopLocalPreviewIfStarted()
+            whipModule?.cancel()
+            whipModule = null
+            isRunning = false
+            isLocalPreviewStarted = false
         }
-        session.releasePeerConnection()
         super.onDestroyView()
     }
 

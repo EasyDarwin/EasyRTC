@@ -31,17 +31,9 @@ class IpDirectContainerFragment : Fragment() {
         }
     }
 
-    fun onPermissionGranted() {
-        (childFragmentManager.findFragmentByTag(FRAGMENT_TAG) as? IpDirectFragment)?.onPermissionGranted()
-    }
-
     companion object {
         private const val FRAGMENT_TAG = "ip_direct_home"
 
         fun newInstance(): IpDirectContainerFragment = IpDirectContainerFragment()
-
-        fun notifyPermissionGranted(fragment: Fragment) {
-            (fragment as? IpDirectContainerFragment)?.onPermissionGranted()
-        }
     }
 }

@@ -9,7 +9,7 @@
 #include <string>
 #include <thread>
 #include <mutex>
-
+struct MediaSession;
 struct MediaPipeline {
     AMediaCodec* encoder = nullptr;
     std::shared_ptr<AMediaFormat> format = nullptr;
@@ -36,6 +36,7 @@ struct MediaPipeline {
 
 
     bool initEncoder();
+    void startEncoder(MediaSession *);
 };
 
 std::string findCameraId(int facing);

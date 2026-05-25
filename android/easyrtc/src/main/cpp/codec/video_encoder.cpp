@@ -77,8 +77,11 @@ bool MediaPipeline::initEncoder()
     return true;
 }
 
-void* outputThreadFunc(void* arg) {
-    auto *session = reinterpret_cast<MediaSession *>(arg);
+void MediaPipeline::startEncoder(MediaSession *session)
+{
+    running.store(true);
+    outputThread = std::thread([](void *sessionPtr) {
+        auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(session->videoEncoder);
     auto* pipeline = session->videoEncoder.get();
@@ -176,5 +179,5 @@ void* outputThreadFunc(void* arg) {
     }
 
     LOGI("[VO] Output thread exiting");
-    return nullptr;
+    }, session);
 }

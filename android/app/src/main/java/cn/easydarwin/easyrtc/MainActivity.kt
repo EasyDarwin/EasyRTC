@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.os.IBinder
 import android.os.Bundle
 import androidx.core.view.WindowCompat
+import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -21,7 +22,6 @@ import androidx.constraintlayout.widget.ConstraintSet
 import com.tencent.bugly.crashreport.CrashReport
 import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
-import cn.easydarwin.easyrtc.ui.hub.EmptyTabFragment
 import cn.easydarwin.easyrtc.ui.whip.WhipFragment
 import cn.easydarwin.easyrtc.ui.ipdirect.IpDirectContainerFragment
 import cn.easydarwin.easyrtc.fragment.SettingFragment
@@ -33,7 +33,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class MainActivity : AppCompatActivity() {
 
-    var bottomNavigationView: BottomNavigationView? = null
+    lateinit var bottomNavigationView: BottomNavigationView
     val webSocketServiceLiveData = MutableLiveData<WebSocketService?>()
     val incomingCallLiveData = MutableLiveData<WebSocketService.Event.IncomingCall>()
     private var webSocketServiceConnection: ServiceConnection? = null
@@ -45,8 +45,8 @@ class MainActivity : AppCompatActivity() {
         if (event is WebSocketService.Event.IncomingCall) {
             incomingCallLiveData.postValue(event)
             runOnUiThread {
-                if (bottomNavigationView?.selectedItemId != R.id.navigation_p2p_call) {
-                    bottomNavigationView?.selectedItemId = R.id.navigation_p2p_call
+                if (bottomNavigationView.selectedItemId != R.id.navigation_p2p_call) {
+                    bottomNavigationView.selectedItemId = R.id.navigation_p2p_call
                 }
             }
         }
@@ -63,6 +63,17 @@ class MainActivity : AppCompatActivity() {
         SPUtil.init(this)
         super.onCreate(savedInstanceState)
 
+        val permissionsGranted = allPermissionsGranted()
+        if (!permissionsGranted) {
+            val fm = supportFragmentManager
+            if (fm.fragments.isNotEmpty()) {
+                fm.beginTransaction().apply {
+                    fm.fragments.forEach { remove(it) }
+                    commitNow()
+                }
+            }
+        }
+
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.statusBarColor = Color.WHITE
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
@@ -76,9 +87,10 @@ class MainActivity : AppCompatActivity() {
                 AppLogStore.appendTimestamped(logLine)
             }
         }
+
         AppLogStore.appendCritical(
             tag = "MainActivity",
-            message = "Application bootstrapped, pid=${android.os.Process.myPid()}, deviceId=${SPUtil.getInstance().rtcUserUUID}"
+            message = "Application bootstrapped, pid=${android.os.Process.myPid()}, deviceId=${SPUtil.getInstance().rtcUserUUID}, permissionsGranted=$permissionsGranted"
         )
         MagicFileHelper.init(this)
 
@@ -87,10 +99,32 @@ class MainActivity : AppCompatActivity() {
 
         CrashReport.initCrashReport(applicationContext, "5aece7ce65", false)
 
-        checkPermission()
         bindWebSocketService()
 
-        initBNView()
+        bottomNavigationView = findViewById(R.id.bottomNavigationView)
+        bottomNavigationView.setOnItemSelectedListener {
+            when (it.itemId) {
+                R.id.navigation_p2p_call -> {
+                    switchFragment("p2p_call"); true
+                }
+                R.id.navigation_whip_push -> {
+                    switchFragment("whip_push"); true
+                }
+                R.id.navigation_ip_direct -> {
+                    switchFragment("ip_direct"); true
+                }
+                else -> false
+            }
+        }
+
+        if (permissionsGranted) {
+            if (supportFragmentManager.fragments.isEmpty()) {
+                switchFragment("p2p_call")
+            }
+        } else {
+            bottomNavigationView.visibility = View.GONE
+            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+        }
         supportFragmentManager.addOnBackStackChangedListener { syncChromeVisibility() }
         syncChromeVisibility()
     }
@@ -113,41 +147,6 @@ class MainActivity : AppCompatActivity() {
         }
         webSocketServiceConnection = connection
         bindService(Intent(this, WebSocketService::class.java), connection, Context.BIND_AUTO_CREATE)
-    }
-
-    private fun checkPermission() {
-        if (!allPermissionsGranted()) {
-            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
-        }
-    }
-
-    private fun initBNView() {
-        if (bottomNavigationView != null) return
-
-        bottomNavigationView = findViewById(R.id.bottomNavigationView)
-
-        bottomNavigationView?.setOnItemSelectedListener {
-            when (it.itemId) {
-                R.id.navigation_p2p_call -> {
-                    switchFragment("p2p_call")
-                    true
-                }
-
-                R.id.navigation_whip_push -> {
-                    switchFragment("whip_push")
-                    true
-                }
-
-                R.id.navigation_ip_direct -> {
-                    switchFragment("ip_direct")
-                    true
-                }
-
-                else -> false
-            }
-        }
-
-        bottomNavigationView?.selectedItemId = R.id.navigation_p2p_call
     }
 
     fun switchFragment(tag: String, commitNow: Boolean = false) {
@@ -193,7 +192,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun syncChromeVisibility() {
         val fullScreen = supportFragmentManager.backStackEntryCount > 0
-        bottomNavigationView?.visibility = if (fullScreen) android.view.View.GONE else android.view.View.VISIBLE
+        bottomNavigationView.visibility = if (fullScreen) android.view.View.GONE else android.view.View.VISIBLE
 
         val root = mainRoot ?: return
         val set = ConstraintSet().apply { clone(root) }
@@ -214,19 +213,13 @@ class MainActivity : AppCompatActivity() {
 
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
-
-                // Notify live fragment to reinitialize camera after permission grant
-                supportFragmentManager.fragments.forEach {
-                    if (it.tag == "p2p_call") {
-                        LiveFragment.notifyPermissionGranted(it)
-                    }
-                    if (it.tag == "ip_direct") {
-                        IpDirectContainerFragment.notifyPermissionGranted(it)
-                    }
-                }
-
+                AppLogStore.appendCritical(tag = "MainActivity", message = "Permissions granted via onRequestPermissionsResult")
+                bottomNavigationView.visibility = View.VISIBLE
+                switchFragment("p2p_call")
             } else {
+                AppLogStore.appendCritical(tag = "MainActivity", message = "Permissions denied, finishing activity")
                 Toast.makeText(this, "Permissions not granted!", Toast.LENGTH_SHORT).show()
+                finish()
             }
         }
     }

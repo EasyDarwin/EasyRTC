@@ -31,17 +31,9 @@ class LiveFragment : Fragment() {
         }
     }
 
-    fun onPermissionGranted() {
-        (childFragmentManager.findFragmentByTag(HOME_FRAGMENT_TAG) as? HomeFragment)?.onPermissionGranted()
-    }
-
     companion object {
         private const val HOME_FRAGMENT_TAG = "live_home"
 
         fun newInstance(): LiveFragment = LiveFragment()
-
-        fun notifyPermissionGranted(fragment: Fragment) {
-            (fragment as? LiveFragment)?.onPermissionGranted()
-        }
     }
 }

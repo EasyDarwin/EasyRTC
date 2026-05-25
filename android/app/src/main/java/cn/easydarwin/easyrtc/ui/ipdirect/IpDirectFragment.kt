@@ -18,31 +18,20 @@ import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
 import cn.easyrtc.EasyRTCCodec
 import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
-import cn.easyrtc.model.LiveSessionController
 import cn.easyrtc.model.LiveUiState
-import cn.easydarwin.easyrtc.ui.live.NativePipelineController
-import cn.easydarwin.easyrtc.ui.live.NativePipelineState
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easyrtc.model.DataChannelEvent
-import cn.easyrtc.model.DataChannelLiveData
-import cn.easyrtc.model.RemoteVideoSizeLiveData
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.util.Locale
 
-/**
- * IP直连 fragment — acts as a WebSocket server on port 9000.
- * Accepts incoming calls from WS clients and handles bidirectional media.
- * No device list, no outgoing calls — passive answer only.
- */
 class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener, IpDirectServer.Listener {
 
     companion object {
         private const val TAG = "IpDirectFragment"
     }
 
-    // UI
     private lateinit var endCallButton: ImageButton
     private lateinit var switchCameraButton: ImageButton
     private lateinit var speakerButton: ImageButton
@@ -57,14 +46,9 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
-    // Surface state
     private var mainSurfaceTexture: SurfaceTexture? = null
     private var smallSurfaceTexture: SurfaceTexture? = null
 
-    // Pipeline & session state
-    private val pipelineController = NativePipelineController()
-
-    // WebSocket server
     private var server: IpDirectServer? = null
 
     override fun onMediaSessionCreated(session: cn.easyrtc.media.MediaSession) {
@@ -90,22 +74,50 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-
         initViews(view)
-        observeLiveSessionState()
         startServer()
+    }
 
-        DataChannelLiveData.observe(viewLifecycleOwner) { event ->
+    private fun setupSessionObservers() {
+        val s = session ?: return
+        s.connectionState.observe(viewLifecycleOwner) { state ->
+            when (state) {
+                is LiveUiState.Idle -> {
+                    val ip = getLocalIpAddress() ?: "unknown"
+                    tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
+                    endCallButton.visibility = View.GONE
+                }
+                is LiveUiState.Connected -> {
+                    appendLog("连接成功")
+                    endCallButton.visibility = View.VISIBLE
+                    tvStatus.text = "IP直连 [已连接]"
+                }
+                is LiveUiState.Disconnected -> {
+                    appendLog("连接断开")
+                    val ip = getLocalIpAddress() ?: "unknown"
+                    tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT} [已断开]"
+                    endCallButton.visibility = View.INVISIBLE
+                }
+                is LiveUiState.Failed -> {
+                    appendLog("连接失败")
+                    state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("原因: $it") }
+                    tvStatus.text = "IP直连 [连接失败]"
+                    endCallButton.visibility = View.INVISIBLE
+                }
+            }
+        }
+
+        s.dataChannel.observe(viewLifecycleOwner) { event ->
             if (event is DataChannelEvent.Open) {
-                session.sendDataChannelMsg(false, "Hello EasyRTC IP直连!!!".toByteArray(Charsets.UTF_8))
+                s.sendDataChannelMsg(false, "Hello EasyRTC IP直连!!!".toByteArray(Charsets.UTF_8))
             } else if (event is DataChannelEvent.Message) {
                 if (event.binary == 0) {
                     runOnMainThread { appendLog(event.data.toString(Charsets.UTF_8)) }
                 }
             }
         }
-        RemoteVideoSizeLiveData.observe(viewLifecycleOwner) { size ->
+
+        s.remoteVideoSize.observe(viewLifecycleOwner) { size ->
             if (size.width > 0 && size.height > 0) onRemoteVideoSize(size.width, size.height)
         }
     }
@@ -131,7 +143,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         remotePreview.surfaceTextureListener = this
 
         endCallButton.setOnClickListener {
-            Log.d(TAG, "挂断通话")
             server?.sendHangup()
             stopCall()
         }
@@ -148,7 +159,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         buttonMenu?.setOnClickListener { showMenu(it) }
     }
 
-    // ─── Server lifecycle ────────────────────────────────────────────────
+    // ─── Server ───────────────────────────────────────────────────────────
 
     private fun startServer() {
         if (server?.isRunning == true) return
@@ -161,27 +172,17 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         server = null
     }
 
-    // ─── IpDirectServer.Listener ─────────────────────────────────────────
-
     override fun onServerStarted(port: Int) {
         val ip = getLocalIpAddress() ?: "unknown"
         tvStatus.text = "监听中 ws://$ip:$port"
         appendLog("服务已启动 ws://$ip:$port")
     }
-
-    override fun onServerStopped() {
-        appendLog("服务已停止")
-    }
-
-    override fun onServerError(message: String) {
-        appendLog("服务错误: $message")
-    }
-
+    override fun onServerStopped() { appendLog("服务已停止") }
+    override fun onServerError(message: String) { appendLog("服务错误: $message") }
     override fun onClientConnected(remoteAddress: String) {
         appendLog("客户端连接: $remoteAddress")
         tvStatus.text = "客户端已连接: $remoteAddress"
     }
-
     override fun onClientDisconnected(remoteAddress: String) {
         appendLog("客户端断开: $remoteAddress")
         session.releasePeerConnection()
@@ -189,29 +190,24 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
         endCallButton.visibility = View.GONE
     }
-
     override fun onClientReady() {
         appendLog("客户端握手完成，创建 Offer...")
         createAndSendOffer()
     }
-
     override fun onAnswerReceived(sdp: String) {
         appendLog("收到 Answer SDP, 长度=${sdp.length}")
         session.setRemoteDescription(sdp)
     }
 
-    // ─── Call handling (server creates offer, client answers) ────────────
-
     private fun createAndSendOffer() {
-        session.createPeerConnection("", "", "", "")
-
+        val s = session ?: return
+        s.createPeerConnection("", "", "", "")
         val config = getVideoEncodeConfig()
         val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-        session.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
-        session.addDataChannel("")
-
+        s.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
+        s.addDataChannel("")
         appendLog("创建 Offer...")
-        session.createOffer { sdp ->
+        s.createOffer { sdp ->
             appendLog("Offer 创建完成, 长度=${sdp.length}")
             server?.sendOffer(sdp)
         }
@@ -219,12 +215,10 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     private fun stopCall() {
         session.releasePeerConnection()
-        pipelineController.stop()
     }
 
     fun onRemoteVideoSize(width: Int, height: Int) {
         val density = resources.displayMetrics.density
-
         val desiredWidthPx = remotePreviewContainer.width
         val desiredHeightPx = desiredWidthPx * height / width
         val lp = remotePreviewContainer.layoutParams
@@ -257,44 +251,11 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         if (type == 1) {
             session.sendDataChannelMsg(false, "Hello EasyRTC IP直连!!!".toByteArray(Charsets.UTF_8))
         } else if (type == 2 && binary == 0) {
-            requireActivity().runOnUiThread {
-                appendLog(data.toString(Charsets.UTF_8))
-            }
+            requireActivity().runOnUiThread { appendLog(data.toString(Charsets.UTF_8)) }
         }
     }
 
-    // ─── LiveSession state observation ───────────────────────────────────
-
-    private fun observeLiveSessionState() {
-        LiveSessionController.observe(viewLifecycleOwner) { state ->
-            when (state) {
-                is LiveUiState.Idle -> {
-                    val ip = getLocalIpAddress() ?: "unknown"
-                    tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
-                    endCallButton.visibility = View.GONE
-                }
-                is LiveUiState.Connected -> {
-                    appendLog("连接成功")
-                    endCallButton.visibility = View.VISIBLE
-                    tvStatus.text = "IP直连 [已连接]"
-                }
-                is LiveUiState.Disconnected -> {
-                    appendLog("连接断开")
-                    val ip = getLocalIpAddress() ?: "unknown"
-                    tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT} [已断开]"
-                    endCallButton.visibility = View.INVISIBLE
-                }
-                is LiveUiState.Failed -> {
-                    appendLog("连接失败")
-                    state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("原因: $it") }
-                    tvStatus.text = "IP直连 [连接失败]"
-                    endCallButton.visibility = View.INVISIBLE
-                }
-            }
-        }
-    }
-
-    // ─── TextureView.SurfaceTextureListener ──────────────────────────────
+    // ─── SurfaceTexture lifecycle ─── drives session create / release ────
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
         when (surface) {
@@ -306,12 +267,14 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             }
             remotePreview.surfaceTexture -> {
                 smallSurfaceTexture = surface
-                session.setupVideoEncoder(getVideoEncodeConfig())
-                session.setDecoderSurface(Surface(surface))
                 Log.d(TAG, "远端 SurfaceTexture 已创建")
             }
         }
-        if (mainSurfaceTexture != null && smallSurfaceTexture != null && hasCameraPermission()) {
+        if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
+            createSession()
+            setupSessionObservers()
+            session.setupVideoEncoder(getVideoEncodeConfig())
+            session.setDecoderSurface(Surface(remotePreview.surfaceTexture))
             startCameraPreview()
         }
     }
@@ -321,10 +284,13 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         when {
             surface == localPreview.surfaceTexture -> mainSurfaceTexture = null
-            surface == remotePreview.surfaceTexture -> {
-                smallSurfaceTexture = null
-                session.setDecoderSurface(null)
-            }
+            surface == remotePreview.surfaceTexture -> smallSurfaceTexture = null
+        }
+        if (mainSurfaceTexture == null && smallSurfaceTexture == null) {
+            session.stopPreview()
+            session.setDecoderSurface(null)
+            session.releasePeerConnection()
+            releaseSession()
         }
         return true
     }
@@ -334,61 +300,37 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     // ─── Camera ──────────────────────────────────────────────────────────
 
     private fun startCameraPreview() {
-        if (!hasCameraPermission()) return
         try {
             if (localPreview.isAvailable) {
-                val result = session.startPreview(Surface(localPreview.surfaceTexture))
+                val result = session.startPreview(Surface(localPreview.surfaceTexture)) ?: -1
                 if (result != 0) {
                     Log.e(TAG, "startPreview failed: $result")
-                    pipelineController.reportError("startPreview failed: $result")
                     return
                 }
             }
-            pipelineController.start()
         } catch (e: Exception) {
             Log.e(TAG, "Camera preview failed: ${e.message}")
-            pipelineController.reportError(e.message ?: "unknown")
         }
     }
 
     private fun switchCamera() {
-        if (pipelineController.state !is NativePipelineState.Running) return
         session.switchCamera()
-        pipelineController.switchCamera()
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────
 
-    override fun onResume() {
-        super.onResume()
-        if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-            startCameraPreview()
-        }
-    }
-
-    override fun onPause() {
-        super.onPause()
-    }
-
     override fun onDestroyView() {
         super.onDestroyView()
-        stopCall()
-        session.stopPreview()
         stopServer()
         buttonMenu = null
     }
-
-    // ─── Menu ────────────────────────────────────────────────────────────
 
     private fun showMenu(anchor: View) {
         PopupMenu(requireContext(), anchor).apply {
             menu.add(0, 1, 0, "设置")
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
-                    1 -> {
-                        (activity as? MainActivity)?.openSettingsScreen()
-                        true
-                    }
+                    1 -> { (activity as? MainActivity)?.openSettingsScreen(); true }
                     else -> false
                 }
             }
@@ -396,17 +338,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         }
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────
-
-    private fun appendLog(message: String) {
-        AppLogStore.appendTimestamped("[IP直连] $message")
-    }
-
-    fun onPermissionGranted() {
-        if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-            startCameraPreview()
-        }
-    }
+    private fun appendLog(message: String) { AppLogStore.appendTimestamped("[IP直连] $message") }
 
     private fun getLocalIpAddress(): String? {
         try {
@@ -417,9 +349,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
                 val addresses = intf.inetAddresses
                 while (addresses.hasMoreElements()) {
                     val addr = addresses.nextElement()
-                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
-                        return addr.hostAddress
-                    }
+                    if (addr is Inet4Address && !addr.isLoopbackAddress) return addr.hostAddress
                 }
             }
         } catch (_: Exception) {}

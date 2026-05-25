@@ -898,11 +898,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
         LOGE("Failed to start encoder: %d", status);
         return -1;
     }
-
-    p->running.store(true);
-    p->outputThread = std::thread([](void *sessionPtr) {
-        outputThreadFunc(sessionPtr);
-    }, session);
+    p->startEncoder(session);
     // pthread_t th = p->outputThread.native_handle();
     // sched_param sch_params;
     // sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
@@ -1104,8 +1100,19 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         LOGI("[CRITICAL] PC released: session=%p", session);
     }
 
-    if (session->cameraDevice) {
+    if (session->cameraDevice && session->cameraInputWindow) {
         std::lock_guard<std::mutex> lock(session->cameraMutex);
+
+        if (session->cameraInputSurfaceTexture) {
+            ASurfaceTexture_release(session->cameraInputSurfaceTexture);
+            session->cameraInputSurfaceTexture = nullptr;
+        }
+        if (session->cameraInputSurfaceTextureObj) {
+            env->DeleteGlobalRef(session->cameraInputSurfaceTextureObj);
+            session->cameraInputSurfaceTextureObj = nullptr;
+        }
+        session->cameraInputWindow.reset();
+
         releaseCaptureSession(session);
         if (session->previewWindow) createCaptureSession(session, false);
     }

@@ -11,35 +11,6 @@ sealed class LiveUiState {
     data class Disconnected(val user: String?) : LiveUiState()
     data class Failed(val user: String?, val reason: String?) : LiveUiState()
 }
-object LiveSessionController: MutableLiveData<LiveUiState>(LiveUiState.Idle) {
-    private var currentUser: String? = null
-
-    fun onConnected(user: String?) {
-        currentUser = user
-        postValue(
-            LiveUiState.Connected(
-                currentUser
-            )
-        )
-    }
-
-    fun onClosed() {
-        postValue(
-            LiveUiState.Disconnected(
-                currentUser
-            )
-        )
-    }
-
-    fun onFailed(reason: String? = null) {
-        postValue(
-            LiveUiState.Failed(
-                currentUser,
-                reason
-            )
-        )
-    }
-}
 
 sealed class DataChannelEvent {
     data object Open : DataChannelEvent()
@@ -48,13 +19,6 @@ sealed class DataChannelEvent {
         override fun equals(other: Any?): Boolean = other is Message
     }
 }
-object DataChannelLiveData : MutableLiveData<DataChannelEvent>(DataChannelEvent.Idle) {
-    fun onOpen() { postValue(DataChannelEvent.Open) }
-    fun onMessage(binary: Int, data: ByteArray, size: Int) {
-        postValue(DataChannelEvent.Message(binary, data.copyOf(size), size))
-    }
-}
-object RemoteVideoSizeLiveData : MutableLiveData<android.util.Size>(android.util.Size(0, 0))
 
 data class VideoEncodeConfig(
     private val useHevc: Boolean = false,

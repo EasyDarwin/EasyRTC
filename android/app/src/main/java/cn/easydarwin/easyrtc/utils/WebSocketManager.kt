@@ -7,7 +7,6 @@ import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCDirection
 import cn.easyrtc.EasyRTCIceTransportPolicy
 import cn.easyrtc.EasyRTCUser
-import cn.easyrtc.media.MediaSession
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -17,7 +16,6 @@ import okio.ByteString
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
-import kotlin.let
 
 public class WebSocketManager(private val url: String, private val token: String? = null, private val callback: WebSocketCallback) {
 
@@ -28,15 +26,10 @@ public class WebSocketManager(private val url: String, private val token: String
     var uuidClientA = ""
     var uuidClientB = ""
 
-    var session: MediaSession? = null
     private var stunUrl = ""
     private var turnUrl = ""
     private var turnUser = ""
     private var turnPass = ""
-
-    fun createPeerConnection() {
-        session?.createPeerConnection(stunUrl, turnUrl, turnUser, turnPass)
-    }
 
     private val handler = Handler(Looper.getMainLooper())
     private var onlineTask: Runnable? = null
@@ -86,6 +79,7 @@ public class WebSocketManager(private val url: String, private val token: String
         fun onWSLogs(txt: String)
         fun onWSIncomingCall(uuid: String)
         fun onTypeAndData(type: Int, data: ByteArray)
+        fun onWSAnswerSDP(sdp: String)
     }
 
     private val listener = object : WebSocketListener() {
@@ -224,7 +218,7 @@ public class WebSocketManager(private val url: String, private val token: String
             val sdplen = bytesToIntLE(data.copyOfRange(24, 26))           //2字节
             val answerSdp = String(data.copyOfRange(26, 26 + sdplen), Charsets.UTF_8)
             AppLogStore.appendTimestamped("answer from remote:\n$answerSdp")
-            session?.setRemoteDescription(answerSdp)
+            callback.onWSAnswerSDP(answerSdp)
         } else if (HPACKGETONLINEDEVICESINFO == type) {
             val users = mutableListOf<EasyRTCUser>()
             if (data.size < 12) return
