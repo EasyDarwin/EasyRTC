@@ -94,15 +94,12 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
                 }
                 is LiveUiState.Disconnected -> {
                     appendLog("连接断开")
-                    val ip = getLocalIpAddress() ?: "unknown"
-                    tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT} [已断开]"
-                    endCallButton.visibility = View.INVISIBLE
+                    resetCallUI()
                 }
                 is LiveUiState.Failed -> {
                     appendLog("连接失败")
                     state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("原因: $it") }
-                    tvStatus.text = "IP直连 [连接失败]"
-                    endCallButton.visibility = View.INVISIBLE
+                    resetCallUI()
                 }
             }
         }
@@ -144,7 +141,8 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
         endCallButton.setOnClickListener {
             server?.sendHangup()
-            stopCall()
+            resetCallUI()
+            view?.postDelayed({ session.releasePeerConnection() }, 300)
         }
 
         switchCameraButton.setOnClickListener { switchCamera() }
@@ -185,10 +183,8 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
     override fun onClientDisconnected(remoteAddress: String) {
         appendLog("客户端断开: $remoteAddress")
-        session.releasePeerConnection()
-        val ip = getLocalIpAddress() ?: "unknown"
-        tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
-        endCallButton.visibility = View.GONE
+        resetCallUI()
+        view?.postDelayed({ session.releasePeerConnection() }, 300)
     }
     override fun onClientReady() {
         appendLog("客户端握手完成，创建 Offer...")
@@ -197,6 +193,20 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     override fun onAnswerReceived(sdp: String) {
         appendLog("收到 Answer SDP, 长度=${sdp.length}")
         session.setRemoteDescription(sdp)
+    }
+
+    private fun resetCallUI() {
+        val ip = getLocalIpAddress() ?: "unknown"
+        tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
+        endCallButton.visibility = View.GONE
+        remotePreviewContainer.visibility = View.GONE
+        val lp = localPreview.layoutParams
+        lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+        lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+        localPreview.layoutParams = lp
+        localPreview.translationX = 0f
+        localPreview.translationY = 0f
+        bandwidthTV?.text = ""
     }
 
     private fun createAndSendOffer() {
@@ -211,10 +221,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             appendLog("Offer 创建完成, 长度=${sdp.length}")
             server?.sendOffer(sdp)
         }
-    }
-
-    private fun stopCall() {
-        session.releasePeerConnection()
     }
 
     fun onRemoteVideoSize(width: Int, height: Int) {

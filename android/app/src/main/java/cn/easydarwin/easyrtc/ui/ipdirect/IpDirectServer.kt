@@ -100,12 +100,13 @@ class IpDirectServer(
     fun sendHangup() {
         val client = activeClient
         if (client == null || !client.isOpen) return
-        // Send hangup as a small binary message
         val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
         buf.putInt(8)
-        buf.putInt(0x10009)  // hangup msgtype
+        buf.putInt(0x10009)
         client.send(buf.array())
-        Log.d(TAG, "Hangup sent")
+        client.close()
+        activeClient = null
+        Log.d(TAG, "Hangup sent, client closed")
     }
 
     private fun postOnMain(action: () -> Unit) {

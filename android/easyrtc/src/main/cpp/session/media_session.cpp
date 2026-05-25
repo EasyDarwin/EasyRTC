@@ -1094,12 +1094,18 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         p->encoder = nullptr;
     }
 
-    //
-    if (session->peerConnection) {
-        LOGI("[CRITICAL] PC releasing: session=%p", session);
-        EasyRTC_ReleasePeerConnection(&session->peerConnection);
-        session->peerConnection = nullptr;
-        LOGI("[CRITICAL] PC released: session=%p", session);
+    // 4. Free children BEFORE releasing parent PC
+    if (session->dataChannel) {
+        EasyRTC_FreeDataChannel(&session->dataChannel);
+        session->dataChannel = nullptr;
+    }
+    if (session->videoTransceiver) {
+        EasyRTC_FreeTransceiver(&session->videoTransceiver);
+        session->videoTransceiver = nullptr;
+    }
+    if (session->audioTransceiver) {
+        EasyRTC_FreeTransceiver(&session->audioTransceiver);
+        session->audioTransceiver = nullptr;
     }
 
     if (session->cameraDevice && session->cameraInputWindow) {
@@ -1138,18 +1144,12 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         session->statThread.join();
     }
 
-    // 4. Free children BEFORE releasing parent PC
-    if (session->dataChannel) {
-        EasyRTC_FreeDataChannel(&session->dataChannel);
-        session->dataChannel = nullptr;
-    }
-    if (session->videoTransceiver) {
-        EasyRTC_FreeTransceiver(&session->videoTransceiver);
-        session->videoTransceiver = nullptr;
-    }
-    if (session->audioTransceiver) {
-        EasyRTC_FreeTransceiver(&session->audioTransceiver);
-        session->audioTransceiver = nullptr;
+    //
+    if (session->peerConnection) {
+        LOGI("[CRITICAL] PC releasing: session=%p", session);
+        EasyRTC_ReleasePeerConnection(&session->peerConnection);
+        session->peerConnection = nullptr;
+        LOGI("[CRITICAL] PC released: session=%p", session);
     }
 
 }
