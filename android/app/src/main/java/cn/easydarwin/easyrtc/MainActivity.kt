@@ -20,12 +20,17 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
 import androidx.constraintlayout.widget.ConstraintSet
 import com.tencent.bugly.crashreport.CrashReport
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easydarwin.easyrtc.ui.live.LiveFragment
 import cn.easydarwin.easyrtc.ui.whip.WhipFragment
 import cn.easydarwin.easyrtc.ui.ipdirect.IpDirectContainerFragment
 import cn.easydarwin.easyrtc.fragment.SettingFragment
 import cn.easydarwin.easyrtc.utils.AppLogStore
+import cn.easydarwin.easyrtc.utils.AppUpdateChecker
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easyrtc.EasyRTCLog
 import cn.easyrtc.helper.MagicFileHelper
@@ -37,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     val webSocketServiceLiveData = MutableLiveData<WebSocketService?>()
     val incomingCallLiveData = MutableLiveData<WebSocketService.Event.IncomingCall>()
     private var webSocketServiceConnection: ServiceConnection? = null
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     var currentFragmentTag: String? = null
 
     var ws: WebSocketService? = null
@@ -98,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         mainRoot = findViewById(R.id.main_root)
 
         CrashReport.initCrashReport(applicationContext, "5aece7ce65", false)
+        mainScope.launch { AppUpdateChecker.check(this@MainActivity) }
 
         bindWebSocketService()
 

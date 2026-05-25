@@ -1171,7 +1171,11 @@ Java_cn_easyrtc_media_MediaSession_nativeDataChannelSend(
         JNIEnv *env, jobject thiz, jlong sessionPtr, jboolean isBinary, jbyteArray data) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
-    assert(session->dataChannel && "Invalid data channel");
+    if(!session->dataChannel)
+    {
+        LOGI("[CRITICAL] Data channel not added when sending data...");
+        return -1;
+    }
     jsize len = env->GetArrayLength(data);
     jbyte *bytes = env->GetByteArrayElements(data, nullptr);
     int result = EasyRTC_DataChannelSend(session->dataChannel, isBinary ? TRUE : FALSE,

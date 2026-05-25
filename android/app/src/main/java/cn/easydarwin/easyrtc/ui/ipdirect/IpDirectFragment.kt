@@ -200,14 +200,14 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     private fun createAndSendOffer() {
-        val s = session ?: return
-        s.createPeerConnection("", "", "", "")
+        session.releasePeerConnection()
+        session.createPeerConnection("", "", "", "")
         val config = getVideoEncodeConfig()
         val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-        s.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
-        s.addDataChannel("")
+        session.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
+        session.addDataChannel("")
         appendLog("创建 Offer...")
-        s.createOffer { sdp ->
+        session.createOffer { sdp ->
             appendLog("Offer 创建完成, 长度=${sdp.length}")
             server?.sendOffer(sdp)
         }

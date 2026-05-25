@@ -30,6 +30,7 @@ import cn.easydarwin.easyrtc.ui.hub.HubFragment
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
+import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.model.DataChannelEvent
 import cn.easyrtc.model.LiveUiState
 import org.json.JSONObject
@@ -123,8 +124,12 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
                 val callSetup = ws.prepareIncomingCall(event.data, event.callout)
                 session.releasePeerConnection()
                 session.createPeerConnection("", "", "", "")
-                session.addTransceivers(callSetup.videoCodec, callSetup.audioCodec)
-                session.addDataChannel(callSetup.dataChannelName)
+
+                val config = getVideoEncodeConfig()
+                val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
+                session.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
+                session.addDataChannel("")
+
                 if (callSetup.callout) {
                     session.createAnswer(callSetup.sdp) { ws.sendOfferSDP(it, false) }
                 } else {
