@@ -4,11 +4,11 @@ import android.util.Log
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import androidx.annotation.Keep
+import androidx.lifecycle.MutableLiveData
 import cn.easyrtc.EasyRTCLog
 import cn.easyrtc.EasyRTCPeerConnectionState
-import cn.easyrtc.model.DataChannelLiveData
-import cn.easyrtc.model.LiveSessionController
-import cn.easyrtc.model.RemoteVideoSizeLiveData
+import cn.easyrtc.model.DataChannelEvent
+import cn.easyrtc.model.LiveUiState
 import cn.easyrtc.model.VideoEncodeConfig
 import java.lang.ref.WeakReference
 
@@ -25,6 +25,11 @@ class MediaSession {
     private var inputKbpsStatsListener: ((InputKbpsStats) -> Unit)? = null
     private var onOfferCallback: WeakReference<(String) -> Unit>? = null
     private var onAnswerCallback: WeakReference<(String) -> Unit>? = null
+    private var currentUser: String? = null
+
+    val connectionState = MutableLiveData<LiveUiState>(LiveUiState.Idle)
+    val dataChannel = MutableLiveData<DataChannelEvent>(DataChannelEvent.Idle)
+    val remoteVideoSize = MutableLiveData<android.util.Size>(android.util.Size(0, 0))
 
     fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
         inputKbpsStatsListener = listener
@@ -56,6 +61,7 @@ class MediaSession {
     fun releasePeerConnection() {
         EasyRTCLog.i("MediaSession", "releasePeerConnection: nativePtr=$nativePtr")
         nativeReleasePeerConnection(nativePtr)
+        connectionState.postValue(LiveUiState.Idle)
     }
 
     fun createOffer(onSdp: (sdp: String) -> Unit) {
@@ -164,7 +170,7 @@ class MediaSession {
 
     @Keep
     private fun onRemoteVideoSize(width: Int, height: Int) {
-        RemoteVideoSizeLiveData.postValue(android.util.Size(width, height))
+        remoteVideoSize.postValue(android.util.Size(width, height))
     }
 
     @Keep
@@ -175,11 +181,12 @@ class MediaSession {
     @Keep
     private fun onConnectionStateChangeEvent(state: Int) {
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
-            LiveSessionController.onConnected("")
+            currentUser = ""
+            connectionState.postValue(LiveUiState.Connected(currentUser))
         } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED) {
-            LiveSessionController.onFailed()
+            connectionState.postValue(LiveUiState.Failed(currentUser, null))
         } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED) {
-            LiveSessionController.onClosed()
+            connectionState.postValue(LiveUiState.Disconnected(currentUser))
         }
     }
 
@@ -196,8 +203,8 @@ class MediaSession {
 
     @Keep
     private fun onDataChannelEvent(type: Int, binary: Int, data: ByteArray) {
-        if (type == 1) DataChannelLiveData.onOpen()
-        else DataChannelLiveData.onMessage(binary, data, data.size)
+        if (type == 1) dataChannel.postValue(DataChannelEvent.Open)
+        else dataChannel.postValue(DataChannelEvent.Message(binary, data.copyOf(data.size), data.size))
     }
 
     private external fun nativeCreate(): Long
