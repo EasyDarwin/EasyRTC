@@ -50,19 +50,19 @@ object AppUpdateChecker {
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) return@withContext null
             var body = response.body?.string() ?: return@withContext null
-            body = "{\n" +
-                    "\t\"version\": \"1.999.1\",\n" +
-                    "\t\"isPush\": true,\n" +
-                    "\t\"name\": \"EasyRTC-Android\",\n" +
-                    "\t\"type\": \"Android\",\n" +
-                    "\t\"url\": \"https://xxrb.com:19892/easyrtc.1.0.1.26.0525.apk\",\n" +
-                    "\t\"items\": [\n" +
-                    "\t\t\"[修复] 支持最新Chrome浏览器\",\n" +
-                    "\t\t\"[新增] 支持IP直连\",\n" +
-                    "\t\t\"[新增] 支持WHIP推流\",\n" +
-                    "\t\t\"[优化] 双向通话体验\"\n" +
-                    "      ]\n" +
-                    "}\n"
+//            body = "{\n" +
+//                    "\t\"version\": \"1.999.1\",\n" +
+//                    "\t\"isPush\": true,\n" +
+//                    "\t\"name\": \"EasyRTC-Android\",\n" +
+//                    "\t\"type\": \"Android\",\n" +
+//                    "\t\"url\": \"https://xxrb.com:19892/easyrtc.1.0.1.26.0525.apk\",\n" +
+//                    "\t\"items\": [\n" +
+//                    "\t\t\"[修复] 支持最新Chrome浏览器\",\n" +
+//                    "\t\t\"[新增] 支持IP直连\",\n" +
+//                    "\t\t\"[新增] 支持WHIP推流\",\n" +
+//                    "\t\t\"[优化] 双向通话体验\"\n" +
+//                    "      ]\n" +
+//                    "}\n"
             json.decodeFromString<AppUpdateInfo>(body)
         } catch (e: Exception) {
             AppLogStore.appendCritical("AppUpdateChecker", "fetch failed: ${e.message}")
