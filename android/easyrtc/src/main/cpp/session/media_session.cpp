@@ -404,7 +404,7 @@ static void onRemoteVideoSizeCallback(void *userPtr, int width, int height) {
 static int connectionStateChangeCallback(void *userPtr, EASYRTC_PEER_CONNECTION_STATE state) {
     auto *session = static_cast<MediaSession *>(userPtr);
     assert(session && "Invalid session in connectionStateChangeCallback");
-    LOGI("[CRITICAL] PC state: session=%p state=%d", session, state);
+    LOGI("[CRITICAL] connectionStateChangeCallback PC state: session=%p state=%d", session, state);
     session->connectState = state;
     bool becameConnected = (state == 3 && session->videoEncoder);
     if (becameConnected) session->videoEncoder->requestKeyFramePending.store(true);
@@ -423,6 +423,7 @@ static int connectionStateChangeCallback(void *userPtr, EASYRTC_PEER_CONNECTION_
             if (attached) session->jvm->DetachCurrentThread();
         }
     }
+    LOGI("[CRITICAL] connectionStateChangeCallback OUT");
     return 0;
 }
 
@@ -1095,6 +1096,7 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
 
     //
     if (session->peerConnection) {
+        LOGI("[CRITICAL] PC releasing: session=%p", session);
         EasyRTC_ReleasePeerConnection(&session->peerConnection);
         session->peerConnection = nullptr;
         LOGI("[CRITICAL] PC released: session=%p", session);
