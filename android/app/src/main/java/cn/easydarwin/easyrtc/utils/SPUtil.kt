@@ -107,7 +107,7 @@ class SPUtil private constructor(context: Context) {
         set(hevc) = preferences.edit { putInt(KEY_HEVC_CODEC, hevc) }
 
     var videoResolution: Int
-        get() = preferences.getInt(VIDEORESOLUTION, 1)
+        get() = preferences.getInt(VIDEORESOLUTION, 0)
         set(value) = preferences.edit { putInt(VIDEORESOLUTION, value) }
 
     var frameRate: Int
@@ -115,7 +115,7 @@ class SPUtil private constructor(context: Context) {
         set(value) = preferences.edit { putInt(FRAMERATE, value) }
 
     var bitRateKbps: Int
-        get() = preferences.getInt(KEY_BITRATE_ADDED_KBPS, 3)
+        get() = preferences.getInt(KEY_BITRATE_ADDED_KBPS, 2)
         set(value) = preferences.edit { putInt(KEY_BITRATE_ADDED_KBPS, value) }
 
     var aacCodec: Int
