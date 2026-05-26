@@ -59,6 +59,7 @@
     <string name="settings_label_resolution">分辨率</string>
     <string name="settings_label_frame_rate">帧率</string>
     <string name="settings_label_bitrate">码率</string>
+    <string name="settings_label_gop">关键帧间隔</string>
     <string name="settings_label_sample_rate">采样率</string>
     <string name="settings_label_channel">声道</string>
     <string name="about_title">关于 EasyRTC</string>
@@ -103,6 +104,14 @@
         <item>G711A</item>
         <!--        <item>G711U</item>-->
         <!--        <item>AAC</item>-->
+    </string-array>
+
+    <string-array name="goparr">
+        <item>1s</item>
+        <item>2s</item>
+        <item>5s</item>
+        <item>10s</item>
+        <item>15s</item>
     </string-array>
 
     <string-array name="samplingratearr">

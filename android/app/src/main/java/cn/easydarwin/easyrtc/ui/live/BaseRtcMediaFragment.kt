@@ -41,6 +41,7 @@ abstract class BaseRtcMediaFragment : Fragment() {
         val resolution = SPUtil.getInstance().getVideoResolution()
         val bitRate = SPUtil.getInstance().getVideoBitRateKbps()
         val frameRate = SPUtil.getInstance().getVideoFrameRate()
+        val iFrameInterval = SPUtil.getInstance().getVideoGopInterval()
         AppLogStore.appendCritical(
             "BaseRtcMediaFragment",
             "VideoEncodeConfig: fragment=${this::class.java.simpleName} hevc=$useHevc cameraId=$cameraId resolution=${resolution.width}x${resolution.height} bitrate=$bitRate fps=$frameRate"
@@ -51,7 +52,8 @@ abstract class BaseRtcMediaFragment : Fragment() {
             cameraId = cameraId,
             resolution = resolution,
             orientation = VideoEncodeConfig.ORIENTATION_90,
-            bitRate = bitRate
+            bitRate = bitRate,
+            iFrameInterval = iFrameInterval
         )
     }
 

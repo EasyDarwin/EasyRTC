@@ -49,12 +49,16 @@ class SettingFragment : PreferenceFragmentCompat() {
             key = KEY_VIDEO_FRAME_RATE,
             entriesResId = R.array.frameratearr,
             currentIndex = SPUtil.getInstance().frameRate,
-        ) { SPUtil.getInstance().frameRate = it }
+        ) {
+            SPUtil.getInstance().frameRate = it
+            updateGopSummary()
+        }
         bindIndexedListPreference(
             key = KEY_VIDEO_BIT_RATE,
             entriesResId = R.array.videocoderatearr,
             currentIndex = SPUtil.getInstance().bitRateKbps,
         ) { SPUtil.getInstance().bitRateKbps = it }
+        bindGopPreference()
         bindIndexedListPreference(
             key = KEY_AUDIO_CODEC,
             entriesResId = R.array.audiocodearr,
@@ -136,6 +140,33 @@ class SettingFragment : PreferenceFragmentCompat() {
         }
     }
 
+    private fun bindGopPreference() {
+        val preference = findPreference<ListPreference>(KEY_VIDEO_GOP) ?: return
+        val entries = resources.getStringArray(R.array.goparr)
+        val entryValues = Array(entries.size) { index -> index.toString() }
+        val safeIndex = SPUtil.getInstance().gopInterval.coerceIn(entryValues.indices)
+
+        preference.entries = entries
+        preference.entryValues = entryValues
+        preference.value = safeIndex.toString()
+        preference.setOnPreferenceChangeListener { pref, newValue ->
+            val index = newValue.toString().toIntOrNull() ?: return@setOnPreferenceChangeListener false
+            if (index !in entries.indices) return@setOnPreferenceChangeListener false
+            SPUtil.getInstance().gopInterval = index
+            updateGopSummary()
+            true
+        }
+        updateGopSummary()
+    }
+
+    private fun updateGopSummary() {
+        val preference = findPreference<ListPreference>(KEY_VIDEO_GOP) ?: return
+        val iFrameInterval = SPUtil.getInstance().getVideoGopInterval()
+        val fps = SPUtil.getInstance().getVideoFrameRate()
+        val gop = fps * iFrameInterval
+        preference.summary = "${iFrameInterval}s (GOP ${gop})"
+    }
+
     private fun reportLogs() {
         val preference = uploadLogsPreference ?: return
         val appContext = requireContext().applicationContext
@@ -194,6 +225,7 @@ class SettingFragment : PreferenceFragmentCompat() {
         const val KEY_VIDEO_RESOLUTION = "pref_video_resolution"
         const val KEY_VIDEO_FRAME_RATE = "pref_video_frame_rate"
         const val KEY_VIDEO_BIT_RATE = "pref_video_bit_rate"
+        const val KEY_VIDEO_GOP = "pref_video_gop"
         const val KEY_AUDIO_CODEC = "pref_audio_codec"
         const val KEY_AUDIO_SAMPLE_RATE = "pref_audio_sample_rate"
         const val KEY_AUDIO_CHANNEL = "pref_audio_channel"

@@ -37,6 +37,10 @@
         <ListPreference
             android:key="pref_video_bit_rate"
             android:title="@string/settings_label_bitrate" />
+
+        <ListPreference
+            android:key="pref_video_gop"
+            android:title="@string/settings_label_gop" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="@string/settings_section_audio">

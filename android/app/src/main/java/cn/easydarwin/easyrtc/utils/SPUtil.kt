@@ -130,9 +130,16 @@ class SPUtil private constructor(context: Context) {
         get() = preferences.getInt(AUDIOCHANNEL, 0)
         set(value) = preferences.edit { putInt(AUDIOCHANNEL, value) }
 
+    //GOP间隔
+    private val KEY_GOP_INTERVAL = "key_gop_interval"
+
     var audioCodeRate: Int
         get() = preferences.getInt(AUDIOCODERATE, 0)
         set(value) = preferences.edit { putInt(AUDIOCODERATE, value) }
+
+    var gopInterval: Int
+        get() = preferences.getInt(KEY_GOP_INTERVAL, 0)
+        set(value) = preferences.edit { putInt(KEY_GOP_INTERVAL, value) }
 
     var cameraId: Int
         get() = preferences.getInt(CAMERAID, Camera.CameraInfo.CAMERA_FACING_BACK)
@@ -169,6 +176,17 @@ class SPUtil private constructor(context: Context) {
             2 -> 20
             3 -> 15
             else -> 25 // 默认值
+        }
+    }
+
+    fun getVideoGopInterval(): Int {
+        return when (getInstance().gopInterval) {
+            0 -> 1
+            1 -> 2
+            2 -> 5
+            3 -> 10
+            4 -> 15
+            else -> 10
         }
     }
 
