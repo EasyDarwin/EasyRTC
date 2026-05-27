@@ -176,6 +176,53 @@ static void testUint8ToHex() {
     LOG("");
 }
 
+static void testHEVCExtractOnAVCData() {
+    LOG("=== testHEVCExtractOnAVCData (should yield empty) ===");
+    auto data = readFile("easyrtc_key_frame.bin");
+    std::vector<uint8_t> csd0;
+    extractH265VpsSpsPpsFromAnnexb(data.data(), data.size(), csd0);
+    LOG("HEVC extract on AVC data: csd0 size=%zu (expect 0)", csd0.size());
+    assert(csd0.empty() && "AVC data should not produce HEVC csd0");
+    LOG("PASS");
+    LOG("");
+}
+
+static void testHEVCExtractReal() {
+    LOG("=== testHEVCExtractReal ===");
+    auto data = readFile("easyrtc_key_frame_hevc.bin");
+    LOG("HEVC file size: %zu bytes", data.size());
+
+    std::vector<uint8_t> csd0;
+    extractH265VpsSpsPpsFromAnnexb(data.data(), data.size(), csd0);
+    LOG("HEVC csd0 size: %zu", csd0.size());
+    assert(!csd0.empty() && "HEVC csd0 should not be empty");
+    LOG("HEVC csd0: %s", hex(csd0.data(), csd0.size()).c_str());
+
+    // Verify first NAL is VPS (type 32)
+    assert(csd0.size() >= 5);
+    bool sc4 = (csd0[0] == 0x00 && csd0[1] == 0x00 && csd0[2] == 0x00 && csd0[3] == 0x01);
+    size_t off0 = sc4 ? 4 : 3;
+    uint8_t nalType0 = (csd0[off0] >> 1) & 0x3F;
+    LOG("First NAL type: %d (expect 32=VPS)", nalType0);
+    assert(nalType0 == 32);
+
+    // Verify csd0 does NOT contain IDR (type 19 or 20)
+    bool hasIDR = false;
+    for (size_t i = 0; i + 3 < csd0.size();) {
+        if (csd0[i] == 0x00 && csd0[i+1] == 0x00 && csd0[i+2] == 0x01) {
+            uint8_t nt = (csd0[i+3] >> 1) & 0x3F;
+            if (nt == 19 || nt == 20) { hasIDR = true; break; }
+            i += 4;
+        } else {
+            i++;
+        }
+    }
+    assert(!hasIDR && "csd0 should not contain IDR");
+    LOG("No IDR in csd0: OK");
+    LOG("PASS");
+    LOG("");
+}
+
 int main(int argc, char** argv) {
     LOG("Testing util/video.hpp with easyrtc_key_frame.bin");
     LOG("================================================");
@@ -187,6 +234,8 @@ int main(int argc, char** argv) {
     testExtractSpsPpsFromAnnexb();
     testParseSPS();
     testParseSPSFixed();
+    testHEVCExtractOnAVCData();
+    testHEVCExtractReal();
 
     LOG("Done.");
     return 0;
