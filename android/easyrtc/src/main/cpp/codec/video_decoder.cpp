@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include "session/media_session.h"
 
 namespace {
@@ -82,6 +83,30 @@ int64_t getMonoUs() {
     return static_cast<int64_t>(duration_cast<microseconds>(
         steady_clock::now().time_since_epoch()
     ).count() - _start_us);
+}
+
+static void sleepInterruptibleUs(int64_t targetSleepUs,
+                                 const std::function<bool()> &shouldBreak) {
+    if (targetSleepUs <= 0) {
+        return;
+    }
+    static constexpr int64_t kMaxSleepUsPerSlice = 20000;
+    const auto sleepStart = std::chrono::steady_clock::now();
+
+    while (true) {
+        if (shouldBreak && shouldBreak()) {
+            break;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        const auto elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
+                now - sleepStart).count();
+        if (elapsedUs >= targetSleepUs) {
+            break;
+        }
+        const int64_t remainingUs = targetSleepUs - elapsedUs;
+        const int64_t sliceUs = std::min(remainingUs, kMaxSleepUsPerSlice);
+        std::this_thread::sleep_for(std::chrono::microseconds(sliceUs));
+    }
 }
 
 static std::string uint8_to_hex(const uint8_t* data, size_t size) {
@@ -191,8 +216,10 @@ static void* decodeThreadFunc(void* arg) {
                 FLOGI("VIDEO PKT OUT process:%lldms, audio master clock process:%lldms, delta:%lldms", ptsUs/1000, pipeline->audio_master_clock_us_from_begining_to_now/1000, delta_us_to_master/1000);
                 int64_t sleepUs = delta_us_to_master - 3000;
 
-                if (sleepUs > 0 ) {
-                   std::this_thread::sleep_for(std::chrono::microseconds(sleepUs));
+                if (sleepUs > 0) {
+                    sleepInterruptibleUs(sleepUs, [&]() {
+                        return !pipeline->running.load();
+                    });
                 }
 
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
@@ -243,7 +270,9 @@ static void* decodeThreadFunc(void* arg) {
     auto setupDecoder = [&]() {
         auto packet = pipeline->frameQueue.acquirePop();
         if (!packet) {
-            usleep(1000);
+            sleepInterruptibleUs(1000, [&]() {
+                return !pipeline->running.load();
+            });
             return false;
         }
         defer(pipeline->frameQueue.commitPop());
@@ -263,7 +292,7 @@ static void* decodeThreadFunc(void* arg) {
         return false;
     };
 
-    while (pipeline->running.load() && !pipeline->destroyed.load()) {
+    while (pipeline->running.load()) {
         if (!pipeline->decoder) {
             if (!setupDecoder()) {
                 continue;
@@ -271,7 +300,7 @@ static void* decodeThreadFunc(void* arg) {
         }
         auto decoder = pipeline->decoder.get();
         assert(pipeline->decoder);
-        while (pipeline->running.load() && !pipeline->destroyed.load()) {
+        while (pipeline->running.load()) {
             if (dequeueDecoder(decoder)) {
                 continue;
             }else {
@@ -281,7 +310,9 @@ static void* decodeThreadFunc(void* arg) {
 
         auto packet = pipeline->frameQueue.acquirePop();
         if (!packet) {
-            usleep(1000);
+            sleepInterruptibleUs(1000, [&]() {
+                return !pipeline->running.load();
+            });
             continue;
         }
         defer(pipeline->frameQueue.commitPop());
@@ -354,11 +385,16 @@ void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, co
     int32_t size = frame->size;
     int64_t ptsUs = VIDEO_PTS_TO_US(frame->presentationTs);
     uint32_t frameFlags = frame->flags;
-    if (!pipeline || !pipeline->running.load() || pipeline->destroyed.load() || size <= 0) return;
+    if (!pipeline || !pipeline->running.load() || size <= 0) return;
     Packet *slot = pipeline->frameQueue.acquirePush();
     if (!slot) {
         do {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if (!pipeline->running.load()) {
+                return;
+            }
+            sleepInterruptibleUs(10000, [&]() {
+                return !pipeline->running.load();
+            });
             slot = pipeline->frameQueue.acquirePush();
         } while (!slot);
     }

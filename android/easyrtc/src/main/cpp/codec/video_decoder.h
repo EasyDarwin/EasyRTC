@@ -24,7 +24,6 @@ struct VideoDecoderPipeline {
   // we use the ringbuffer to replace frameQueue.
   PacketRingBuffer frameQueue{MAX_QUEUE_SIZE};
   std::atomic<bool> running{false};
-  std::atomic<bool> destroyed{false};
   std::atomic<uint64_t> enqueuedFrames{0};
   std::atomic<uint64_t> renderedFrames{0};
   std::atomic<uint64_t> tryLaterCount{0};
@@ -48,7 +47,6 @@ struct VideoDecoderPipeline {
   VideoDecoderPipeline() = default;
   ~VideoDecoderPipeline() {
     running.store(false);
-    destroyed.store(true);
 
     if (decodeThread.joinable()) {
         decodeThread.join();
