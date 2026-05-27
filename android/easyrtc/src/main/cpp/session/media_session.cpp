@@ -286,10 +286,10 @@ static int mediaTransceiverCallback(void *userPtr,
                      frame ? frame->size : 0,
                      static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
             }
-            FLOGI("VIDEO_CB codec=%d keyFlag=%d size=%u pts=%lld", codecID,
+            FLOGI("VIDEO_CB codec=%d keyFlag=%d size=%u pts=%lld idx=%u", codecID,
                  frame ? frame->flags : 0,
                  frame ? frame->size : 0,
-                 static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
+                 static_cast<unsigned long long>(frame ? frame->presentationTs : 0), frame->index);
             if (frame && frame->frameData && frame->size > 0) {
                 int dumpLen = frame->size < 32 ? frame->size : 32;
                 char hex[128] = {0};
@@ -301,21 +301,13 @@ static int mediaTransceiverCallback(void *userPtr,
             // Lazy-create video decoder on first frame using actual remote codec
             if (!session->videoDecoder && !session->videoDecoderInitAttempted && session->decoderSurface) {
                 session->videoDecoderInitAttempted = true;
-                int dw = 720, dh = 1280;
-                if (session->videoEncoder) { dw = session->videoEncoder->width; dh = session->videoEncoder->height; }
-                session->videoDecoder = videoDecoderCreate(session->decoderSurface,
-                                                           static_cast<int>(codecID), dw, dh);
-                if (session->videoDecoder) {
-                    session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
-                    session->videoDecoder->onVideoSizeUserPtr = session;
-                    if (videoDecoderStart(session->videoDecoder) == 0) {
-                        LOGI("[CRITICAL] Recv: video decoder lazily created codec=%d %dx%d",
-                             codecID, dw, dh);
-                    } else {
-                        videoDecoderRelease(session->videoDecoder);
-                        session->videoDecoder = nullptr;
-                    }
-                }
+                session->videoDecoder = std::make_shared<VideoDecoderPipeline>();
+                session->videoDecoder->currentCodecType = (codecID == EasyRTC_CODEC_H265) ? "video/hevc" : "video/avc";
+                session->videoDecoder->surface = session->decoderSurface;
+                assert(session->videoDecoder);
+                session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
+                session->videoDecoder->onVideoSizeUserPtr = session;
+                videoDecoderStart(session->videoDecoder);
             }
 
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {

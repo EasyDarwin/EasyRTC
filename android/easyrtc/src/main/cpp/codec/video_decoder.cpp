@@ -21,7 +21,7 @@ std::atomic<uint64_t> gDecTryLater{0};
 std::atomic<uint64_t> gDecFormatChanged{0};
 }
 
-static bool initDecoder(VideoDecoderPipeline* pipeline) {
+static bool initDecoder(const std::shared_ptr<VideoDecoderPipeline> &pipeline) {
     assert(!pipeline->decoder);
     auto decoder = AMediaCodec_createDecoderByType(pipeline->currentCodecType.c_str());
     if (!decoder) {
@@ -111,52 +111,76 @@ static void sleepInterruptibleUs(int64_t targetSleepUs,
 }
 
 
-static void* decodeThreadFunc(void* arg) {
-    auto* pipeline = static_cast<VideoDecoderPipeline*>(arg);
-    LOGI("Video decode thread started");
-    AMediaCodecBufferInfo bufferInfo;
-    int enqueued{};
-    int64_t firstPtsUs = -1;
-    int64_t firstSystemUs = -1;
-    bool droppingPackets = false;
+std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface, int codecType, int width, int height) {
+    auto pipeline = std::make_shared<VideoDecoderPipeline>();
+    pipeline->width = 0;
+    pipeline->height = 0;
+    pipeline->currentCodecType = (codecType == EasyRTC_CODEC_H265) ? "video/hevc" : "video/avc";
+
+    if (surface) {
+        pipeline->surface = surface;
+    }
+
+    LOGI("VideoDecoderPipeline created: %s %dx%d", pipeline->currentCodecType.c_str(), width, height);
+    return pipeline;
+}
+
+int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
+    pipeline->running.store(true);
+    pipeline->decodeThread = std::thread([pipeline]() {
+        LOGI("Video decode thread started");
+        AMediaCodecBufferInfo bufferInfo;
+        int enqueued{};
+        int64_t firstPtsUs = -1;
+        int64_t firstSystemUs = -1;
+        bool droppingPackets = false;
 
 
-    auto enqueueDecoder = [&](AMediaCodec *decoder, Packet *packet) {
-        ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
-        if (inputBufId < 0) {
-            return;
-        }
-        size_t outSize = 0;
-        uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
-        if (!inputBuf || packet->size > outSize) {
-            LOGW("Invalid decoder input buffer: inputBuf=%p frame=%u cap=%zu",
-                 inputBuf, packet->size, outSize);
-            assert(false);
-            return;
-        }
+        auto enqueueDecoder = [&](AMediaCodec *decoder, Packet *packet) {
+            static uint32_t  frame_idx = 0;
+            if (frame_idx == 0) frame_idx = packet->index;
+            else {
+                if (frame_idx != packet->index -1){
+                    LOGW("packet not continouse.%u->%u", frame_idx, packet->index);
+                }
+                frame_idx = packet->index;
+            }
+            ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
+            if (inputBufId < 0) {
+                return false;
+            }
+            size_t outSize = 0;
+            uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
+            if (!inputBuf || packet->size > outSize) {
+                LOGW("Invalid decoder input buffer: inputBuf=%p frame=%u cap=%zu",
+                     inputBuf, packet->size, outSize);
+                assert(false);
+                return true;
+            }
 
-        memcpy(inputBuf, packet->data(), packet->size);
-        int flags = 0;
-        if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
-        }
-        AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet->size, packet->ptsUs, flags);
-        uint64_t q = gDecQueued.fetch_add(1) + 1;
-        pipeline->enqueuedFrames.store(q);
-        enqueued++;
-        if (q <= 8 || (q % 120) == 0) {
-            LOGI("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
-                 static_cast<unsigned long long>(q),
-                 packet->size,
-                 static_cast<long long>(packet->ptsUs),
-                 packet->frameFlags,
-                 pipeline->frameQueue.size());
-        }
-    };
+            memcpy(inputBuf, packet->data(), packet->size);
+            int flags = 0;
+            if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
+                flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
+            }
+            AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet->size, packet->ptsUs, flags);
+            uint64_t q = gDecQueued.fetch_add(1) + 1;
+            pipeline->enqueuedFrames.store(q);
+            enqueued++;
+            if (q <= 8 || (q % 120) == 0) {
+                LOGI("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
+                     static_cast<unsigned long long>(q),
+                     packet->size,
+                     static_cast<long long>(packet->ptsUs),
+                     packet->frameFlags,
+                     pipeline->frameQueue.size());
+            }
+            return true;
+        };
 
-    auto dequeueDecoder = [&](AMediaCodec *decoder) -> bool {
-        ssize_t outputBufId = AMediaCodec_dequeueOutputBuffer(decoder, &bufferInfo,
-                    pipeline->DEQUEUE_TIMEOUT_US);
+        auto dequeueDecoder = [&](AMediaCodec *decoder) -> bool {
+            ssize_t outputBufId = AMediaCodec_dequeueOutputBuffer(decoder, &bufferInfo,
+                                                                  pipeline->DEQUEUE_TIMEOUT_US);
             if (outputBufId >= 0) {
                 if (firstPtsUs < 0) {
                     firstPtsUs = bufferInfo.presentationTimeUs;
@@ -217,70 +241,80 @@ static void* decodeThreadFunc(void* arg) {
                 return true;
             }
             return false;
-    };
+        };
 
-    auto setupDecoder = [&]() {
-        auto packet = pipeline->frameQueue.acquirePop();
-        if (!packet) {
-            sleepInterruptibleUs(1000, [&]() {
-                return !pipeline->running.load();
-            });
+        auto setupDecoder = [&]() {
+            auto packet = pipeline->frameQueue.acquirePop();
+            if (!packet) {
+                sleepInterruptibleUs(1000, [&]() {
+                    return !pipeline->running.load();
+                });
+                return false;
+            }
+            defer(pipeline->frameQueue.commitPop());
+            if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
+                // extract sps/pps for avcc stream, and re-init decoder.
+                // give me a util function to parse avcc stream and extract sps/pps data
+                auto hex = uint8_to_hex(packet->data(), std::min(uint32_t(56), packet->size));
+                LOGI("Frame:%s", hex.c_str());
+                extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
+                auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
+                auto csd1Hex = uint8_to_hex(pipeline->csd1.data(), pipeline->csd1.size());
+                LOGI("Extracted csd0 =%s, csd1 =%s", csd0Hex.c_str(), csd1Hex.c_str());
+
+                auto parseWidthHeight = parseSPS(pipeline->csd0.data(), pipeline->csd0.size(), pipeline->width, pipeline->height);
+                assert(parseWidthHeight && "parseWidthHeight failed from csd0");
+                LOGI("width/height from csd0:%dx%d", pipeline->width, pipeline->height);
+                if (initDecoder(pipeline)){
+                    auto sureConsumed = enqueueDecoder(pipeline->decoder.get(), packet);
+                    assert(sureConsumed && "Failed to enqueue key frame after decoder init");
+                    return true;
+                }else {
+                    assert(false && "initDecoder failed!");
+                }
+            } else {
+                FLOGI("Dropping non-key frame since decoder is not initialized, pts=%lld", static_cast<long long>(packet->ptsUs));
+            }
             return false;
-        }
-        defer(pipeline->frameQueue.commitPop());
-        if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            // extract sps/pps for avcc stream, and re-init decoder.
-            // give me a util function to parse avcc stream and extract sps/pps data
-            auto hex = uint8_to_hex(packet->data(), std::min(uint32_t(56), packet->size));
-            LOGI("Frame:%s", hex.c_str());
-            extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
+        };
 
-            auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
-            auto csd1Hex = uint8_to_hex(pipeline->csd1.data(), pipeline->csd1.size());
-            LOGI("Extracted csd0 =%s, csd1 =%s", csd0Hex.c_str(), csd1Hex.c_str());
-            
-            if (initDecoder(pipeline)){
-                enqueueDecoder(pipeline->decoder.get(), packet);
-                return true;
-            }
-        } else {
-            FLOGI("Dropping non-key frame since decoder is not initialized, pts=%lld", static_cast<long long>(packet->ptsUs));
-        }
-        return false;
-    };
-
-    while (pipeline->running.load()) {
-        if (!pipeline->decoder) {
-            if (!setupDecoder()) {
-                continue;
-            }
-        }
-        auto decoder = pipeline->decoder.get();
-        assert(pipeline->decoder);
         while (pipeline->running.load()) {
-            if (dequeueDecoder(decoder)) {
-                continue;
-            }else {
-                break;
+            if (!pipeline->decoder) {
+                if (!setupDecoder()) {
+                    continue;
+                }
+                assert(pipeline->decoder);
             }
-        }
+            auto decoder = pipeline->decoder.get();
+            assert(pipeline->decoder);
+            while (pipeline->running.load()) {
+                if (dequeueDecoder(decoder)) {
+                    continue;
+                }else {
+                    break;
+                }
+            }
 
-        auto packet = pipeline->frameQueue.acquirePop();
-        if (!packet) {
-            sleepInterruptibleUs(1000, [&]() {
-                return !pipeline->running.load();
+            auto packet = pipeline->frameQueue.acquirePop();
+            if (!packet) {
+                sleepInterruptibleUs(1000, [&]() {
+                    return !pipeline->running.load();
+                });
+                continue;
+            }
+            bool sureConsumed = true;
+            auto _do_not_delete_me = make_defer([&] {
+                if (sureConsumed)
+                    pipeline->frameQueue.commitPop();
             });
-            continue;
-        }
-        defer(pipeline->frameQueue.commitPop());
-        FLOGI("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
-        if (droppingPackets && packet->frameFlags == 0) {
-            LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
-            continue;
-        }
-        droppingPackets = false;
+            FLOGI("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
+            if (droppingPackets && packet->frameFlags == 0) {
+                LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
+                continue;
+            }
+            droppingPackets = false;
 #if 0
-        const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
+            const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
         if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
             bool hasKeyInside = false;
             pipeline->frameQueue.check([&](const Packet* p) {
@@ -296,39 +330,18 @@ static void* decodeThreadFunc(void* arg) {
                 droppingPackets = true;
                 continue;
             }
-        } 
+        }
         assert(!droppingPackets);
 #endif
-        enqueueDecoder(decoder, packet);
-    }
+            sureConsumed = enqueueDecoder(decoder, packet);
+        }
 
-    if (pipeline->decoder) {
-        AMediaCodec_stop(pipeline->decoder.get());
-        pipeline->decoder = nullptr;   
-    }
-    LOGI("Video decode thread exiting");
-    return nullptr;
-}
-
-std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface, int codecType, int width, int height) {
-    auto pipeline = std::make_shared<VideoDecoderPipeline>();
-    pipeline->width = width;
-    pipeline->height = height;
-    pipeline->currentCodecType = (codecType == EasyRTC_CODEC_H265) ? "video/hevc" : "video/avc";
-
-    if (surface) {
-        pipeline->surface = surface;
-    }
-
-    LOGI("VideoDecoderPipeline created: %s %dx%d", pipeline->currentCodecType.c_str(), width, height);
-    return pipeline;
-}
-
-int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
-    if (!pipeline) return -1;
-
-    pipeline->running.store(true);
-    pipeline->decodeThread = std::thread([pipeline]() { decodeThreadFunc(pipeline.get()); });
+        if (pipeline->decoder) {
+            AMediaCodec_stop(pipeline->decoder.get());
+            pipeline->decoder = nullptr;
+        }
+        LOGI("Video decode thread exiting");
+    });
     pthread_t th = pipeline->decodeThread.native_handle();
     sched_param sch_params;
     sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
@@ -358,6 +371,7 @@ void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, co
     slot->setData(data, static_cast<uint32_t>(size));
     slot->ptsUs = ptsUs;
     slot->frameFlags = frameFlags;
+    slot->index = frame->index;
     pipeline->frameQueue.commitPush();
     {
         static int64_t __idx = 0;

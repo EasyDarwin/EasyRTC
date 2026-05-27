@@ -13,6 +13,7 @@ struct Packet {
   uint32_t size = 0;
   int64_t ptsUs = 0;
   uint32_t frameFlags = 0;
+  uint32_t  index = 0;
 
   void setData(const uint8_t *src, uint32_t len) {
     size = len;
