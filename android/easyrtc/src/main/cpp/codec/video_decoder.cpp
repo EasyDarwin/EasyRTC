@@ -253,18 +253,29 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
             }
             defer(pipeline->frameQueue.commitPop());
             if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
-                // extract sps/pps for avcc stream, and re-init decoder.
-                // give me a util function to parse avcc stream and extract sps/pps data
                 auto hex = uint8_to_hex(packet->data(), std::min(uint32_t(56), packet->size));
                 LOGI("Frame:%s", hex.c_str());
-                extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
-                auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
-                auto csd1Hex = uint8_to_hex(pipeline->csd1.data(), pipeline->csd1.size());
-                LOGI("Extracted csd0 =%s, csd1 =%s", csd0Hex.c_str(), csd1Hex.c_str());
 
-                auto parseWidthHeight = parseSPS(pipeline->csd0.data(), pipeline->csd0.size(), pipeline->width, pipeline->height);
-                assert(parseWidthHeight && "parseWidthHeight failed from csd0");
-                LOGI("width/height from csd0:%dx%d", pipeline->width, pipeline->height);
+                bool isHEVC = (pipeline->currentCodecType == "video/hevc");
+
+                if (isHEVC) {
+                    extractH265VpsSpsPpsFromAnnexb(packet->data(), packet->size, pipeline->csd0);
+                    pipeline->csd1.clear();
+                    auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
+                    LOGI("HEVC csd0(VPS+SPS+PPS)=%s", csd0Hex.c_str());
+                } else {
+                    extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
+                    auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
+                    auto csd1Hex = uint8_to_hex(pipeline->csd1.data(), pipeline->csd1.size());
+                    LOGI("AVC csd0=%s, csd1=%s", csd0Hex.c_str(), csd1Hex.c_str());
+                }
+
+                if (pipeline->width <= 0 || pipeline->height <= 0) {
+                    pipeline->width = 1920;
+                    pipeline->height = 1080;
+                }
+                LOGI("Decoder configure size:%dx%d (actual from FORMAT_CHANGED)", pipeline->width, pipeline->height);
+
                 if (initDecoder(pipeline)){
                     auto sureConsumed = enqueueDecoder(pipeline->decoder.get(), packet);
                     assert(sureConsumed && "Failed to enqueue key frame after decoder init");

@@ -130,6 +130,46 @@ static std::vector<uint8_t> removeEmulationBytes(
     return out;
 }
 
+static void extractH265VpsSpsPpsFromAnnexb(const uint8_t* data, size_t size, std::vector<uint8_t>& csd0) {
+    csd0.clear();
+    size_t vps_pos = SIZE_MAX, sps_pos = SIZE_MAX, pps_pos = SIZE_MAX;
+    size_t pps_end = SIZE_MAX;
+
+    for (size_t i = 0; i + 3 < size;) {
+        if (data[i] == 0x00 && data[i + 1] == 0x00 && data[i + 2] == 0x01) {
+            size_t nal_start = i + 3;
+            uint8_t nal_type = (data[nal_start] >> 1) & 0x3F;
+            size_t start = (i > 0 && data[i - 1] == 0x00) ? i - 1 : i;
+            if (nal_type == 32 && vps_pos == SIZE_MAX) {
+                vps_pos = start;
+            } else if (nal_type == 33 && sps_pos == SIZE_MAX) {
+                sps_pos = start;
+            } else if (nal_type == 34 && pps_pos == SIZE_MAX) {
+                pps_pos = start;
+                size_t j = pps_pos + 4;
+                for (; j + 3 < size; j++) {
+                    if (data[j] == 0x00 && data[j + 1] == 0x00 && data[j + 2] == 0x01) {
+                        pps_end = (j > 0 && data[j - 1] == 0x00) ? j - 1 : j;
+                        break;
+                    }
+                }
+                if (pps_end == SIZE_MAX) pps_end = size;
+                break;
+            }
+            i = nal_start + 1;
+        } else {
+            i++;
+        }
+    }
+
+    if (vps_pos == SIZE_MAX || sps_pos == SIZE_MAX || pps_pos == SIZE_MAX || pps_end == SIZE_MAX)
+        return;
+    if (pps_end <= vps_pos)
+        return;
+
+    csd0.insert(csd0.end(), data + vps_pos, data + pps_end);
+}
+
 bool parseSPS(
         const uint8_t* sps,
         size_t size,
