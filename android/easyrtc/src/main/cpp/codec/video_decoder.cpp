@@ -12,6 +12,7 @@
 #include <chrono>
 #include <functional>
 #include "session/media_session.h"
+#include "util/video.hpp"
 
 namespace {
 std::atomic<uint64_t> gDecQueued{0};
@@ -109,55 +110,6 @@ static void sleepInterruptibleUs(int64_t targetSleepUs,
     }
 }
 
-static std::string uint8_to_hex(const uint8_t* data, size_t size) {
-    std::string str;
-    for (size_t i = 0; i < size; i++) {
-        char buf[3];
-        snprintf(buf, sizeof(buf), "%02x", data[i]);
-        str += buf;
-    }
-    return str;
-}
-
-static void extractSpsPpsFromAnnexb(const uint8_t* data, size_t size, std::vector<uint8_t>& sps_data,  std::vector<uint8_t>& pps_data) {
-    // This is a simplified parser for annexb format, which may not cover all cases.
-    // It assumes the annexb data contains one SPS and one PPS, and they are in the format of:
-    // [start code][NALU header][SPS][start code][NALU header][PPS]
-    // the start code could be 0x00000001 or 0x000001
-    sps_data.clear();
-    pps_data.clear();
-    size_t pos = 0;
-    while (pos + 4 < size) {
-        uint64_t startCode = (data[pos] << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3];
-        if (startCode == 0x00000001 || startCode == 0x000001) {
-            const auto start_ = pos;
-            // found 4-byte start code
-            size_t nal_start = pos + (startCode == 0x00000001 ? 4 : 3);
-            if (nal_start >= size) break;
-            uint8_t nal_type = data[nal_start] & 0x1F;
-            if (nal_type == 7 || nal_type == 8) {
-                // SPS or PPS
-                auto &target_data = (nal_type == 7) ? sps_data : pps_data;
-                size_t nal_end = nal_start + 1;
-                while (nal_end + 4 < size) {
-                    uint64_t nextStartCode = (data[nal_end] << 24) | (data[nal_end + 1] << 16) | (data[nal_end + 2] << 8) | data[nal_end + 3];
-                    if (nextStartCode == 0x00000001 || nextStartCode == 0x000001) {
-                        break;
-                    }
-                    nal_end++;
-                }
-                target_data.insert(target_data.end(), data + start_, data + nal_end);
-                pos = nal_end;
-                auto hex = uint8_to_hex(target_data.data(), target_data.size());
-                LOGI("Extracted %s, size=%zu, data=%s", (nal_type == 7) ? "SPS" : "PPS", target_data.size(), hex.c_str());
-            }else {
-                break;
-            }
-        } else {
-            pos++;
-        }
-    }
-}
 
 static void* decodeThreadFunc(void* arg) {
     auto* pipeline = static_cast<VideoDecoderPipeline*>(arg);
@@ -276,12 +228,17 @@ static void* decodeThreadFunc(void* arg) {
             return false;
         }
         defer(pipeline->frameQueue.commitPop());
-        if (packet->frameFlags != 0) {
+        if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
             // extract sps/pps for avcc stream, and re-init decoder.
             // give me a util function to parse avcc stream and extract sps/pps data
             auto hex = uint8_to_hex(packet->data(), std::min(uint32_t(56), packet->size));
             LOGI("Frame:%s", hex.c_str());
-             extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
+            extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
+
+            auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
+            auto csd1Hex = uint8_to_hex(pipeline->csd1.data(), pipeline->csd1.size());
+            LOGI("Extracted csd0 =%s, csd1 =%s", csd0Hex.c_str(), csd1Hex.c_str());
+            
             if (initDecoder(pipeline)){
                 enqueueDecoder(pipeline->decoder.get(), packet);
                 return true;

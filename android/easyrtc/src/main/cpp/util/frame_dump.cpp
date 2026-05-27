@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <cstring>
 #include <string>
-#if 0
+#if 1
 void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec) {
     char cmdline[256] = {0};
     int fd = open("/proc/self/cmdline", O_RDONLY);
@@ -65,6 +65,26 @@ void frameDumpClose(FrameDumpWriter* writer) {
     }
     writer->enabled = false;
 }
+
+void dumpKeyFrame(const uint8_t* data, uint32_t size) {
+        char cmdline[256] = {0};
+    int fd = open("/proc/self/cmdline", O_RDONLY);
+    if (fd < 0) { return; }
+    read(fd, cmdline, sizeof(cmdline) - 1);
+    close(fd);
+    if (cmdline[0] == '\0') { return; }
+
+    std::string dumpDir = std::string("/sdcard/Android/data/") + cmdline + "/files";
+    mkdir(dumpDir.c_str(), 0777);
+    std::string dumpPath = dumpDir + "/easyrtc_key_frame.bin";
+    fd = open(dumpPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0) {
+        LOGE("frameDumpInit: failed to open %s", dumpPath.c_str());
+        return;
+    }
+    write(fd, data, size);
+    close(fd);
+}
 #else
 void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec) {
 
@@ -73,6 +93,10 @@ void frameDumpWrite(FrameDumpWriter* writer, uint32_t kind, const uint8_t* data,
 
 }
 void frameDumpClose(FrameDumpWriter* writer) {
+
+}
+
+void dumpKeyFrame(const uint8_t* data, uint32_t size) {
 
 }
 #endif

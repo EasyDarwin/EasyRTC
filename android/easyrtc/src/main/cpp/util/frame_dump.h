@@ -17,4 +17,6 @@ void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec);
 void frameDumpWrite(FrameDumpWriter* writer, uint32_t kind, const uint8_t* data, uint32_t size, uint32_t flags);
 void frameDumpClose(FrameDumpWriter* writer);
 
+void dumpKeyFrame(const uint8_t* data, uint32_t size);
+
 #endif

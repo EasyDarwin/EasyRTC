@@ -274,7 +274,18 @@ static int mediaTransceiverCallback(void *userPtr,
             assert(frame && "invalid frame in video callback");
             assert(frame->frameData && "invalid frame data in video callback");
             assert(frame->size >= 0 && "invalid frame size in video callback");
-
+            if (frame->flags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
+                static bool dumped = false;
+                if (!dumped) {
+                    LOGI("dumping key frame");
+                    dumpKeyFrame(frame->frameData, frame->size);
+                    dumped = true;
+                }
+                LOGI("VIDEO_CB KEY codec=%d keyFlag=%d size=%u pts=%lld", codecID,
+                     frame ? frame->flags : 0,
+                     frame ? frame->size : 0,
+                     static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
+            }
             FLOGI("VIDEO_CB codec=%d keyFlag=%d size=%u pts=%lld", codecID,
                  frame ? frame->flags : 0,
                  frame ? frame->size : 0,
