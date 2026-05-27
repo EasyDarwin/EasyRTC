@@ -115,12 +115,14 @@ class WebSocketService : Service() {
         val videoCodec: Int,
         val audioCodec: Int,
         val hasDataChannel: Boolean,
-        val dataChannelName: String
+        val dataChannelName: String,
+        val stunTurnInfo: WebSocketManager.StunTurnInfo
     )
 
     fun prepareIncomingCall(data: ByteArray, callout: Boolean): CallSetup {
+        var st = WebSocketManager.StunTurnInfo()
         if (callout) {
-            val sdp = manager.handlerPeerConnection(data, true)
+            val sdp = manager.handlerPeerConnection(data, true, st)
             AppLogStore.appendTimestamped("offer from remote:\n$sdp")
             var videoCodec = 0
             var audioCodec = 0
@@ -139,10 +141,10 @@ class WebSocketService : Service() {
                 }
             }
             val hasDC = sdp.contains("webrtc-datachannel", ignoreCase = true)
-            return CallSetup(callout = true, sdp = sdp, videoCodec = videoCodec, audioCodec = audioCodec, hasDataChannel = hasDC, dataChannelName = "")
+            return CallSetup(callout = true, sdp = sdp, videoCodec = videoCodec, audioCodec = audioCodec, hasDataChannel = hasDC, dataChannelName = "", st)
         }
-        manager.handlerPeerConnection(data)
+        manager.handlerPeerConnection(data, false, st)
         val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-        return CallSetup(callout = false, sdp = "", videoCodec = videoCodeID, audioCodec = EasyRTCCodec.ALAW, hasDataChannel = true, dataChannelName = "123")
+        return CallSetup(callout = false, sdp = "", videoCodec = videoCodeID, audioCodec = EasyRTCCodec.ALAW, hasDataChannel = true, dataChannelName = "123", st)
     }
 }

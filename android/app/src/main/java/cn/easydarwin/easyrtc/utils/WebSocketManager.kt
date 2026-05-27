@@ -26,11 +26,6 @@ public class WebSocketManager(private val url: String, private val token: String
     var uuidClientA = ""
     var uuidClientB = ""
 
-    private var stunUrl = ""
-    private var turnUrl = ""
-    private var turnUser = ""
-    private var turnPass = ""
-
     private val handler = Handler(Looper.getMainLooper())
     private var onlineTask: Runnable? = null
     private var isOnlineTaskRunning = false
@@ -163,7 +158,7 @@ public class WebSocketManager(private val url: String, private val token: String
         sendBinary(bos.toByteArray())
     }
 
-    fun handlerPeerConnection(data: ByteArray, isCaller: Boolean = false): String {
+    fun handlerPeerConnection(data: ByteArray, isCaller: Boolean = false, mStunTurnInfo:StunTurnInfo): String {
 //        Log.d(TAG, " handlerPeerConnection ...")
         val uuid = byteArrayToUuid(data.copyOfRange(8, 24))
         val exTraDataLen = bytesToIntLE(data.copyOfRange(24, 26))
@@ -171,7 +166,6 @@ public class WebSocketManager(private val url: String, private val token: String
         val strCount = bytesToIntLE(data.copyOfRange(28, 29))
         val sturnTypes = data.copyOfRange(29, 37)
         val sturnDatas = splitByZero(data.copyOfRange(37, 37 + strDataLen))  // sturndatas 数据
-        val mStunTurnInfo = StunTurnInfo()
         for ((index, b) in sturnTypes.withIndex()) {
             if (index >= 4) break;
             when (b.toInt() and 0xFF) {
@@ -183,10 +177,6 @@ public class WebSocketManager(private val url: String, private val token: String
         }
 //        Log.d(TAG, " mStunTurnInfo= ${mStunTurnInfo.toString()},uuid = $uuid")
         this.uuidClientB = uuid
-        stunUrl = "stun:${mStunTurnInfo.stunServer}"
-        turnUrl = "turn:${mStunTurnInfo.turnServer}"
-        turnUser = mStunTurnInfo.turnUsername
-        turnPass = mStunTurnInfo.turnPassword
         if (isCaller) return String(data.copyOfRange(37 + strDataLen, data.size), Charsets.UTF_8)
         return ""
     }

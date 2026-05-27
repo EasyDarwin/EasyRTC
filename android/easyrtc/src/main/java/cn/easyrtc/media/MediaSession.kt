@@ -54,7 +54,6 @@ class MediaSession {
 
     fun createPeerConnection(stunUrl: String, turnUrl: String, turnUser: String, turnPass: String): Long {
         val pc = nativeCreatePeerConnection(nativePtr, stunUrl, turnUrl, turnUser, turnPass)
-        EasyRTCLog.i("MediaSession", "createPeerConnection: nativePtr=$nativePtr pc=$pc")
         return pc
     }
 

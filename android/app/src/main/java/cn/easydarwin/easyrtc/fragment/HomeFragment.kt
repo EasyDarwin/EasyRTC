@@ -123,7 +123,11 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
                 val ws = webSocketService ?: return@post
                 val callSetup = ws.prepareIncomingCall(event.data, event.callout)
                 session.releasePeerConnection()
-                session.createPeerConnection("", "", "", "")
+                session.createPeerConnection(
+                    "stun:${callSetup.stunTurnInfo.stunServer}",
+                    "turn:${callSetup.stunTurnInfo.turnServer}",
+                    callSetup.stunTurnInfo.turnUsername,
+                    callSetup.stunTurnInfo.turnPassword)
 
                 val config = getVideoEncodeConfig()
                 val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264

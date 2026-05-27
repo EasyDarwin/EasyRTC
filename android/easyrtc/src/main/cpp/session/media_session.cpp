@@ -1038,15 +1038,20 @@ Java_cn_easyrtc_media_MediaSession_nativeCreatePeerConnection(
     const char *turn = env->GetStringUTFChars(turnUrl, nullptr);
     const char *user = env->GetStringUTFChars(turnUser, nullptr);
     const char *pass = env->GetStringUTFChars(turnPass, nullptr);
+    assert(stun && "STUN URL is null");
+    assert(turn && "TURN URL is null");
+    assert(user && "TURN username is null");
+    assert(pass && "TURN password is null");
 
-    if (stun && strlen(stun) > 0) {
+    if (strlen(stun) > 0) {
         strncpy(config.iceServers[0].urls, stun, MAX_ICE_CONFIG_URI_LEN);
     }
-    if (turn && strlen(turn) > 0) {
+    if (strlen(turn) > 0) {
         strncpy(config.iceServers[1].urls, turn, MAX_ICE_CONFIG_URI_LEN);
         if (user) strncpy(config.iceServers[1].username, user, MAX_ICE_CONFIG_USER_NAME_LEN);
         if (pass) strncpy(config.iceServers[1].credential, pass, MAX_ICE_CONFIG_CREDENTIAL_LEN);
     }
+    LOGI("[CRITICAL] CreatePeerConnection: stun=%s turn=%s user=%s pass=%s", stun, turn, user, pass);
 
     env->ReleaseStringUTFChars(stunUrl, stun);
     env->ReleaseStringUTFChars(turnUrl, turn);
@@ -1057,6 +1062,7 @@ Java_cn_easyrtc_media_MediaSession_nativeCreatePeerConnection(
     int result = EasyRTC_CreatePeerConnection(&pc, &config, connectionStateChangeCallback, session);
     if (result != 0 || !pc) {
         LOGE("[CRITICAL] EasyRTC_CreatePeerConnection FAILED: %d", result);
+        assert(false && "Failed to create PeerConnection");
         return 0;
     }
     session->peerConnection = pc;
