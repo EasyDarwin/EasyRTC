@@ -3,6 +3,7 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <android/surface_texture.h>
+#include <cassert>
 #include <chrono>
 #include <ctime>
 #include <cstdio>
@@ -539,9 +540,7 @@ bool encoderGlRenderFrame(const std::shared_ptr<EncoderGlBridge>& bridge, long l
 }
 
 bool encoderGlUpdateTexImage(ASurfaceTexture* st, float matrix4x4[16], int64_t* timestampNs) {
-    if (!st) {
-        return false;
-    }
+    assert(st && "ASurfaceTexture is null in updateTexImage");
     int r = ASurfaceTexture_updateTexImage(st);
     if (r != 0) {
         LOGW("[CRITICAL] EncoderRotate updateTexImage failed: %d", r);
