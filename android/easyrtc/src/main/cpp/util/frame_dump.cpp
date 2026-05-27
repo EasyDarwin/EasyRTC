@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <cstring>
 #include <string>
-#if 1
+#if 0
 void frameDumpInit(FrameDumpWriter* writer, int videoCodec, int audioCodec) {
     char cmdline[256] = {0};
     int fd = open("/proc/self/cmdline", O_RDONLY);

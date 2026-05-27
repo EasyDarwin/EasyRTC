@@ -137,14 +137,6 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
 
 
         auto enqueueDecoder = [&](AMediaCodec *decoder, Packet *packet) {
-            static uint32_t  frame_idx = 0;
-            if (frame_idx == 0) frame_idx = packet->index;
-            else {
-                if (frame_idx != packet->index -1){
-                    LOGW("packet not continouse.%u->%u", frame_idx, packet->index);
-                }
-                frame_idx = packet->index;
-            }
             ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
             if (inputBufId < 0) {
                 return false;
@@ -162,6 +154,14 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
             int flags = 0;
             if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
                 flags |= AMEDIACODEC_BUFFER_FLAG_KEY_FRAME;
+            }
+            static uint32_t  frame_idx = 0;
+            if (frame_idx == 0) frame_idx = packet->index;
+            else {
+                if (frame_idx != packet->index -1){
+                    LOGW("packet not continouse.%u->%u", frame_idx, packet->index);
+                }
+                frame_idx = packet->index;
             }
             AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet->size, packet->ptsUs, flags);
             uint64_t q = gDecQueued.fetch_add(1) + 1;
@@ -358,6 +358,7 @@ void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, co
     if (!pipeline || !pipeline->running.load() || size <= 0) return;
     Packet *slot = pipeline->frameQueue.acquirePush();
     if (!slot) {
+        LOGW("no available VIDEO cache, waiting...");
         do {
             if (!pipeline->running.load()) {
                 return;

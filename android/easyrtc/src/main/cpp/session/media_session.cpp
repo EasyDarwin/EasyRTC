@@ -36,7 +36,14 @@ static void notifyInputKbpsStats(MediaSession *session,
     if (!session || !session->jvm || !session->javaObj) {
         return;
     }
-
+    auto _begin = std::chrono::steady_clock::now();
+    defer({
+        auto _duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - _begin).count();
+        if (_duration > 10) {
+            LOGW("notifyInputKbpsStats took %lld ms", static_cast<long long>(_duration));
+        }
+    });
     JNIEnv *env = nullptr;
     bool attached = false;
     int ret = session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
@@ -69,7 +76,6 @@ static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes
     if (!session) {
         return;
     }
-    std::lock_guard<std::mutex> lock(session->statsMutex);
     if (videoBytes > 0) {
         session->mediaInputVideoBytesWindow.fetch_add(videoBytes, std::memory_order_relaxed);
     }
@@ -268,12 +274,27 @@ static int mediaTransceiverCallback(void *userPtr,
 
     auto *session = static_cast<MediaSession *>(userPtr);
     assert(session && "Invalid session in transceiver callback");
-
+    auto begin_ = std::chrono::steady_clock::now();
+    defer({
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - begin_).count();
+        if (duration > 10) {
+            LOGW("mediaTransceiverCallback type=%d codec=%d frameSize=%u took %lld ms",
+                 type, codecID, frame ? frame->size : 0, static_cast<long long>(duration));
+        }
+    });
     switch (type) {
         case EASYRTC_TRANSCEIVER_CALLBACK_VIDEO_FRAME:
             assert(frame && "invalid frame in video callback");
             assert(frame->frameData && "invalid frame data in video callback");
             assert(frame->size >= 0 && "invalid frame size in video callback");
+            if (session->last_video_frame_idx != 0) {
+                if (session->last_video_frame_idx + 1 != frame->index) {
+                    session->video_frame_loss_count += frame->index - session->last_video_frame_idx - 1;
+                    LOGW("VIDEO_CB frame index jump: last=%u current=%u, lost=%u", session->last_video_frame_idx, frame->index, session->video_frame_loss_count);
+                }
+            }
+            session->last_video_frame_idx = frame->index;
             if (frame->flags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
                 static bool dumped = false;
                 if (!dumped) {
@@ -332,7 +353,12 @@ static int mediaTransceiverCallback(void *userPtr,
             FLOGI("AUDIO_CB codec=%d size=%u pts=%lld", codecID,
                  frame ? frame->size : 0,
                  static_cast<unsigned long long>(frame ? frame->presentationTs : 0));
-
+            if (session->last_audio_frame_idx != 0) {
+                if (session->last_audio_frame_idx + 1 != frame->index) {
+                    session->audio_frame_loss_count += frame->index - session->last_audio_frame_idx - 1;
+                    LOGW("AUDIO_CB frame index jump: last=%u current=%u, lost=%u", session->last_audio_frame_idx, frame->index, session->audio_frame_loss_count);
+                }
+            }
             // Lazy-create audio playback on first frame using actual remote codec
             if (!session->audioPlayback && !session->audioPlaybackInitAttempted) {
                 session->audioPlaybackInitAttempted = true;
@@ -596,6 +622,10 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
 
     session->videoCodec = videoCodec;
     session->audioCodec = audioCodec;
+    session->last_audio_frame_idx = 0;
+    session->last_video_frame_idx = 0;
+    session->video_frame_loss_count = 0;
+    session->audio_frame_loss_count = 0;
 
     EasyRTC_MediaStreamTrack videoTrack{};
     videoTrack.codec = static_cast<EasyRTC_CODEC>(videoCodec);

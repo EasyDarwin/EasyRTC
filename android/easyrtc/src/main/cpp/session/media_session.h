@@ -84,7 +84,6 @@ struct MediaSession {
     FrameDumpWriter frameDump;
 
     std::thread statThread;
-    std::mutex statsMutex;
     std::atomic<uint64_t> mediaInputVideoBytesWindow{0};
     std::atomic<uint64_t> mediaInputAudioBytesWindow{0};
     std::atomic<int64_t> mediaInputLastReportNs{0};
@@ -94,5 +93,10 @@ struct MediaSession {
 
     int connectState{};
     std::string deviceId;
+
+    uint32_t  last_video_frame_idx{};
+    uint32_t  video_frame_loss_count{};
+    uint32_t  last_audio_frame_idx{};
+    uint32_t  audio_frame_loss_count{};
 };
 #endif
