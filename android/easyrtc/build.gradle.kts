@@ -19,6 +19,22 @@ android {
         }
     }
 
+    flavorDimensions += "mode"
+    productFlavors {
+        create("prod") {
+            dimension = "mode"
+        }
+        create("mock") {
+            dimension = "mode"
+            externalNativeBuild {
+                cmake {
+                    arguments("-DMOCK_EASYRTC=ON")
+                    targets("easyrtc_media")
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

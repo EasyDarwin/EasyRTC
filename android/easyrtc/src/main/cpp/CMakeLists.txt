@@ -39,16 +39,36 @@ target_include_directories(easyrtc_media PRIVATE
     ${REPO_INCLUDE_DIR}
 )
 
-target_link_libraries(easyrtc_media
-    android
-    log
-    EGL
-    GLESv2
-    mediandk
-    camera2ndk
-    aaudio
-    ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libEasyRTC.so
-)
+if(MOCK_EASYRTC)
+    add_library(EasyRTC STATIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../test/cpp/mock_libEasyRTC.cpp
+    )
+    target_include_directories(EasyRTC PRIVATE
+        ${REPO_INCLUDE_DIR}
+    )
+    target_compile_definitions(EasyRTC PRIVATE ANDROID_BUILD)
+    target_link_libraries(easyrtc_media
+        android
+        log
+        EGL
+        GLESv2
+        mediandk
+        camera2ndk
+        aaudio
+        EasyRTC
+    )
+else()
+    target_link_libraries(easyrtc_media
+        android
+        log
+        EGL
+        GLESv2
+        mediandk
+        camera2ndk
+        aaudio
+        ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}/libEasyRTC.so
+    )
+endif()
 
 target_compile_definitions(easyrtc_media PRIVATE ANDROID_BUILD)
 

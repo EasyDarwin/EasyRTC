@@ -46,6 +46,12 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <activity
+            android:name="cn.easydarwin.easyrtc.camera.CameraTestActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat" />
+
     </application>
 
 </manifest>
