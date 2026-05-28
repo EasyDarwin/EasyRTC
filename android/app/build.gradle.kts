@@ -63,7 +63,7 @@ android {
     applicationVariants.all {
         val variant = this
         variant.outputs.map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }.forEach { output ->
-            val outputFileName = "EasyRTC_${versionName}.apk"
+            val outputFileName = "EasyRTC_${variant.flavorName}_${variant.buildType.name}_${versionName}.apk"
             output.outputFileName = outputFileName
         }
     }
