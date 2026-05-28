@@ -106,19 +106,28 @@ static void formatTimestamp(char *buf, size_t bufSize) {
              static_cast<long long>(ms.count()));
 }
 
-bool initEglForEncoder(EncoderGlBridge* bridge) {
+bool initEglForEncoder(EncoderGlBridge* bridge, void* externalEglDisplay, void* externalEglContext) {
     if (!bridge || !bridge->encoderWindow) {
         return false;
     }
 
-    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display == EGL_NO_DISPLAY) {
-        LOGE("[CRITICAL] EncoderRotate EGL: eglGetDisplay failed");
-        return false;
-    }
-    if (!eglInitialize(display, nullptr, nullptr)) {
-        LOGE("[CRITICAL] EncoderRotate EGL: eglInitialize failed");
-        return false;
+    EGLDisplay display;
+    EGLContext sharedCtx = EGL_NO_CONTEXT;
+
+    if (externalEglDisplay && externalEglContext) {
+        display = reinterpret_cast<EGLDisplay>(externalEglDisplay);
+        sharedCtx = reinterpret_cast<EGLContext>(externalEglContext);
+        LOGI("[CRITICAL] EncoderRotate EGL: using external display=%p context=%p", display, sharedCtx);
+    } else {
+        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        if (display == EGL_NO_DISPLAY) {
+            LOGE("[CRITICAL] EncoderRotate EGL: eglGetDisplay failed");
+            return false;
+        }
+        if (!eglInitialize(display, nullptr, nullptr)) {
+            LOGE("[CRITICAL] EncoderRotate EGL: eglInitialize failed");
+            return false;
+        }
     }
 
     const EGLint configAttrs[] = {
@@ -134,33 +143,43 @@ bool initEglForEncoder(EncoderGlBridge* bridge) {
     EGLint numConfig = 0;
     if (!eglChooseConfig(display, configAttrs, &config, 1, &numConfig) || numConfig < 1) {
         LOGE("[CRITICAL] EncoderRotate EGL: eglChooseConfig failed");
-        eglTerminate(display);
+        if (!externalEglDisplay) eglTerminate(display);
         return false;
     }
 
     EGLSurface surface = eglCreateWindowSurface(display, config, bridge->encoderWindow, nullptr);
     if (surface == EGL_NO_SURFACE) {
         LOGE("[CRITICAL] EncoderRotate EGL: eglCreateWindowSurface failed");
-        eglTerminate(display);
+        if (!externalEglDisplay) eglTerminate(display);
         return false;
     }
 
     const EGLint ctxAttrs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
-    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctxAttrs);
-    if (context == EGL_NO_CONTEXT) {
-        LOGE("[CRITICAL] EncoderRotate EGL: eglCreateContext failed");
-        eglDestroySurface(display, surface);
-        eglTerminate(display);
-        return false;
+    EGLContext context;
+    if (sharedCtx != EGL_NO_CONTEXT) {
+        context = sharedCtx;
+        LOGI("[CRITICAL] EncoderRotate EGL: reusing external context %p", context);
+    } else {
+        context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctxAttrs);
+        if (context == EGL_NO_CONTEXT) {
+            LOGE("[CRITICAL] EncoderRotate EGL: eglCreateContext failed");
+            eglDestroySurface(display, surface);
+            if (!externalEglDisplay) eglTerminate(display);
+            return false;
+        }
     }
 
     if (!eglMakeCurrent(display, surface, surface, context)) {
         LOGE("[CRITICAL] EncoderRotate EGL: eglMakeCurrent failed");
-        eglDestroyContext(display, context);
+        if (!sharedCtx) {
+            eglDestroyContext(display, context);
+        }
         eglDestroySurface(display, surface);
-        eglTerminate(display);
+        if (!externalEglDisplay) eglTerminate(display);
         return false;
     }
+
+    // --- GL resources ---
 
     GLuint tex = 0;
     glGenTextures(1, &tex);
@@ -182,9 +201,9 @@ bool initEglForEncoder(EncoderGlBridge* bridge) {
         glDeleteFramebuffers(1, &fbo);
         glDeleteTextures(1, &tex);
         eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        eglDestroyContext(display, context);
+        if (!sharedCtx) eglDestroyContext(display, context);
         eglDestroySurface(display, surface);
-        eglTerminate(display);
+        if (!externalEglDisplay) eglTerminate(display);
         return false;
     }
 
@@ -194,14 +213,19 @@ bool initEglForEncoder(EncoderGlBridge* bridge) {
     bridge->colorTex = tex;
     bridge->fbo = fbo;
 
-    GLuint oes = 0;
-    glGenTextures(1, &oes);
-    glBindTexture(GL_TEXTURE_EXTERNAL_OES, oes);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    bridge->cameraOesTex = oes;
+    if (bridge->externalOesTex != 0) {
+        bridge->cameraOesTex = bridge->externalOesTex;
+        LOGI("[CRITICAL] EncoderRotate EGL: using external OES tex=%u", bridge->cameraOesTex);
+    } else {
+        GLuint oes = 0;
+        glGenTextures(1, &oes);
+        glBindTexture(GL_TEXTURE_EXTERNAL_OES, oes);
+        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        bridge->cameraOesTex = oes;
+    }
 
     bridge->oesProgram = linkProgram(kVs, kFsOes);
     bridge->blitProgram = linkProgram(kVs, kFs2d);
@@ -298,14 +322,18 @@ void teardownEgl(EncoderGlBridge* bridge) {
 std::shared_ptr<EncoderGlBridge> encoderGlCreate(ANativeWindow* encoderWindow,
                                                   int width,
                                                   int height,
-                                                  int rotation) {
+                                                  int rotation,
+                                                  unsigned int externalOesTex,
+                                                  void* externalEglDisplay,
+                                                  void* externalEglContext) {
     auto bridge = std::make_shared<EncoderGlBridge>();
     bridge->encoderWindow = encoderWindow;
     bridge->width = width;
     bridge->height = height;
     bridge->rotation = rotation;
+    bridge->externalOesTex = externalOesTex;
     bridge->initialized = (encoderWindow != nullptr && width > 0 && height > 0) &&
-                          initEglForEncoder(bridge.get());
+                          initEglForEncoder(bridge.get(), externalEglDisplay, externalEglContext);
     LOGI("[CRITICAL] EncoderRotate GL bridge create: window=%p size=%dx%d rot=%d init=%d",
          encoderWindow, width, height, rotation, bridge->initialized ? 1 : 0);
     LOGI("[CRITICAL] EncoderRotate GL bridge cameraOesTex=%u", bridge->cameraOesTex);
@@ -568,5 +596,58 @@ void encoderGlRelease(std::shared_ptr<EncoderGlBridge>& bridge) {
     }
     LOGI("[CRITICAL] EncoderRotate GL bridge release: window=%p", bridge->encoderWindow);
     teardownEgl(bridge.get());
+    bridge.reset();
+}
+
+void encoderGlReleaseKeepOesEgl(std::shared_ptr<EncoderGlBridge>& bridge) {
+    if (!bridge) {
+        return;
+    }
+    LOGI("[CRITICAL] EncoderRotate GL bridge release (keep OES+EGL): window=%p oesTex=%u",
+         bridge->encoderWindow, bridge->cameraOesTex);
+    EGLDisplay display = reinterpret_cast<EGLDisplay>(bridge->eglDisplay);
+    EGLSurface surface = reinterpret_cast<EGLSurface>(bridge->eglSurface);
+
+    if (display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    }
+    if (bridge->fbo) {
+        GLuint fbo = bridge->fbo;
+        glDeleteFramebuffers(1, &fbo);
+        bridge->fbo = 0;
+    }
+    if (bridge->colorTex) {
+        GLuint tex = bridge->colorTex;
+        glDeleteTextures(1, &tex);
+        bridge->colorTex = 0;
+    }
+    if (bridge->oesProgram) {
+        glDeleteProgram(bridge->oesProgram);
+        bridge->oesProgram = 0;
+    }
+    if (bridge->blitProgram) {
+        glDeleteProgram(bridge->blitProgram);
+        bridge->blitProgram = 0;
+    }
+    if (bridge->overlayProgram) {
+        glDeleteProgram(bridge->overlayProgram);
+        bridge->overlayProgram = 0;
+    }
+    if (bridge->overlayVbo) {
+        GLuint vbo = bridge->overlayVbo;
+        glDeleteBuffers(1, &vbo);
+        bridge->overlayVbo = 0;
+    }
+    if (bridge->overlayIbo) {
+        GLuint ibo = bridge->overlayIbo;
+        glDeleteBuffers(1, &ibo);
+        bridge->overlayIbo = 0;
+    }
+    // Destroy encoder window surface only, keep EGL context and OES texture
+    if (display != EGL_NO_DISPLAY && surface != EGL_NO_SURFACE) {
+        eglDestroySurface(display, surface);
+    }
+    bridge->eglSurface = nullptr;
+    bridge->encoderWindow = nullptr;
     bridge.reset();
 }

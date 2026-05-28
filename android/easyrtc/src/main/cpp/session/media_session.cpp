@@ -20,6 +20,11 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+#ifndef GL_TEXTURE_EXTERNAL_OES
+#define GL_TEXTURE_EXTERNAL_OES 0x8D65
+#endif
 
 namespace {
     // std::atomic<uint64_t> gVideoCbCount{0};
@@ -122,6 +127,141 @@ static void reportMediaInputKbpsStats(MediaSession *session) {
     notifyInputKbpsStats(session, videoKbps, audioKbps, totalKbps);
 }
 
+// ─── Early EGL / OES texture creation (before GL bridge exists) ────────────
+
+static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, int width, int height);
+
+static bool createEarlyEglAndOesTex(MediaSession* s) {
+    if (s->cameraOesTex != 0) return true;
+
+    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (display == EGL_NO_DISPLAY) {
+        LOGE("[CRITICAL] createEarlyEgl: eglGetDisplay failed");
+        return false;
+    }
+    if (!eglInitialize(display, nullptr, nullptr)) {
+        LOGE("[CRITICAL] createEarlyEgl: eglInitialize failed");
+        return false;
+    }
+
+    const EGLint configAttrs[] = {
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+            EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
+            EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+            EGL_NONE
+    };
+    EGLConfig config = nullptr;
+    EGLint numConfig = 0;
+    if (!eglChooseConfig(display, configAttrs, &config, 1, &numConfig) || numConfig < 1) {
+        LOGE("[CRITICAL] createEarlyEgl: eglChooseConfig failed");
+        eglTerminate(display);
+        return false;
+    }
+
+    const EGLint pbufferAttrs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
+    EGLSurface pbuffer = eglCreatePbufferSurface(display, config, pbufferAttrs);
+    if (pbuffer == EGL_NO_SURFACE) {
+        LOGE("[CRITICAL] createEarlyEgl: eglCreatePbufferSurface failed");
+        eglTerminate(display);
+        return false;
+    }
+
+    const EGLint ctxAttrs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, ctxAttrs);
+    if (context == EGL_NO_CONTEXT) {
+        LOGE("[CRITICAL] createEarlyEgl: eglCreateContext failed");
+        eglDestroySurface(display, pbuffer);
+        eglTerminate(display);
+        return false;
+    }
+
+    if (!eglMakeCurrent(display, pbuffer, pbuffer, context)) {
+        LOGE("[CRITICAL] createEarlyEgl: eglMakeCurrent failed");
+        eglDestroyContext(display, context);
+        eglDestroySurface(display, pbuffer);
+        eglTerminate(display);
+        return false;
+    }
+
+    GLuint oes = 0;
+    glGenTextures(1, &oes);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, oes);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Don't keep the pbuffer surface current; just keep context + OES tex alive
+    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroySurface(display, pbuffer);
+
+    s->cameraOesTex = oes;
+    s->cameraEglDisplay = reinterpret_cast<void*>(display);
+    s->cameraEglContext = reinterpret_cast<void*>(context);
+    LOGI("[CRITICAL] createEarlyEgl: SUCCESS display=%p ctx=%p oesTex=%u",
+         s->cameraEglDisplay, s->cameraEglContext, oes);
+    return true;
+}
+
+static void releaseEarlyEgl(MediaSession* s) {
+    if (s->cameraOesTex != 0) {
+        EGLDisplay display = reinterpret_cast<EGLDisplay>(s->cameraEglDisplay);
+        EGLContext context = reinterpret_cast<EGLContext>(s->cameraEglContext);
+        if (display != EGL_NO_DISPLAY && context != EGL_NO_CONTEXT) {
+            eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
+            GLuint oes = s->cameraOesTex;
+            glDeleteTextures(1, &oes);
+            eglDestroyContext(display, context);
+            eglTerminate(display);
+            LOGI("[CRITICAL] releaseEarlyEgl: done oesTex=%u", s->cameraOesTex);
+        }
+    }
+    s->cameraOesTex = 0;
+    s->cameraEglDisplay = nullptr;
+    s->cameraEglContext = nullptr;
+    s->cameraInputReady = false;
+}
+
+// ─── Capture request builders ─────────────────────────────────────────────
+
+static ACaptureRequest* buildRequestWithTargets(MediaSession* s, bool includeEncoder) {
+    if (!s->cameraDevice) return nullptr;
+
+    ACaptureRequest* req = nullptr;
+    ACameraDevice_createCaptureRequest(s->cameraDevice, TEMPLATE_PREVIEW, &req);
+    if (!req) return nullptr;
+
+    if (includeEncoder && s->cameraInputTarget) {
+        ACaptureRequest_addTarget(req, s->cameraInputTarget);
+    }
+    if (s->previewTarget) {
+        ACaptureRequest_addTarget(req, s->previewTarget);
+    }
+    uint8_t afMode = ACAMERA_CONTROL_AF_MODE_CONTINUOUS_VIDEO;
+    ACaptureRequest_setEntry_u8(req, ACAMERA_CONTROL_AF_MODE, 1, &afMode);
+    return req;
+}
+
+static bool switchRepeatingRequest(MediaSession* s, bool includeEncoder) {
+    if (!s->captureSession) return false;
+    auto* old = s->captureRequest;
+    s->captureRequest = buildRequestWithTargets(s, includeEncoder);
+    if (!s->captureRequest) {
+        s->captureRequest = old;
+        return false;
+    }
+    camera_status_t status = ACameraCaptureSession_setRepeatingRequest(
+            s->captureSession, nullptr, 1, &s->captureRequest, nullptr);
+    if (status != ACAMERA_OK) {
+        LOGE("[CRITICAL] switchRepeatingRequest: setRepeatingRequest failed %d", status);
+        return false;
+    }
+    if (old) ACaptureRequest_free(old);
+    LOGI("[CRITICAL] switchRepeatingRequest: encoder=%d", includeEncoder ? 1 : 0);
+    return true;
+}
+
 static void releaseCaptureSessionOutputs(MediaSession *s) {
     if (s->captureRequest) {
         ACaptureRequest_free(s->captureRequest);
@@ -171,7 +311,25 @@ static void closeCamera(MediaSession *s) {
         ACameraDevice_close(s->cameraDevice);
         s->cameraDevice = nullptr;
     }
+    if (s->cameraInputSurfaceTexture) {
+        ASurfaceTexture_release(s->cameraInputSurfaceTexture);
+        s->cameraInputSurfaceTexture = nullptr;
+    }
+    if (s->cameraInputSurfaceTextureObj) {
+        JNIEnv* env = nullptr;
+        bool attached = false;
+        if (s->jvm && s->jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+            if (s->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) attached = true;
+        }
+        if (env) {
+            env->DeleteGlobalRef(s->cameraInputSurfaceTextureObj);
+            if (attached) s->jvm->DetachCurrentThread();
+        }
+        s->cameraInputSurfaceTextureObj = nullptr;
+    }
+    s->cameraInputWindow.reset();
     releaseCaptureSessionOutputs(s);
+    releaseEarlyEgl(s);
 }
 
 static bool createCaptureSession(MediaSession *s, bool withEncoder) {
@@ -196,10 +354,13 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
             releaseCaptureSession(s);
             return false;
         }
-    } else if (withEncoder) {
-        LOGE("[CRITICAL] EncoderRotate: cameraInputWindow missing; refuse direct camera->encoder path");
-        releaseCaptureSession(s);
-        return false;
+        camStatus = ACameraOutputTarget_create(
+                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow.get()), &s->cameraInputTarget);
+        if (camStatus != ACAMERA_OK) {
+            releaseCaptureSession(s);
+            return false;
+        }
+        s->cameraInputReady = true;
     }
 
     if (s->previewWindow) {
@@ -214,50 +375,20 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
             releaseCaptureSession(s);
             return false;
         }
-    }
-
-    camStatus = ACameraDevice_createCaptureRequest(s->cameraDevice,
-                                                   withEncoder ? TEMPLATE_RECORD : TEMPLATE_PREVIEW,
-                                                   &s->captureRequest);
-    if (camStatus != ACAMERA_OK) {
-        releaseCaptureSession(s);
-        return false;
-    }
-
-    if (withEncoder && s->cameraInputWindow) {
-        camStatus = ACameraOutputTarget_create(
-                reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow.get()), &s->cameraInputTarget);
-        if (camStatus != ACAMERA_OK) {
-            releaseCaptureSession(s);
-            return false;
-        }
-        camStatus = ACaptureRequest_addTarget(s->captureRequest, s->cameraInputTarget);
-        if (camStatus != ACAMERA_OK) {
-            releaseCaptureSession(s);
-            return false;
-        }
-    } else if (withEncoder) {
-        LOGE("[CRITICAL] EncoderRotate: cameraInputTarget missing; refuse direct camera->encoder path");
-        releaseCaptureSession(s);
-        return false;
-    }
-
-    if (s->previewWindow) {
         camStatus = ACameraOutputTarget_create(
                 reinterpret_cast<ACameraWindowType *>(s->previewWindow.get()), &s->previewTarget);
         if (camStatus != ACAMERA_OK) {
             releaseCaptureSession(s);
             return false;
         }
-        camStatus = ACaptureRequest_addTarget(s->captureRequest, s->previewTarget);
-        if (camStatus != ACAMERA_OK) {
-            releaseCaptureSession(s);
-            return false;
-        }
     }
 
-    uint8_t afMode = ACAMERA_CONTROL_AF_MODE_CONTINUOUS_VIDEO;
-    ACaptureRequest_setEntry_u8(s->captureRequest, ACAMERA_CONTROL_AF_MODE, 1, &afMode);
+    // Build initial request (preview-only by default, encoder target added when needed)
+    s->captureRequest = buildRequestWithTargets(s, false);
+    if (!s->captureRequest) {
+        releaseCaptureSession(s);
+        return false;
+    }
 
     static const ACameraCaptureSession_stateCallbacks sessionCallbacks = {nullptr, nullptr, nullptr,
                                                                           nullptr};
@@ -594,6 +725,19 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     }
 
     session->cameraDevice = device;
+
+    // Create early EGL context + OES texture + SurfaceTexture for camera-to-encoder path.
+    // This allows the capture session to include the cameraInput output from the start,
+    // avoiding session rebuild when encoding starts/stops.
+    if (session->videoEncoder) {
+        auto p = session->videoEncoder;
+        int stW = session->encoderSwapWH ? p->height : p->width;
+        int stH = session->encoderSwapWH ? p->width : p->height;
+        if (createEarlyEglAndOesTex(session)) {
+            ensureCameraInputSurfaceTexture(env, session, stW, stH);
+        }
+    }
+
     if (!createCaptureSession(session, false)) {
         closeCamera(session);
         return -1;
@@ -811,7 +955,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
 }
 
 static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, int width, int height) {
-    if (!session || !session->javaObj || !session->encoderGlBridge) {
+    if (!session || !session->javaObj || session->cameraOesTex == 0) {
         return false;
     }
     if (session->cameraInputWindow && session->cameraInputSurfaceTexture && session->cameraInputSurfaceTextureObj) {
@@ -822,7 +966,7 @@ static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, 
     jmethodID mid = env->GetMethodID(clazz, "createCameraInputSurfaceTexture", "(III)Landroid/graphics/SurfaceTexture;");
     if (!mid) return false;
     jobject stLocal = env->CallObjectMethod(session->javaObj, mid,
-                                            static_cast<jint>(session->encoderGlBridge->cameraOesTex),
+                                            static_cast<jint>(session->cameraOesTex),
                                             static_cast<jint>(width), static_cast<jint>(height));
     if (!stLocal) {
         return false;
@@ -840,7 +984,7 @@ static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, 
     }
     LOGI("[CRITICAL] EncoderRotate camera input ST created: st=%p window=%p tex=%u bufferSize=%dx%d",
          session->cameraInputSurfaceTexture, session->cameraInputWindow.get(),
-         session->encoderGlBridge->cameraOesTex, width, height);
+         session->cameraOesTex, width, height);
     return true;
 }
 
@@ -924,7 +1068,13 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
         return -1;
     }
     assert(p->encoder);
-    session->encoderGlBridge = encoderGlCreate(p->encoderInputSurface.get(), p->width, p->height, session->encoderRotation);
+
+    // Pass early EGL context + OES tex to GL bridge so it reuses them
+    session->encoderGlBridge = encoderGlCreate(
+            p->encoderInputSurface.get(), p->width, p->height, session->encoderRotation,
+            session->cameraOesTex,
+            session->cameraEglDisplay, session->cameraEglContext);
+
     if (!session->deviceId.empty() && session->encoderGlBridge) {
         session->encoderGlBridge->deviceId = session->deviceId;
     }
@@ -936,11 +1086,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     }
     LOGI("[CRITICAL] EncoderRotate start send: rotation=%d swapWH=%d",
          session->encoderRotation, session->encoderSwapWH ? 1 : 0);
-    if (!ensureCameraInputSurfaceTexture(env, session,
-            session->encoderSwapWH ? p->height : p->width,
-            session->encoderSwapWH ? p->width : p->height)) {
-        LOGW("[CRITICAL] EncoderRotate failed to create camera input surface texture");
-    }
+
     LOGI("[CRITICAL] nativeStartSend: before startRenderThread");
     startRenderThread(session);
     media_status_t status = AMediaCodec_start(p->encoder);
@@ -949,16 +1095,11 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
         return -1;
     }
     p->startEncoder(session);
-    // pthread_t th = p->outputThread.native_handle();
-    // sched_param sch_params;
-    // sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
-    // pthread_setschedparam(th, SCHED_FIFO, &sch_params);
-    if (session->cameraDevice) {
+
+    // Switch repeating request to include encoder target (no session rebuild)
+    if (session->cameraDevice && session->cameraInputReady) {
         std::lock_guard<std::mutex> lock(session->cameraMutex);
-        releaseCaptureSession(session);
-        if (!createCaptureSession(session, true)) {
-            LOGE("Failed to recreate capture session with encoder");
-        }
+        switchRepeatingRequest(session, true);
     }
     LOGD("Video encoder started");
 
@@ -1137,7 +1278,7 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
     LOGI("[CRITICAL] nativeStopSend: before stopRenderThread");
     stopRenderThread(session);
     LOGI("[CRITICAL] nativeStopSend: before encoderGlRelease");
-    encoderGlRelease(session->encoderGlBridge);
+    encoderGlReleaseKeepOesEgl(session->encoderGlBridge);
 
     if (session->videoEncoder) {
         auto p = session->videoEncoder;
@@ -1171,17 +1312,11 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         std::lock_guard<std::mutex> lock(session->cameraMutex);
 
         if (session->cameraInputSurfaceTexture) {
-            ASurfaceTexture_release(session->cameraInputSurfaceTexture);
-            session->cameraInputSurfaceTexture = nullptr;
+            ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
         }
-        if (session->cameraInputSurfaceTextureObj) {
-            env->DeleteGlobalRef(session->cameraInputSurfaceTextureObj);
-            session->cameraInputSurfaceTextureObj = nullptr;
-        }
-        session->cameraInputWindow.reset();
 
-        releaseCaptureSession(session);
-        if (session->previewWindow) createCaptureSession(session, false);
+        // Switch repeating request back to preview-only (no session rebuild)
+        switchRepeatingRequest(session, false);
     }
     LOGI("[CRITICAL] StopSend: DONE");
 

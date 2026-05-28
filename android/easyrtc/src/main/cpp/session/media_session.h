@@ -95,6 +95,10 @@ struct MediaSession {
     uint64_t videoTrackId = 0;
     uint64_t audioTrackId = 1;
     std::string deviceId;
+    bool cameraInputReady = false;
+    unsigned int cameraOesTex = 0;
+    void* cameraEglDisplay = nullptr;
+    void* cameraEglContext = nullptr;
 
     uint32_t  last_video_frame_idx{};
     uint32_t  video_frame_loss_count{};
