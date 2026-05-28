@@ -117,13 +117,7 @@ static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes
     notifyInputKbpsStats(session, videoKbps, audioKbps, totalKbps);
 }
 
-static void releaseCaptureSession(MediaSession *s) {
-    LOGI("[CRITICAL] releaseCaptureSession ENTRY: s=%p", s);
-    if (s->captureSession) {
-        ACameraCaptureSession_stopRepeating(s->captureSession);
-        ACameraCaptureSession_close(s->captureSession);
-        s->captureSession = nullptr;
-    }
+static void releaseCaptureSessionOutputs(MediaSession *s) {
     if (s->captureRequest) {
         ACaptureRequest_free(s->captureRequest);
         s->captureRequest = nullptr;
@@ -148,6 +142,31 @@ static void releaseCaptureSession(MediaSession *s) {
         ACaptureSessionOutputContainer_free(s->outputContainer);
         s->outputContainer = nullptr;
     }
+    s->captureSession = nullptr;
+}
+
+static void releaseCaptureSession(MediaSession *s) {
+    LOGI("[CRITICAL] releaseCaptureSession ENTRY: s=%p", s);
+    if (s->captureSession) {
+        ACameraCaptureSession_stopRepeating(s->captureSession);
+        ACameraCaptureSession_close(s->captureSession);
+        s->captureSession = nullptr;
+    }
+    releaseCaptureSessionOutputs(s);
+}
+
+static void closeCamera(MediaSession *s) {
+    LOGI("[CRITICAL] closeCamera ENTRY: s=%p", s);
+    std::lock_guard<std::mutex> lock(s->cameraMutex);
+    if (s->captureSession) {
+        ACameraCaptureSession_stopRepeating(s->captureSession);
+        s->captureSession = nullptr;
+    }
+    if (s->cameraDevice) {
+        ACameraDevice_close(s->cameraDevice);
+        s->cameraDevice = nullptr;
+    }
+    releaseCaptureSessionOutputs(s);
 }
 
 static bool createCaptureSession(MediaSession *s, bool withEncoder) {
@@ -252,16 +271,6 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
     }
 
     return true;
-}
-
-static void closeCamera(MediaSession *s) {
-    LOGI("[CRITICAL] closeCamera ENTRY: s=%p", s);
-    std::lock_guard<std::mutex> lock(s->cameraMutex);
-    releaseCaptureSession(s);
-    if (s->cameraDevice) {
-        ACameraDevice_close(s->cameraDevice);
-        s->cameraDevice = nullptr;
-    }
 }
 
 static void onRemoteVideoSizeCallback(void *userPtr, int width, int height);
@@ -968,11 +977,15 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
     assert(session && "Invalid session");
 
     std::lock_guard<std::mutex> lock(session->cameraMutex);
-    releaseCaptureSession(session);
+    if (session->captureSession) {
+        ACameraCaptureSession_stopRepeating(session->captureSession);
+        session->captureSession = nullptr;
+    }
     if (session->cameraDevice) {
         ACameraDevice_close(session->cameraDevice);
         session->cameraDevice = nullptr;
     }
+    releaseCaptureSessionOutputs(session);
 
     session->cameraFacing = (session->cameraFacing == 0) ? 1 : 0;
 
