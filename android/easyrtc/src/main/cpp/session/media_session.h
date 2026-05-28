@@ -92,6 +92,8 @@ struct MediaSession {
     std::atomic<uint32_t> mediaInputTotalKbpsX100{0};
 
     int connectState{};
+    uint64_t videoTrackId = 0;
+    uint64_t audioTrackId = 1;
     std::string deviceId;
 
     uint32_t  last_video_frame_idx{};

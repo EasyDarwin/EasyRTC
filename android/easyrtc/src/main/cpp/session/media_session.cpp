@@ -641,10 +641,14 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     session->video_frame_loss_count = 0;
     session->audio_frame_loss_count = 0;
 
+    session->videoTrackId = 0;
+    session->audioTrackId = 1;
+    auto _strVideoTrack = std::to_string(session->videoTrackId);
+    auto _strAudioTrack = std::to_string(session->audioTrackId);
     EasyRTC_MediaStreamTrack videoTrack{};
     videoTrack.codec = static_cast<EasyRTC_CODEC>(videoCodec);
     std::strcpy(videoTrack.streamId, "0");
-    std::strcpy(videoTrack.trackId, "0");
+    std::strcpy(videoTrack.trackId, _strVideoTrack.c_str());
     videoTrack.kind = EasyRTC_MEDIA_STREAM_TRACK_KIND_VIDEO;
 
     EasyRTC_RtpTransceiverInit videoInit{};
@@ -663,7 +667,7 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     EasyRTC_MediaStreamTrack audioTrack{};
     audioTrack.codec = static_cast<EasyRTC_CODEC>(audioCodec);
     std::strcpy(audioTrack.streamId, "0");
-    std::strcpy(audioTrack.trackId, "1");
+    std::strcpy(audioTrack.trackId, _strAudioTrack.c_str());
     audioTrack.kind = EasyRTC_MEDIA_STREAM_TRACK_KIND_AUDIO;
 
     EasyRTC_RtpTransceiverInit audioInit{};
@@ -680,8 +684,6 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
     LOGD("Audio transceiver added. codec:%d, r: %p", audioCodec, session->audioTransceiver);
 
     session->transceiversAdded.store(true);
-    LOGI("[CRITICAL] AddTransceivers: SUCCESS video=%p audio=%p",
-         session->videoTransceiver, session->audioTransceiver);
 
     frameDumpInit(&session->frameDump, session->videoCodec, session->audioCodec);
 

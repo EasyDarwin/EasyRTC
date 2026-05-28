@@ -144,7 +144,7 @@ static aaudio_data_callback_result_t dataCallback(
     frame.presentationTs = pts100ns;
     frame.decodingTs = pts100ns;
     frame.frameData = pipeline->audioBuffer;
-    frame.trackId = 0;
+    frame.trackId = session->audioTrackId;
 
     int result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
     if (result != 0) {

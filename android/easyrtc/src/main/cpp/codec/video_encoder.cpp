@@ -139,7 +139,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
         frame.presentationTs = static_cast<UINT64>(info.presentationTimeUs) * 10ULL;
         frame.decodingTs = frame.presentationTs;
         frame.frameData = data;
-        frame.trackId = 0;
+        frame.trackId = session->videoTrackId;
 
         const bool isConnected = (session->connectState == 3);
 
