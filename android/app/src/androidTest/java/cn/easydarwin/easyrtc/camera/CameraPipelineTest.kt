@@ -23,6 +23,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(AndroidJUnit4::class)
 class CameraPipelineTest {
@@ -211,5 +212,44 @@ class CameraPipelineTest {
         assertTrue("SDP should contain v=0", offerSdp!!.contains("v=0"))
 
         session.releasePeerConnection()
+    }
+
+    @Test
+    fun previewRestartAfterStopStart_noFreeze() {
+        val activity = launchAndWaitForSurface()
+        session.setupVideoEncoder(defaultConfig)
+
+        val surface = activity.acquirePreviewSurface()
+        assertEquals(0, session.startPreview(surface))
+
+        val pc = session.createPeerConnection(
+            "stun:stun.l.google.com:19302",
+            "turn:turn.example.com:3478", "user", "pass")
+        assertTrue(pc != 0L)
+        session.addTransceivers(MediaSession.CODEC_H264, 5)
+        SystemClock.sleep(3000)
+
+        // Simulate screen off: stop preview
+        session.stopPreview()
+        session.setDecoderSurface(null)
+        session.releasePeerConnection()
+        SystemClock.sleep(500)
+
+        // Simulate screen on: restart preview on same surface (TextureView survives activity pause/resume)
+        session.setupVideoEncoder(defaultConfig)
+        assertEquals(0, session.startPreview(surface))
+
+        val pc2 = session.createPeerConnection(
+            "stun:stun.l.google.com:19302",
+            "turn:turn.example.com:3478", "user", "pass")
+        assertTrue(pc2 != 0L)
+        session.addTransceivers(MediaSession.CODEC_H264, 5)
+        SystemClock.sleep(3000)
+
+        session.stopPreview()
+        session.setDecoderSurface(null)
+        session.releasePeerConnection()
+
+        assertTrue("Activity should survive", !activity.isDestroyed)
     }
 }
