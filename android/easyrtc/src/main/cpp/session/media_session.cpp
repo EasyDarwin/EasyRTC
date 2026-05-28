@@ -72,7 +72,7 @@ static void notifyInputKbpsStats(MediaSession *session,
     }
 }
 
-static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes, uint32_t audioBytes) {
+static void accumulateMediaInputBytes(MediaSession *session, uint32_t videoBytes, uint32_t audioBytes) {
     if (!session) {
         return;
     }
@@ -81,6 +81,12 @@ static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes
     }
     if (audioBytes > 0) {
         session->mediaInputAudioBytesWindow.fetch_add(audioBytes, std::memory_order_relaxed);
+    }
+}
+
+static void reportMediaInputKbpsStats(MediaSession *session) {
+    if (!session) {
+        return;
     }
 
     const int64_t nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -91,8 +97,7 @@ static void updateMediaInputKbpsStats(MediaSession *session, uint32_t videoBytes
         return;
     }
     const int64_t durationNs = nowNs - lastNs;
-    constexpr int64_t kReportIntervalNs = 1000LL * 1000LL * 1000LL;
-    if (durationNs < kReportIntervalNs) {
+    if (durationNs <= 0) {
         return;
     }
     if (!session->mediaInputLastReportNs.compare_exchange_strong(lastNs, nowNs, std::memory_order_relaxed)) {
@@ -344,7 +349,7 @@ static int mediaTransceiverCallback(void *userPtr,
                 
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
                                frame->size, frame->flags);
-                updateMediaInputKbpsStats(session, frame->size, 0);
+                accumulateMediaInputBytes(session, frame->size, 0);
                 videoDecoderEnqueueFrame(session->videoDecoder, frame);
             } else {
                 LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d",
@@ -378,7 +383,7 @@ static int mediaTransceiverCallback(void *userPtr,
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData,
                                frame->size, frame->flags);
-                updateMediaInputKbpsStats(session, 0, frame->size);
+                accumulateMediaInputBytes(session, 0, frame->size);
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame);
                 if (session->videoDecoder) {
                     session->videoDecoder->audio_master_clock_us_from_begining_to_now = estimateAudioMasterClockUs(session->audioPlayback);
@@ -696,7 +701,7 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastReportTime).count();
             if (elapsed >= 1000) {
                 lastReportTime = now;
-                updateMediaInputKbpsStats(session, 0, 0);
+                reportMediaInputKbpsStats(session);
             }
         }
         LOGI("MediaSession stats thread exiting");
