@@ -241,7 +241,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
             AppLogStore.appendCritical(TAG,"主视频 SurfaceTexture 已创建, buffer=${config.getWidth()}x${config.getHeight()}")
             localSurfaceTexture = surface
             updatePreviewTransform(width, height)
-            createSession()
             startLocalPreviewIfAvailable()
         }
     }
@@ -259,7 +258,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
             session.releasePeerConnection()
             isRunning = false
             isLocalPreviewStarted = false
-            releaseSession()
         }
         return true
     }
@@ -295,6 +293,10 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
     private fun updateButtonState() {
         btnToggleStream.text = if (isRunning) "停止推流" else "开始推流"
+    }
+
+    override fun getPreviewSurfaceForRestart(): Surface? {
+        return localSurfaceTexture?.let { Surface(it) }
     }
 
     override fun onResume() {

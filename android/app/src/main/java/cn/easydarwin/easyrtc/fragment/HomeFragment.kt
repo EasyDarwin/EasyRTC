@@ -92,9 +92,9 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initViews(view)
+        setupSessionObservers()
 
         (activity as? MainActivity)?.webSocketServiceLiveData?.observe(viewLifecycleOwner) { service ->
-            webSocketService = service
             service?.events?.observe(viewLifecycleOwner) { event ->
                 when (event) {
                     is WebSocketService.Event.Connected -> onWSConnected()
@@ -276,8 +276,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
         }
 
         if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-            createSession()
-            setupSessionObservers()
             session.setupVideoEncoder(getVideoEncodeConfig())
             session.setDecoderSurface(Surface(remote_preview_.surfaceTexture))
             startNativeCameraPreview()
@@ -297,7 +295,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             session.stopPreview()
             session.setDecoderSurface(null)
             session.releasePeerConnection()
-            releaseSession()
         }
         return true
     }
@@ -327,8 +324,11 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
 
+    override fun getPreviewSurfaceForRestart(): Surface? {
+        return if (local_preview_.isAvailable) Surface(local_preview_.surfaceTexture) else null
+    }
+
     override fun onDestroyView() {
-        Log.d(TAG, "onDestroyView")
         super.onDestroyView()
         buttonHomeMenu = null
     }

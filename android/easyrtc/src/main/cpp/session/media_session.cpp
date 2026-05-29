@@ -262,6 +262,52 @@ static bool switchRepeatingRequest(MediaSession* s, bool includeEncoder) {
     return true;
 }
 
+// ─── Camera error callbacks (diagnostic logging) ──────────────────────────
+
+static void releaseCaptureSessionOutputs(MediaSession *s);
+static void releaseEarlyEgl(MediaSession* s);
+
+static void onCameraDeviceError(void* context, ACameraDevice* device, int error) {
+    auto* s = static_cast<MediaSession*>(context);
+    LOGE("[CRITICAL] CAMERA DEVICE ERROR: session=%p error=%d — closing camera", s, error);
+    s->cameraError.store(error);
+    s->previewRunning.store(false);
+
+    {
+        std::lock_guard<std::mutex> lock(s->cameraMutex);
+        if (s->captureSession) {
+            ACameraCaptureSession_stopRepeating(s->captureSession);
+            s->captureSession = nullptr;
+        }
+        if (s->cameraDevice) {
+            ACameraDevice_close(s->cameraDevice);
+            s->cameraDevice = nullptr;
+        }
+        releaseCaptureSessionOutputs(s);
+    }
+}
+
+static void onCameraDeviceDisconnected(void* context, ACameraDevice* device) {
+    auto* s = static_cast<MediaSession*>(context);
+    LOGE("[CRITICAL] CAMERA DEVICE DISCONNECTED: session=%p", s);
+    s->cameraError.store(1);
+}
+
+static void onSessionActive(void* context, ACameraCaptureSession* session) {
+    auto* s = static_cast<MediaSession*>(context);
+    LOGI("[CAMERA SESSION] ACTIVE: session=%p", s);
+}
+
+static void onSessionReady(void* context, ACameraCaptureSession* session) {
+    auto* s = static_cast<MediaSession*>(context);
+    LOGI("[CAMERA SESSION] READY: session=%p", s);
+}
+
+static void onSessionClosed(void* context, ACameraCaptureSession* session) {
+    auto* s = static_cast<MediaSession*>(context);
+    LOGW("[CAMERA SESSION] CLOSED: session=%p", s);
+}
+
 static void releaseCaptureSessionOutputs(MediaSession *s) {
     if (s->captureRequest) {
         ACaptureRequest_free(s->captureRequest);
@@ -390,8 +436,9 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
         return false;
     }
 
-    static const ACameraCaptureSession_stateCallbacks sessionCallbacks = {nullptr, nullptr, nullptr,
-                                                                          nullptr};
+    const ACameraCaptureSession_stateCallbacks sessionCallbacks = {
+            s, onSessionClosed, onSessionReady, onSessionActive
+    };
     camStatus = ACameraDevice_createCaptureSession(s->cameraDevice, s->outputContainer,
                                                    &sessionCallbacks, &s->captureSession);
     if (camStatus != ACAMERA_OK) {
@@ -675,6 +722,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     assert(session && "Invalid session");
     assert(!session->previewRunning.load() && "Preview already running");
     assert(surface && "Invalid session");
+    session->cameraError.store(0);
 
     session->previewWindow = std::shared_ptr<ANativeWindow>(ANativeWindow_fromSurface(env, surface), ANativeWindow_release);
     LOGI("[CRITICAL] nativeStartPreview: previewWindow acquired, letting camera HAL choose buffer size naturally");
@@ -714,8 +762,8 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
 
     ACameraDevice_StateCallbacks cb = {};
     cb.context = session;
-    cb.onDisconnected = nullptr;
-    cb.onError = nullptr;
+    cb.onDisconnected = onCameraDeviceDisconnected;
+    cb.onError = onCameraDeviceError;
     ACameraDevice *device = nullptr;
     camera_status_t camStatus = ACameraManager_openCamera(cameraMgr, cameraId.c_str(), &cb,
                                                           &device);
@@ -1144,8 +1192,8 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
     if (!cameraId.empty()) {
         ACameraDevice_StateCallbacks cb = {};
         cb.context = session;
-        cb.onDisconnected = nullptr;
-        cb.onError = nullptr;
+        cb.onDisconnected = onCameraDeviceDisconnected;
+        cb.onError = onCameraDeviceError;
         ACameraDevice *device = nullptr;
         camera_status_t camStatus = ACameraManager_openCamera(cameraMgr, cameraId.c_str(), &cb,
                                                               &device);
@@ -1421,6 +1469,14 @@ Java_cn_easyrtc_media_MediaSession_nativeGetIceCandidateType(
     int ret = EasyRTC_GetIceCandidatePairStats(session->peerConnection, &stats);
     if (ret != 0) return -1;
     return static_cast<jint>(stats.local_iceCandidateType);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_cn_easyrtc_media_MediaSession_nativeHasCameraError(
+        JNIEnv *env, jobject thiz, jlong sessionPtr) {
+    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
+    if (!session) return JNI_TRUE;
+    return session->cameraError.load() != 0 ? JNI_TRUE : JNI_FALSE;
 }
 
 }

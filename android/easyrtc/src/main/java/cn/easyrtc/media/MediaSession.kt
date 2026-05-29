@@ -30,6 +30,8 @@ class MediaSession {
     val connectionState = MutableLiveData<LiveUiState>(LiveUiState.Idle)
     val dataChannel = MutableLiveData<DataChannelEvent>(DataChannelEvent.Idle)
     val remoteVideoSize = MutableLiveData<android.util.Size>(android.util.Size(0, 0))
+    val hasCameraError: Boolean
+        get() = nativeHasCameraError(nativePtr)
 
     fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
         inputKbpsStatsListener = listener
@@ -209,6 +211,7 @@ class MediaSession {
     private external fun nativeCreate(): Long
     private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
     private external fun nativeStopPreview(sessionPtr: Long)
+    private external fun nativeHasCameraError(sessionPtr: Long): Boolean
 
     private external fun nativeAddTransceivers(
         sessionPtr: Long,

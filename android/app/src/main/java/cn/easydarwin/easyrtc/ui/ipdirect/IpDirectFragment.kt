@@ -75,6 +75,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initViews(view)
+        setupSessionObservers()
         startServer()
     }
 
@@ -277,8 +278,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             }
         }
         if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-            createSession()
-            setupSessionObservers()
             session.setupVideoEncoder(getVideoEncodeConfig())
             session.setDecoderSurface(Surface(remotePreview.surfaceTexture))
             startCameraPreview()
@@ -296,7 +295,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             session.stopPreview()
             session.setDecoderSurface(null)
             session.releasePeerConnection()
-            releaseSession()
         }
         return true
     }
@@ -324,6 +322,10 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────
+
+    override fun getPreviewSurfaceForRestart(): Surface? {
+        return if (localPreview.isAvailable) Surface(localPreview.surfaceTexture) else null
+    }
 
     override fun onDestroyView() {
         super.onDestroyView()
