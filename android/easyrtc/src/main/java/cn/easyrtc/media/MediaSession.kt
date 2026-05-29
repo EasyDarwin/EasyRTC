@@ -115,7 +115,7 @@ class MediaSession {
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {
         val codec = if (config.getUseHevc()) CODEC_H265 else CODEC_H264
         setEncoderRotation(90)
-        val ret = nativeSetupVideoEncoder(
+        val ret = nativeSetupVideoEncoderParam(
             nativePtr, codec,
             config.getWidth(), config.getHeight(),
             config.getBitRate(), config.getFrameRate(),
@@ -219,7 +219,7 @@ class MediaSession {
         audioCodec: Int
     ): Int
 
-    private external fun nativeSetupVideoEncoder(
+    private external fun nativeSetupVideoEncoderParam(
         sessionPtr: Long,
         codec: Int,
         width: Int,

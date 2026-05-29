@@ -387,7 +387,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
         releaseCaptureSession(s);
         return false;
     }
-
+    assert(s->cameraInputWindow && "cameraInputWindow should be created before capture session");
     if (s->cameraInputWindow) {
         camStatus = ACaptureSessionOutput_create(
                 reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow.get()), &s->cameraInputOutput);
@@ -408,7 +408,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
         }
         s->cameraInputReady = true;
     }
-
+    assert(s->previewWindow && "previewWindow should be created before capture session");
     if (s->previewWindow) {
         camStatus = ACaptureSessionOutput_create(
                 reinterpret_cast<ACameraWindowType *>(s->previewWindow.get()), &s->previewOutput);
@@ -777,16 +777,28 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     // Create early EGL context + OES texture + SurfaceTexture for camera-to-encoder path.
     // This allows the capture session to include the cameraInput output from the start,
     // avoiding session rebuild when encoding starts/stops.
-    if (session->videoEncoder) {
-        auto p = session->videoEncoder;
-        int stW = session->encoderSwapWH ? p->height : p->width;
-        int stH = session->encoderSwapWH ? p->width : p->height;
+    assert(session->cameraOesTex == 0 && "cameraOesTex should be 0 before creation");
+    assert(session->cameraInputSurfaceTexture == nullptr && "cameraInputSurfaceTexture should be null before creation");
+    assert(session->cameraInputWindow == nullptr && "cameraInputWindow should be null before creation");
+    assert(session->encoderParams.width > 0 && session->encoderParams.height > 0 && "Encoder params should be set before starting preview");
+    if (session->encoderParams.width > 0) {
+        int stW = session->encoderSwapWH ? session->encoderParams.height : session->encoderParams.width;
+        int stH = session->encoderSwapWH ? session->encoderParams.width : session->encoderParams.height;
         if (createEarlyEglAndOesTex(session)) {
-            ensureCameraInputSurfaceTexture(env, session, stW, stH);
+            if (!ensureCameraInputSurfaceTexture(env, session, stW, stH)){
+                LOGE("[CRITICAL] nativeStartPreview: failed to create camera input SurfaceTexture");
+                releaseEarlyEgl(session);
+                assert(false && "Failed to create camera input SurfaceTexture");
+                return -1;
+            }
+        }else {
+            LOGE("[CRITICAL] nativeStartPreview: failed to create early EGL and OES texture");
+            assert(false && "Failed to create early EGL and OES texture");
         }
     }
 
     if (!createCaptureSession(session, false)) {
+        assert(false && "Failed to create camera capture session");
         closeCamera(session);
         return -1;
     }
@@ -879,10 +891,6 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
 
     frameDumpInit(&session->frameDump, session->videoCodec, session->audioCodec);
 
-    if (session->videoEncoder && session->videoTransceiver) {
-        session->videoEncoder->transceiver = session->videoTransceiver;
-        LOGD("Video encoder transceiver wired: %p", session->videoTransceiver);
-    }
     session->statThread = std::thread([session]() {
         LOGI("MediaSession stats thread started");
         auto lastReportTime = std::chrono::steady_clock::now();
@@ -906,10 +914,10 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
 }
 
 JNIEXPORT jint JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
+Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoderParam(
         JNIEnv *env, jobject thiz, jlong sessionPtr,
         jint codec, jint width, jint height, jint bitrate, jint fps, jint iframeInterval) {
-    LOGI("[CRITICAL] nativeSetupVideoEncoder ENTRY: sessionPtr=%p codec=%d size=%dx%d bitrate=%d fps=%d iframe=%d",
+    LOGI("[CRITICAL] nativeSetupVideoEncoderParam ENTRY: sessionPtr=%p codec=%d size=%dx%d bitrate=%d fps=%d iframe=%d",
          reinterpret_cast<void *>(sessionPtr), codec, width, height, bitrate, fps, iframeInterval);
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
@@ -918,30 +926,15 @@ Java_cn_easyrtc_media_MediaSession_nativeSetupVideoEncoder(
     const bool swapWH = session->encoderSwapWH;
     const int encoderWidth = swapWH ? height : width;
     const int encoderHeight = swapWH ? width : height;
-    AMediaFormat *format = AMediaFormat_new();
-    AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, mime);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, encoderWidth);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, encoderHeight);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, bitrate);
-//    public static final int BITRATE_MODE_CBR = 2;
-//    public static final int BITRATE_MODE_CBR_FD = 3;
-//    public static final int BITRATE_MODE_CQ = 0;
-//    public static final int BITRATE_MODE_VBR = 1;
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BITRATE_MODE, 2);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, fps);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, iframeInterval);
-    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, COLOR_FormatSurface);
 
-    auto pipeline = std::make_shared<MediaPipeline>();
-    pipeline->transceiver = session->videoTransceiver;
-    pipeline->width = encoderWidth;
-    pipeline->height = encoderHeight;
-    pipeline->bitrate = bitrate;
-    pipeline->fps = fps;
-    pipeline->iframeInterval = iframeInterval;
-    pipeline->format = std::shared_ptr<AMediaFormat>(format, AMediaFormat_delete);
-    pipeline->mime = mime;
-    session->videoEncoder = pipeline;
+    session->videoCodec = codec;
+    session->encoderParams.width = encoderWidth;
+    session->encoderParams.height = encoderHeight;
+    session->encoderParams.bitrate = bitrate;
+    session->encoderParams.fps = fps;
+    session->encoderParams.iframeInterval = iframeInterval;
+    session->encoderParams.mime = mime;
+
     LOGI("[CRITICAL] EncoderRotate setup: req=%dx%d out=%dx%d swap=%d rot=%d mime=%s",
          width, height, encoderWidth, encoderHeight, swapWH ? 1 : 0, session->encoderRotation, mime);
     return 0;
@@ -1107,7 +1100,30 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     LOGI("[CRITICAL] nativeStartSend ENTRY: sessionPtr=%p", reinterpret_cast<void *>(sessionPtr));
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
-    assert(session->videoEncoder);
+    assert(session->encoderParams.width > 0 && "encoder params not set");
+    assert(session->videoTransceiver && "video transceiver not initialized");
+
+    auto pipeline = std::make_shared<MediaPipeline>();
+    pipeline->transceiver = session->videoTransceiver;
+    pipeline->width = session->encoderParams.width;
+    pipeline->height = session->encoderParams.height;
+    pipeline->bitrate = session->encoderParams.bitrate;
+    pipeline->fps = session->encoderParams.fps;
+    pipeline->iframeInterval = session->encoderParams.iframeInterval;
+    pipeline->mime = session->encoderParams.mime;
+
+    AMediaFormat *format = AMediaFormat_new();
+    AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, pipeline->mime.c_str());
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, pipeline->width);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, pipeline->height);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BIT_RATE, pipeline->bitrate);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_BITRATE_MODE, 2);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_FRAME_RATE, pipeline->fps);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_I_FRAME_INTERVAL, pipeline->iframeInterval);
+    AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_COLOR_FORMAT, COLOR_FormatSurface);
+    pipeline->format = std::shared_ptr<AMediaFormat>(format, AMediaFormat_delete);
+
+    session->videoEncoder = pipeline;
     assert(!session->videoEncoder->running.load() && "videoEncoder already running");
     LOGI("[CRITICAL] StartSend: initializing video encoder");
     auto p = session->videoEncoder;
@@ -1434,6 +1450,8 @@ Java_cn_easyrtc_media_MediaSession_nativeCreateOffer(
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
     assert(session->peerConnection && "Invalid peer connection");
+    assert(session->audioTransceiver);
+    assert(session->videoTransceiver);
     EasyRTC_CreateOffer(session->peerConnection, sdpCallback, session);
 }
 

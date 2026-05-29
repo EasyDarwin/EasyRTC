@@ -33,6 +33,16 @@ struct VideoDecoderPipeline;
 struct AudioCapturePipeline;
 struct MediaPipeline;
 struct EncoderGlBridge;
+
+struct EncoderParams {
+    int width = 0;
+    int height = 0;
+    int bitrate = 0;
+    int fps = 0;
+    int iframeInterval = 0;
+    std::string mime;
+};
+
 struct MediaSession {
     EasyRTC_PeerConnection peerConnection = nullptr;
     EasyRTC_Transceiver videoTransceiver = nullptr;
@@ -74,6 +84,7 @@ struct MediaSession {
     int audioCodec = 5;
     int encoderRotation = 90;
     bool encoderSwapWH = true;
+    EncoderParams encoderParams;
     std::array<float, 16> cameraInputTransform = {
             1.f, 0.f, 0.f, 0.f,
             0.f, 1.f, 0.f, 0.f,

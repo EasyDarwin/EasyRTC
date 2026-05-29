@@ -27,6 +27,7 @@ import cn.easyrtc.media.MediaSession
 import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
 import cn.easydarwin.easyrtc.ui.hub.HubFragment
 
+import cn.easydarwin.easyrtc.BuildConfig
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
@@ -95,6 +96,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
         setupSessionObservers()
 
         (activity as? MainActivity)?.webSocketServiceLiveData?.observe(viewLifecycleOwner) { service ->
+            webSocketService = service
             service?.events?.observe(viewLifecycleOwner) { event ->
                 when (event) {
                     is WebSocketService.Event.Connected -> onWSConnected()
@@ -120,7 +122,9 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             tvFragmentUUID.text = "来电: ${event.uuid}"
             appendLog("来电: ${event.uuid}")
             view.post {
-                val ws = webSocketService ?: return@post
+                val ws = webSocketService
+                if (BuildConfig.DEBUG) check(ws != null) { "webSocketService is null when handling incoming call" }
+                if (ws == null) return@post
                 val callSetup = ws.prepareIncomingCall(event.data, event.callout)
                 session.releasePeerConnection()
                 session.createPeerConnection(

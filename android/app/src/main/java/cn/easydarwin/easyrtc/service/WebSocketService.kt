@@ -74,11 +74,11 @@ class WebSocketService : Service() {
                 }
 
                 override fun onTypeAndData(type: Int, data: ByteArray) {
+                    val uuid = manager.byteArrayToUuid(data.copyOfRange(8, 24))
                     if (HPREQGETWEBRTCOFFERINFO == type) {
-                        //device 设备端逻辑
-                        _events.postValue(Event.IncomingCall(manager.uuidClientB, data))
+                        _events.postValue(Event.IncomingCall(uuid, data))
                     } else if (HPNTIWEBRTCOFFERINFO2 == type) {
-                        _events.postValue(Event.IncomingCall(manager.uuidClientB, data, true))
+                        _events.postValue(Event.IncomingCall(uuid, data, true))
                     }
                 }
             }
