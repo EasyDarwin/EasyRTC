@@ -129,19 +129,21 @@ static void reportMediaInputKbpsStats(MediaSession *session) {
 
 // ─── Early EGL / OES texture creation (before GL bridge exists) ────────────
 
-static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, int width, int height);
+static void ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, int width, int height);
 
-static bool createEarlyEglAndOesTex(MediaSession* s) {
-    if (s->cameraOesTex != 0) return true;
-
+static void createEarlyEglAndOesTex(MediaSession* s) {
+    assert(s->cameraOesTex == 0 && "Early EGL and OES texture should only be created once");
+    bool ok = true;
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY) {
         LOGE("[CRITICAL] createEarlyEgl: eglGetDisplay failed");
-        return false;
+        assert(false && "eglGetDisplay failed");
+        return;
     }
     if (!eglInitialize(display, nullptr, nullptr)) {
         LOGE("[CRITICAL] createEarlyEgl: eglInitialize failed");
-        return false;
+        assert(false && "eglInitialize failed");
+        return;
     }
 
     const EGLint configAttrs[] = {
@@ -156,7 +158,8 @@ static bool createEarlyEglAndOesTex(MediaSession* s) {
     if (!eglChooseConfig(display, configAttrs, &config, 1, &numConfig) || numConfig < 1) {
         LOGE("[CRITICAL] createEarlyEgl: eglChooseConfig failed");
         eglTerminate(display);
-        return false;
+        assert(false && "eglChooseConfig failed");
+        return;
     }
 
     const EGLint pbufferAttrs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
@@ -164,7 +167,8 @@ static bool createEarlyEglAndOesTex(MediaSession* s) {
     if (pbuffer == EGL_NO_SURFACE) {
         LOGE("[CRITICAL] createEarlyEgl: eglCreatePbufferSurface failed");
         eglTerminate(display);
-        return false;
+        assert(false && "eglCreatePbufferSurface failed");
+        return;
     }
 
     const EGLint ctxAttrs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
@@ -173,7 +177,8 @@ static bool createEarlyEglAndOesTex(MediaSession* s) {
         LOGE("[CRITICAL] createEarlyEgl: eglCreateContext failed");
         eglDestroySurface(display, pbuffer);
         eglTerminate(display);
-        return false;
+        assert(false && "eglCreateContext failed");
+        return;
     }
 
     if (!eglMakeCurrent(display, pbuffer, pbuffer, context)) {
@@ -181,27 +186,28 @@ static bool createEarlyEglAndOesTex(MediaSession* s) {
         eglDestroyContext(display, context);
         eglDestroySurface(display, pbuffer);
         eglTerminate(display);
-        return false;
+        assert(false && "eglMakeCurrent failed");
+        return;
     }
 
-    GLuint oes = 0;
-    glGenTextures(1, &oes);
-    glBindTexture(GL_TEXTURE_EXTERNAL_OES, oes);
+    glGenTextures(1, &s->cameraOesTex);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, s->cameraOesTex);
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
+    assert(s->cameraOesTex != 0 && "Failed to create OES texture for camera input");
+
     // Don't keep the pbuffer surface current; just keep context + OES tex alive
     eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(display, pbuffer);
 
-    s->cameraOesTex = oes;
     s->cameraEglDisplay = reinterpret_cast<void*>(display);
     s->cameraEglContext = reinterpret_cast<void*>(context);
     LOGI("[CRITICAL] createEarlyEgl: SUCCESS display=%p ctx=%p oesTex=%u",
-         s->cameraEglDisplay, s->cameraEglContext, oes);
-    return true;
+         s->cameraEglDisplay, s->cameraEglContext, s->cameraOesTex);
+
 }
 
 static void releaseEarlyEgl(MediaSession* s) {
@@ -210,8 +216,7 @@ static void releaseEarlyEgl(MediaSession* s) {
         EGLContext context = reinterpret_cast<EGLContext>(s->cameraEglContext);
         if (display != EGL_NO_DISPLAY && context != EGL_NO_CONTEXT) {
             eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, context);
-            GLuint oes = s->cameraOesTex;
-            glDeleteTextures(1, &oes);
+            glDeleteTextures(1, &s->cameraOesTex);
             eglDestroyContext(display, context);
             eglTerminate(display);
             LOGI("[CRITICAL] releaseEarlyEgl: done oesTex=%u", s->cameraOesTex);
@@ -388,7 +393,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
         return false;
     }
     assert(s->cameraInputWindow && "cameraInputWindow should be created before capture session");
-    if (s->cameraInputWindow) {
+    {
         camStatus = ACaptureSessionOutput_create(
                 reinterpret_cast<ACameraWindowType *>(s->cameraInputWindow.get()), &s->cameraInputOutput);
         if (camStatus != ACAMERA_OK) {
@@ -409,7 +414,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
         s->cameraInputReady = true;
     }
     assert(s->previewWindow && "previewWindow should be created before capture session");
-    if (s->previewWindow) {
+    {
         camStatus = ACaptureSessionOutput_create(
                 reinterpret_cast<ACameraWindowType *>(s->previewWindow.get()), &s->previewOutput);
         if (camStatus != ACAMERA_OK) {
@@ -781,21 +786,10 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     assert(session->cameraInputSurfaceTexture == nullptr && "cameraInputSurfaceTexture should be null before creation");
     assert(session->cameraInputWindow == nullptr && "cameraInputWindow should be null before creation");
     assert(session->encoderParams.width > 0 && session->encoderParams.height > 0 && "Encoder params should be set before starting preview");
-    if (session->encoderParams.width > 0) {
-        int stW = session->encoderSwapWH ? session->encoderParams.height : session->encoderParams.width;
-        int stH = session->encoderSwapWH ? session->encoderParams.width : session->encoderParams.height;
-        if (createEarlyEglAndOesTex(session)) {
-            if (!ensureCameraInputSurfaceTexture(env, session, stW, stH)){
-                LOGE("[CRITICAL] nativeStartPreview: failed to create camera input SurfaceTexture");
-                releaseEarlyEgl(session);
-                assert(false && "Failed to create camera input SurfaceTexture");
-                return -1;
-            }
-        }else {
-            LOGE("[CRITICAL] nativeStartPreview: failed to create early EGL and OES texture");
-            assert(false && "Failed to create early EGL and OES texture");
-        }
-    }
+    int stW = session->encoderSwapWH ? session->encoderParams.height : session->encoderParams.width;
+    int stH = session->encoderSwapWH ? session->encoderParams.width : session->encoderParams.height;
+    createEarlyEglAndOesTex(session);
+    ensureCameraInputSurfaceTexture(env, session, stW, stH);
 
     if (!createCaptureSession(session, false)) {
         assert(false && "Failed to create camera capture session");
@@ -995,38 +989,37 @@ Java_cn_easyrtc_media_MediaSession_nativeSetDecoderSurface(
     }
 }
 
-static bool ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, int width, int height) {
-    if (!session || !session->javaObj || session->cameraOesTex == 0) {
-        return false;
-    }
-    if (session->cameraInputWindow && session->cameraInputSurfaceTexture && session->cameraInputSurfaceTextureObj) {
-        return true;
-    }
+static void ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, int width, int height) {
+    assert(session && "Invalid session");
+    assert(env && "Invalid JNI environment");
+    assert(session->cameraOesTex != 0 && "cameraOesTex should be created before ensuring SurfaceTexture");
+    assert(session->javaObj && "Java object should be set before ensuring SurfaceTexture");
+    assert(session->cameraInputWindow == nullptr &&
+           "Camera input cameraInputWindow should not exist before ensuring");
+    assert(session->cameraInputSurfaceTexture == nullptr &&
+           "Camera input cameraInputSurfaceTexture should not exist before ensuring");
+    assert(session->cameraInputSurfaceTextureObj == nullptr &&
+           "Camera input SurfaceTexture Java object should not exist before ensuring");
     jclass clazz = env->GetObjectClass(session->javaObj);
-    if (!clazz) return false;
+    assert(clazz && "Failed to get Java class for creating SurfaceTexture");
     jmethodID mid = env->GetMethodID(clazz, "createCameraInputSurfaceTexture", "(III)Landroid/graphics/SurfaceTexture;");
-    if (!mid) return false;
+    assert(mid && "Failed to get method ID for createCameraInputSurfaceTexture");
     jobject stLocal = env->CallObjectMethod(session->javaObj, mid,
                                             static_cast<jint>(session->cameraOesTex),
                                             static_cast<jint>(width), static_cast<jint>(height));
-    if (!stLocal) {
-        return false;
-    }
+    assert(stLocal && "createCameraInputSurfaceTexture returned null");
+    assert(env->IsInstanceOf(stLocal, env->FindClass("android/graphics/SurfaceTexture")) &&
+           "Returned object is not an instance of SurfaceTexture");
 
     session->cameraInputSurfaceTextureObj = env->NewGlobalRef(stLocal);
     env->DeleteLocalRef(stLocal);
     session->cameraInputSurfaceTexture = ASurfaceTexture_fromSurfaceTexture(env, session->cameraInputSurfaceTextureObj);
-    if (!session->cameraInputSurfaceTexture) {
-        return false;
-    }
+    assert(session->cameraInputSurfaceTexture && "Failed to create ASurfaceTexture from SurfaceTexture");
     session->cameraInputWindow = std::shared_ptr<ANativeWindow>(ASurfaceTexture_acquireANativeWindow(session->cameraInputSurfaceTexture), ANativeWindow_release);
-    if (!session->cameraInputWindow) {
-        return false;
-    }
+    assert(session->cameraInputWindow && "Failed to acquire ANativeWindow from ASurfaceTexture");
     LOGI("[CRITICAL] EncoderRotate camera input ST created: st=%p window=%p tex=%u bufferSize=%dx%d",
          session->cameraInputSurfaceTexture, session->cameraInputWindow.get(),
          session->cameraOesTex, width, height);
-    return true;
 }
 
 static void startRenderThread(MediaSession *session) {

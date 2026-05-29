@@ -195,12 +195,14 @@ class CameraPipelineTest {
         val latch = CountDownLatch(1)
         var offerSdp: String? = null
 
+        session.setupVideoEncoder(defaultConfig)
         session.createPeerConnection(
             "stun:stun.l.google.com:19302",
             "turn:turn.example.com:3478",
             "user",
             "pass"
         )
+        session.addTransceivers(MediaSession.CODEC_H264, 5)  // 5 = ALAW
 
         session.createOffer { sdp ->
             offerSdp = sdp
