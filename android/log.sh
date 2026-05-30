@@ -23,15 +23,12 @@ dump_log() {
 dump_tombstone() {
     local OUT="${1:-tombstone_$(date +%Y%m%d_%H%M%S)}"
     local TS_DIR="/data/tombstones"
-    local count=0
-    for i in $(adb ls "$TS_DIR" 2>/dev/null | grep -o 'tombstone_[0-9]*' | sort -t_ -k2 -n); do
-        adb pull "$TS_DIR/$i" "${OUT}_${i}.txt" 2>/dev/null && count=$((count + 1))
-    done
-    if [ $count -eq 0 ]; then
+    local latest=$(adb shell "ls -t $TS_DIR 2>/dev/null" | tr -d '\r' | grep -o 'tombstone_[0-9]*' | head -1)
+    if [ -z "$latest" ]; then
         echo "No tombstones found"
-    else
-        echo "Pulled $count tombstone(s)"
+        return
     fi
+    adb pull "$TS_DIR/$latest" "${OUT}_${latest}.txt" 2>/dev/null && echo "Pulled latest: $latest"
 }
 
 case "${1:-}" in
