@@ -29,6 +29,7 @@ class MediaSession {
     private var nativePtr: Long = 0
     private var inputKbpsStatsListener: ((InputKbpsStats) -> Unit)? = null
     private var transceiverFrameStatsListener: ((TransceiverFrameStats) -> Unit)? = null
+    private var cameraErrorListener: ((Int) -> Unit)? = null
     private var onOfferCallback: WeakReference<(String) -> Unit>? = null
     private var onAnswerCallback: WeakReference<(String) -> Unit>? = null
     private var currentUser: String? = null
@@ -37,7 +38,9 @@ class MediaSession {
     val dataChannel = MutableLiveData<DataChannelEvent>(DataChannelEvent.Idle)
     val remoteVideoSize = MutableLiveData<android.util.Size>(android.util.Size(0, 0))
     val hasCameraError: Boolean
-        get() = nativeHasCameraError(nativePtr)
+        get() = _cameraHasError
+
+    private var _cameraHasError = false
 
     fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
         inputKbpsStatsListener = listener
@@ -47,6 +50,10 @@ class MediaSession {
         transceiverFrameStatsListener = listener
     }
 
+    fun setCameraErrorListener(listener: ((Int) -> Unit)?) {
+        cameraErrorListener = listener
+    }
+
     fun create() {
         assert(nativePtr == 0L)
         nativePtr = nativeCreate()
@@ -54,12 +61,14 @@ class MediaSession {
     }
 
     fun startPreview(surface: Surface): Int {
+        _cameraHasError = false
         val ret = nativeStartPreview(nativePtr, surface)
         EasyRTCLog.i("MediaSession", "startPreview: nativePtr=$nativePtr ret=$ret")
         return ret
     }
 
     fun stopPreview() {
+        _cameraHasError = false
         EasyRTCLog.i("MediaSession", "stopPreview: nativePtr=$nativePtr")
         nativeStopPreview(nativePtr)
     }
@@ -195,6 +204,12 @@ class MediaSession {
     }
 
     @Keep
+    private fun onCameraError(error: Int) {
+        _cameraHasError = true
+        cameraErrorListener?.invoke(error)
+    }
+
+    @Keep
     private fun onConnectionStateChangeEvent(state: Int) {
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
             currentUser = ""
@@ -226,7 +241,6 @@ class MediaSession {
     private external fun nativeCreate(): Long
     private external fun nativeStartPreview(sessionPtr: Long, surface: Surface?): Int
     private external fun nativeStopPreview(sessionPtr: Long)
-    private external fun nativeHasCameraError(sessionPtr: Long): Boolean
 
     private external fun nativeAddTransceivers(
         sessionPtr: Long,

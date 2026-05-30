@@ -56,6 +56,10 @@ class CameraPipelineTest {
     fun setUp() {
         session = MediaSession()
         session.create()
+        session.setCameraErrorListener { error ->
+            session.stopPreview()
+            session.releasePeerConnection()
+        }
     }
 
     @After

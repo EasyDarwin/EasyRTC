@@ -1,5 +1,6 @@
 #include "session/media_session.h"
 #include "session/common.h"
+#include "session/camera_error_handler.h"
 #include "session/transceiver_stats_reporter.h"
 #include "codec/video_encoder.h"
 #include "capture/audio_capture.h"
@@ -179,18 +180,6 @@ static bool switchRepeatingRequest(MediaSession* s, bool includeEncoder) {
 
 static void releaseCaptureSessionOutputs(MediaSession *s);
 static void releaseEarlyEgl(MediaSession* s);
-
-static void onCameraDeviceError(void* context, ACameraDevice* device, int error) {
-    auto* s = static_cast<MediaSession*>(context);
-    LOGE("[CRITICAL] CAMERA DEVICE ERROR: session=%p error=%d — closing camera", s, error);
-    s->cameraError.store(error);
-}
-
-static void onCameraDeviceDisconnected(void* context, ACameraDevice* device) {
-    auto* s = static_cast<MediaSession*>(context);
-    LOGE("[CRITICAL] CAMERA DEVICE DISCONNECTED: session=%p", s);
-    s->cameraError.store(1);
-}
 
 static void onSessionActive(void* context, ACameraCaptureSession* session) {
     auto* s = static_cast<MediaSession*>(context);
@@ -944,7 +933,7 @@ static void startRenderThread(MediaSession *session) {
                     }
                 }else {
                     LOGE("[Render] thread updateTexImage failed");
-                    assert(false && "Encoder updateTexImage failed");
+                    // assert(false && "Encoder updateTexImage failed");
                 }
             usleep(frameIntervalUs);
         }
@@ -1332,14 +1321,6 @@ Java_cn_easyrtc_media_MediaSession_nativeGetIceCandidateType(
     int ret = EasyRTC_GetIceCandidatePairStats(session->peerConnection, &stats);
     if (ret != 0) return -1;
     return static_cast<jint>(stats.local_iceCandidateType);
-}
-
-JNIEXPORT jboolean JNICALL
-Java_cn_easyrtc_media_MediaSession_nativeHasCameraError(
-        JNIEnv *env, jobject thiz, jlong sessionPtr) {
-    auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
-    if (!session) return JNI_TRUE;
-    return session->cameraError.load() != 0 ? JNI_TRUE : JNI_FALSE;
 }
 
 }

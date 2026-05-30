@@ -20,6 +20,7 @@ add_library(easyrtc_media SHARED
     codec/video_decoder.cpp
     session/media_session.cpp
     session/transceiver_stats_reporter.cpp
+    session/camera_error_handler.cpp
     util/frame_dump.cpp
     util/frame_reader.cpp
     gl/encoder_gl_bridge.cpp

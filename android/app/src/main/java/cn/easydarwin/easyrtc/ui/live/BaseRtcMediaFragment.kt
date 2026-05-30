@@ -18,6 +18,13 @@ abstract class BaseRtcMediaFragment : Fragment() {
         session = MediaSession().apply {
             create()
             setDeviceId(SPUtil.getInstance().rtcUserUUID)
+            setCameraErrorListener { error ->
+                runOnMainThread {
+                    AppLogStore.appendCritical("BaseRtcMediaFragment", "Camera error: $error, closing camera and releasing PC")
+                    stopPreview()
+                    releasePeerConnection()
+                }
+            }
         }.also {
             AppLogStore.appendCritical("BaseRtcMediaFragment", "MediaSession created: fragment=${this::class.java.simpleName}")
             onMediaSessionCreated(it)
