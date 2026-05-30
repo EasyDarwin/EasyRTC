@@ -1023,25 +1023,32 @@ static void ensureCameraInputSurfaceTexture(JNIEnv *env, MediaSession *session, 
 }
 
 static void startRenderThread(MediaSession *session) {
-    LOGI("[CRITICAL] startRenderThread ENTRY: session=%p running=%d", session,
-         session ? (session->renderThreadRunning.load() ? 1 : 0) : -1);
-    if (!session || session->renderThreadRunning.load()) {
-        return;
-    }
     auto encoder = session->videoEncoder;
     assert(encoder && "Video encoder must be initialized before starting render thread");
+        // Pass early EGL context + OES tex to GL bridge so it reuses them
+    session->encoderGlBridge = encoderGlCreate(
+            encoder->encoderInputSurface.get(), encoder->width, encoder->height, session->encoderRotation,
+            session->cameraOesTex,
+            session->cameraEglDisplay, session->cameraEglContext);
+
+    if (!session->deviceId.empty() && session->encoderGlBridge) {
+        session->encoderGlBridge->deviceId = session->deviceId;
+    }
+    assert (session->encoderGlBridge && session->encoderGlBridge->initialized);
+    LOGI("[CRITICAL] Render start: rotation=%d swapWH=%d", session->encoderRotation, session->encoderSwapWH ? 1 : 0);
     const uint32_t frameIntervalUs = static_cast<uint32_t>(1000000 / (encoder->fps > 0 ? encoder->fps : 29.97));
     session->renderThreadRunning.store(true);
     session->renderThread = std::thread([session, frameIntervalUs]() {
-        LOGI("[CRITICAL] EncoderRotate render thread started");
+        LOGI("[Render] thread started");
+        defer(LOGI("[Render] thread stopped"));
         if (!encoderGlMakeCurrent(session->encoderGlBridge)) {
-            LOGE("[CRITICAL] EncoderRotate render thread makeCurrent failed");
+            LOGE("[Render] thread makeCurrent failed");
         }
         if (session->cameraInputSurfaceTexture && session->encoderGlBridge) {
             ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
             int attach = ASurfaceTexture_attachToGLContext(session->cameraInputSurfaceTexture,
                                                             session->encoderGlBridge->cameraOesTex);
-            LOGI("[CRITICAL] EncoderRotate render thread attachToGLContext=%d tex=%u",
+            LOGI("[Render] thread attachToGLContext=%d tex=%u",
                  attach, session->encoderGlBridge->cameraOesTex);
         }
         while (session->renderThreadRunning.load()) {
@@ -1053,24 +1060,23 @@ static void startRenderThread(MediaSession *session) {
                     if (session->connectState == 3) {
                         encoderGlSetInputTransform(session->encoderGlBridge, m);
                         if (!encoderGlRenderFrame(session->encoderGlBridge, static_cast<long long>(ts))) {
-                            LOGW("[CRITICAL] EncoderRotate render thread frame render failed");
+                            LOGW("[Render] thread frame render failed");
                             assert(false && "Encoder render failed");
                         }
                     } else {
-                        FLOGI("[CRITICAL] EncoderRotate render thread: not connected, skipping frame");
+                        FLOGI("[Render] thread: not connected, skipping frame");
                     }
                 }else {
-                    LOGE("[CRITICAL] EncoderRotate render thread updateTexImage failed");
+                    LOGE("[Render] thread updateTexImage failed");
                     assert(false && "Encoder updateTexImage failed");
                 }
             }
             usleep(frameIntervalUs);
         }
         if (session->cameraInputSurfaceTexture) {
-            LOGI("[CRITICAL] EncoderRotate render thread: detaching SurfaceTexture");
+            LOGI("[Render] thread: detaching SurfaceTexture");
             ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
         }
-        LOGI("[CRITICAL] EncoderRotate render thread stopped");
     });
     pthread_t th = session->renderThread.native_handle();
     sched_param sch_params;
@@ -1086,6 +1092,8 @@ static void stopRenderThread(MediaSession *session) {
     if (session->renderThread.joinable()) {
         session->renderThread.join();
     }
+    LOGI("[CRITICAL] nativeStopSend: before encoderGlRelease");
+    encoderGlReleaseKeepOesEgl(session->encoderGlBridge);
 }
 
 JNIEXPORT jint JNICALL
@@ -1126,25 +1134,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     }
     assert(p->encoder);
 
-    // Pass early EGL context + OES tex to GL bridge so it reuses them
-    session->encoderGlBridge = encoderGlCreate(
-            p->encoderInputSurface.get(), p->width, p->height, session->encoderRotation,
-            session->cameraOesTex,
-            session->cameraEglDisplay, session->cameraEglContext);
-
-    if (!session->deviceId.empty() && session->encoderGlBridge) {
-        session->encoderGlBridge->deviceId = session->deviceId;
-    }
-    if (session->encoderGlBridge && session->encoderGlBridge->initialized) {
-        LOGI("[CRITICAL] EncoderRotate pipeline: camera->offscreen->encoder active rot=%d size=%dx%d",
-             session->encoderRotation, p->width, p->height);
-    } else {
-        LOGW("[CRITICAL] EncoderRotate pipeline: GL bridge not fully initialized");
-    }
-    LOGI("[CRITICAL] EncoderRotate start send: rotation=%d swapWH=%d",
-         session->encoderRotation, session->encoderSwapWH ? 1 : 0);
-
-    LOGI("[CRITICAL] nativeStartSend: before startRenderThread");
     startRenderThread(session);
     media_status_t status = AMediaCodec_start(p->encoder);
     if (status != AMEDIA_OK) {
@@ -1334,8 +1323,6 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
     audioCaptureStop(session);
     LOGI("[CRITICAL] nativeStopSend: before stopRenderThread");
     stopRenderThread(session);
-    LOGI("[CRITICAL] nativeStopSend: before encoderGlRelease");
-    encoderGlReleaseKeepOesEgl(session->encoderGlBridge);
 
     if (session->videoEncoder) {
         auto p = session->videoEncoder;
