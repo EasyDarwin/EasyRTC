@@ -1,9 +1,10 @@
 package cn.easydarwin.easyrtc.ui.live
 
 import android.os.Bundle
+import android.os.Handler
 import android.os.Looper
-import android.view.Surface
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.MutableLiveData
 import cn.easyrtc.media.MediaSession
 import cn.easyrtc.model.VideoEncodeConfig
 import cn.easydarwin.easyrtc.utils.AppLogStore
@@ -13,40 +14,33 @@ abstract class BaseRtcMediaFragment : Fragment() {
     protected lateinit var session: MediaSession
         private set
 
+    private val cameraErrorEvent = MutableLiveData<Int?>()
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     override fun onViewCreated(view: android.view.View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        cameraErrorEvent.observe(viewLifecycleOwner) { error ->
+            if (error == null) return@observe
+            cameraErrorEvent.value = null
+            mainHandler.post {
+                if (!isAdded) return@post
+                parentFragmentManager.beginTransaction()
+                    .detach(this@BaseRtcMediaFragment)
+                    .commitNowAllowingStateLoss()
+                parentFragmentManager.beginTransaction()
+                    .attach(this@BaseRtcMediaFragment)
+                    .commitNowAllowingStateLoss()
+            }
+        }
         session = MediaSession().apply {
             create()
             setDeviceId(SPUtil.getInstance().rtcUserUUID)
             setCameraErrorListener { error ->
-                runOnMainThread {
-                    AppLogStore.appendCritical("BaseRtcMediaFragment", "Camera error: $error, closing camera and releasing PC")
-                    stopPreview()
-                    releasePeerConnection()
-                }
+                cameraErrorEvent.postValue(error)
             }
         }.also {
             AppLogStore.appendCritical("BaseRtcMediaFragment", "MediaSession created: fragment=${this::class.java.simpleName}")
             onMediaSessionCreated(it)
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (session.hasCameraError) {
-            val surface = getPreviewSurfaceForRestart()
-            surface?.let {
-                AppLogStore.appendCritical(
-                    "BaseRtcMediaFragment",
-                    "Camera restart after device error, fragment=${this::class.java.simpleName}")
-                session.setupVideoEncoder(getVideoEncodeConfig())
-                val result = session.startPreview(it)
-                if (result == 0) {
-                    AppLogStore.appendCritical("BaseRtcMediaFragment", "Camera restarted successfully")
-                } else {
-                    AppLogStore.appendCritical("BaseRtcMediaFragment", "Camera restart failed: $result")
-                }
-            }
         }
     }
 
@@ -57,10 +51,9 @@ abstract class BaseRtcMediaFragment : Fragment() {
         session.dataChannel.removeObservers(viewLifecycleOwner)
         session.remoteVideoSize.removeObservers(viewLifecycleOwner)
         onMediaSessionReleasing(session)
+        session.setCameraErrorListener(null)
         session.release()
     }
-
-    protected open fun getPreviewSurfaceForRestart(): Surface? = null
 
     protected open fun onMediaSessionCreated(session: MediaSession) {}
 

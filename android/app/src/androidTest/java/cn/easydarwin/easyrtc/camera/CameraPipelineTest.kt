@@ -57,8 +57,8 @@ class CameraPipelineTest {
         session = MediaSession()
         session.create()
         session.setCameraErrorListener { error ->
-            session.stopPreview()
             session.releasePeerConnection()
+            session.stopPreview()
         }
     }
 

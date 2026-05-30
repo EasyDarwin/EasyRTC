@@ -126,7 +126,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
                 if (BuildConfig.DEBUG) check(ws != null) { "webSocketService is null when handling incoming call" }
                 if (ws == null) return@post
                 val callSetup = ws.prepareIncomingCall(event.data, event.callout)
-                session.releasePeerConnection()
                 session.createPeerConnection(
                     "stun:${callSetup.stunTurnInfo.stunServer}",
                     "turn:${callSetup.stunTurnInfo.turnServer}",
@@ -167,12 +166,12 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
                 }
                 is LiveUiState.Disconnected -> {
                     appendLog("连接断开")
-                    stopEasyRTC()
+                    session.releasePeerConnection()
                 }
                 is LiveUiState.Failed -> {
                     appendLog("连接失败")
                     state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("失败原因: $it") }
-                    stopEasyRTC()
+                    session.releasePeerConnection()
                 }
             }
         }
@@ -246,7 +245,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
 
         endCallButton.setOnClickListener {
             Log.d(TAG, "挂电话")
-            stopEasyRTC()
+            session.releasePeerConnection()
         }
 
         switchCameraButton.setOnClickListener {
@@ -296,9 +295,9 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             surface == remote_preview_.surfaceTexture -> smallSurfaceTexture = null
         }
         if (mainSurfaceTexture == null && smallSurfaceTexture == null) {
+            session.releasePeerConnection()
             session.stopPreview()
             session.setDecoderSurface(null)
-            session.releasePeerConnection()
         }
         return true
     }
@@ -327,10 +326,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
-
-    override fun getPreviewSurfaceForRestart(): Surface? {
-        return if (local_preview_.isAvailable) Surface(local_preview_.surfaceTexture) else null
-    }
 
     override fun onDestroyView() {
         super.onDestroyView()

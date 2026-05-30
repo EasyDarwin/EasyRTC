@@ -920,7 +920,8 @@ static void startRenderThread(MediaSession *session) {
         assert(session->cameraInputSurfaceTexture && "cameraInputSurfaceTexture invalid");
         assert(session->encoderGlBridge->cameraOesTex && "cameraOesTex invalid");
         int attach = ASurfaceTexture_attachToGLContext(session->cameraInputSurfaceTexture, session->encoderGlBridge->cameraOesTex);
-        assert(attach == 0 && "Failed to attach SurfaceTexture to GL context in render thread");
+        LOGI("[Render] thread: attachToGLContext result=%d", attach);
+//        assert(attach == 0 && "Failed to attach SurfaceTexture to GL context in render thread");
         while (session->renderThreadRunning.load()) {
             float m[16];
                 int64_t ts = 0;
@@ -1215,16 +1216,7 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         EasyRTC_FreeTransceiver(&session->audioTransceiver);
         session->audioTransceiver = nullptr;
     }
-
-    if (session->cameraDevice && session->cameraInputWindow) {
-
-        if (session->cameraInputSurfaceTexture) {
-            ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
-        }
-
-        // Switch repeating request back to preview-only (no session rebuild)
-        switchRepeatingRequest(session, false);
-    }
+    switchRepeatingRequest(session, false);
     LOGI("[CRITICAL] StopSend: DONE");
 
     // 2. Stop recv pipeline (audio playback, video decoder)

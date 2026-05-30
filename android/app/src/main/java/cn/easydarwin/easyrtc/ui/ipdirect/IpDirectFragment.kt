@@ -143,7 +143,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         endCallButton.setOnClickListener {
             server?.sendHangup()
             resetCallUI()
-            view?.postDelayed({ session.releasePeerConnection() }, 300)
+            session.releasePeerConnection()
         }
 
         switchCameraButton.setOnClickListener { switchCamera() }
@@ -185,7 +185,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     override fun onClientDisconnected(remoteAddress: String) {
         appendLog("客户端断开: $remoteAddress")
         resetCallUI()
-        view?.postDelayed({ session.releasePeerConnection() }, 300)
+        session.releasePeerConnection()
     }
     override fun onClientReady() {
         appendLog("客户端握手完成，创建 Offer...")
@@ -211,7 +211,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     private fun createAndSendOffer() {
-        session.releasePeerConnection()
         session.createPeerConnection("", "", "", "")
         val config = getVideoEncodeConfig()
         val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
@@ -292,9 +291,9 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
             surface == remotePreview.surfaceTexture -> smallSurfaceTexture = null
         }
         if (mainSurfaceTexture == null && smallSurfaceTexture == null) {
+            session.releasePeerConnection()
             session.stopPreview()
             session.setDecoderSurface(null)
-            session.releasePeerConnection()
         }
         return true
     }
@@ -322,10 +321,6 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────
-
-    override fun getPreviewSurfaceForRestart(): Surface? {
-        return if (localPreview.isAvailable) Surface(localPreview.surfaceTexture) else null
-    }
 
     override fun onDestroyView() {
         super.onDestroyView()

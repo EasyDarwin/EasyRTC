@@ -254,8 +254,8 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
         if (surface == localPreview.surfaceTexture) {
             localSurfaceTexture = null
-            session.stopPreview()
             session.releasePeerConnection()
+            session.stopPreview()
             isRunning = false
             isLocalPreviewStarted = false
         }
@@ -293,10 +293,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
     private fun updateButtonState() {
         btnToggleStream.text = if (isRunning) "停止推流" else "开始推流"
-    }
-
-    override fun getPreviewSurfaceForRestart(): Surface? {
-        return localSurfaceTexture?.let { Surface(it) }
     }
 
     override fun onResume() {
