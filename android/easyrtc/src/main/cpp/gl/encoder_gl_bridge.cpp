@@ -332,61 +332,29 @@ std::shared_ptr<EncoderGlBridge> encoderGlCreate(ANativeWindow* encoderWindow,
     bridge->height = height;
     bridge->rotation = rotation;
     bridge->externalOesTex = externalOesTex;
-    bridge->initialized = (encoderWindow != nullptr && width > 0 && height > 0) &&
-                          initEglForEncoder(bridge.get(), externalEglDisplay, externalEglContext);
-    LOGI("[CRITICAL] EncoderRotate GL bridge create: window=%p size=%dx%d rot=%d init=%d",
-         encoderWindow, width, height, rotation, bridge->initialized ? 1 : 0);
+    assert(encoderWindow && "Invalid encoder window");
+    assert(width > 0);
+    assert(height > 0);
+    auto ok = initEglForEncoder(bridge.get(), externalEglDisplay, externalEglContext);
+    assert(ok && "Failed to initialize EGL for encoder");
+    LOGI("[CRITICAL] EncoderRotate GL bridge create: window=%p size=%dx%d rot=%d ",
+         encoderWindow, width, height, rotation);
     LOGI("[CRITICAL] EncoderRotate GL bridge cameraOesTex=%u", bridge->cameraOesTex);
     return bridge;
 }
 
-bool encoderGlRenderTestFrame(const std::shared_ptr<EncoderGlBridge>& bridge) {
-    if (!bridge || !bridge->initialized) {
-        return false;
-    }
-    EGLDisplay display = reinterpret_cast<EGLDisplay>(bridge->eglDisplay);
-    EGLSurface surface = reinterpret_cast<EGLSurface>(bridge->eglSurface);
-    EGLContext context = reinterpret_cast<EGLContext>(bridge->eglContext);
-    if (display == EGL_NO_DISPLAY || surface == EGL_NO_SURFACE || context == EGL_NO_CONTEXT) {
-        return false;
-    }
-    if (!eglMakeCurrent(display, surface, surface, context)) {
-        LOGE("[CRITICAL] EncoderRotate render: eglMakeCurrent failed");
-        return false;
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, bridge->fbo);
-    const float r = (bridge->rotation % 360 == 90) ? 0.0f : 0.15f;
-    const float g = (bridge->rotation % 360 == 180) ? 0.0f : 0.35f;
-    const float b = (bridge->rotation % 360 == 270) ? 0.0f : 0.55f;
-    glViewport(0, 0, bridge->width, bridge->height);
-    glClearColor(r, g, b, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, bridge->width, bridge->height);
-    glClearColor(r, g, b, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    const EGLBoolean swapOk = eglSwapBuffers(display, surface);
-    if (!swapOk) {
-        LOGE("[CRITICAL] EncoderRotate render: eglSwapBuffers failed");
-        return false;
-    }
-    return true;
-}
-
 bool encoderGlMakeCurrent(const std::shared_ptr<EncoderGlBridge>& bridge) {
-    if (!bridge || !bridge->initialized) {
-        return false;
-    }
+    assert(bridge);
     EGLDisplay display = reinterpret_cast<EGLDisplay>(bridge->eglDisplay);
     EGLSurface surface = reinterpret_cast<EGLSurface>(bridge->eglSurface);
     EGLContext context = reinterpret_cast<EGLContext>(bridge->eglContext);
     if (display == EGL_NO_DISPLAY || surface == EGL_NO_SURFACE || context == EGL_NO_CONTEXT) {
+        assert(false);
         return false;
     }
     if (!eglMakeCurrent(display, surface, surface, context)) {
         LOGE("[CRITICAL] EncoderRotate render: eglMakeCurrent failed in makeCurrent");
+        assert(false);
         return false;
     }
     return true;
@@ -502,17 +470,17 @@ static void renderDeviceIdOverlay(const std::shared_ptr<EncoderGlBridge>& bridge
 }
 
 bool encoderGlRenderFrame(const std::shared_ptr<EncoderGlBridge>& bridge, long long timestampNs) {
-    if (!bridge || !bridge->initialized) {
-        return false;
-    }
+    assert(bridge);
     EGLDisplay display = reinterpret_cast<EGLDisplay>(bridge->eglDisplay);
     EGLSurface surface = reinterpret_cast<EGLSurface>(bridge->eglSurface);
     EGLContext context = reinterpret_cast<EGLContext>(bridge->eglContext);
     if (display == EGL_NO_DISPLAY || surface == EGL_NO_SURFACE || context == EGL_NO_CONTEXT) {
+        assert(false && "Invalid EGL context");
         return false;
     }
     if (!eglMakeCurrent(display, surface, surface, context)) {
-        LOGE("[CRITICAL] EncoderRotate render: eglMakeCurrent failed");
+        LOGE("[CRITICAL] Render: eglMakeCurrent failed");
+        assert(false && "Failed to make GL context current");
         return false;
     }
 
@@ -558,11 +526,12 @@ bool encoderGlRenderFrame(const std::shared_ptr<EncoderGlBridge>& bridge, long l
     renderDeviceIdOverlay(bridge);
 
     if (!eglSwapBuffers(display, surface)) {
-        LOGE("[CRITICAL] EncoderRotate render: eglSwapBuffers failed");
+        LOGE("[CRITICAL] Render: eglSwapBuffers failed");
+        assert(false && "Failed to swap EGL buffers");
         return false;
     }
     if ((timestampNs % 120) == 0) {
-        LOGD("EncoderRotate frame rendered ts=%lld", timestampNs);
+        LOGD("Render frame rendered ts=%lld", timestampNs);
     }
     return true;
 }

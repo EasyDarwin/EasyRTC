@@ -905,16 +905,20 @@ static void startRenderThread(MediaSession *session) {
     if (!session->deviceId.empty() && session->encoderGlBridge) {
         session->encoderGlBridge->deviceId = session->deviceId;
     }
-    assert (session->encoderGlBridge && session->encoderGlBridge->initialized);
+    assert (session->encoderGlBridge);
     LOGI("[CRITICAL] Render start: rotation=%d swapWH=%d", session->encoderRotation, session->encoderSwapWH ? 1 : 0);
     const uint32_t frameIntervalUs = static_cast<uint32_t>(1000000 / (encoder->fps > 0 ? encoder->fps : 29.97));
+    assert(session->renderThreadRunning.load() == false && "Render thread already running");
     session->renderThreadRunning.store(true);
     session->renderThread = std::thread([session, frameIntervalUs]() {
         LOGI("[Render] thread started");
         defer(LOGI("[Render] thread stopped"));
         if (!encoderGlMakeCurrent(session->encoderGlBridge)) {
             LOGE("[Render] thread makeCurrent failed");
+            assert(false && "Failed to make GL context current in render thread");
         }
+        assert(session->cameraInputSurfaceTexture && "cameraInputSurfaceTexture invalid");
+        assert(session->encoderGlBridge->cameraOesTex && "cameraOesTex invalid");
         int attach = ASurfaceTexture_attachToGLContext(session->cameraInputSurfaceTexture, session->encoderGlBridge->cameraOesTex);
         assert(attach == 0 && "Failed to attach SurfaceTexture to GL context in render thread");
         while (session->renderThreadRunning.load()) {
@@ -948,9 +952,9 @@ static void startRenderThread(MediaSession *session) {
 }
 
 static void stopRenderThread(MediaSession *session) {
-    LOGI("[CRITICAL] stopRenderThread ENTRY: session=%p running=%d", session,
-         session ? (session->renderThreadRunning.load() ? 1 : 0) : -1);
-    if (!session) return;
+    assert (session && "Invalid session");
+    LOGI("[CRITICAL] stopRenderThread ENTRY: session=%p running=%d", session, (session->renderThreadRunning.load() ? 1 : 0));
+    
     session->renderThreadRunning.store(false);
     if (session->renderThread.joinable()) {
         session->renderThread.join();

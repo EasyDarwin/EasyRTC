@@ -7,7 +7,6 @@
 #include <string>
 
 struct EncoderGlBridge {
-    bool initialized = false;
     int rotation = 0;
     int width = 0;
     int height = 0;
@@ -57,7 +56,6 @@ std::shared_ptr<EncoderGlBridge> encoderGlCreate(ANativeWindow* encoderWindow,
                                                  unsigned int externalOesTex = 0,
                                                  void* externalEglDisplay = nullptr,
                                                  void* externalEglContext = nullptr);
-bool encoderGlRenderTestFrame(const std::shared_ptr<EncoderGlBridge>& bridge);
 bool encoderGlRenderFrame(const std::shared_ptr<EncoderGlBridge>& bridge, long long timestampNs);
 bool encoderGlUpdateTexImage(ASurfaceTexture* st, float matrix4x4[16], int64_t* timestampNs);
 void encoderGlSetInputTransform(const std::shared_ptr<EncoderGlBridge>& bridge, const float* matrix4x4);
