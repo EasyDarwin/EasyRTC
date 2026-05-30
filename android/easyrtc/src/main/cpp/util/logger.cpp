@@ -67,7 +67,7 @@ std::shared_ptr<spdlog::logger> create_logger() {
     std::vector<spdlog::sink_ptr> sinks;
 
     auto androidSink = std::make_shared<spdlog::sinks::android_sink_mt>("EasyRTC.Native", true);
-    androidSink->set_pattern("[%l] [pid:%P tid:%t] %v");
+    androidSink->set_pattern("%L %P/%t %v");
     sinks.push_back(androidSink);
 
     const std::string dir = log_dir();
@@ -81,7 +81,7 @@ std::shared_ptr<spdlog::logger> create_logger() {
                 kRotateBytes,
                 kRotateFiles,
                 true);
-            fileSink->set_pattern("%Y-%m-%d %H:%M:%S.%e [%l] [pid:%P tid:%t] %v");
+            fileSink->set_pattern("%H:%M:%S.%e %L %P/%t %v");
             sinks.push_back(fileSink);
         }else {
             auto msg = "Failed to create log directory: " + ec.message();
