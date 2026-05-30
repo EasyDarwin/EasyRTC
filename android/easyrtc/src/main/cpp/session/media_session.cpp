@@ -184,20 +184,6 @@ static void onCameraDeviceError(void* context, ACameraDevice* device, int error)
     auto* s = static_cast<MediaSession*>(context);
     LOGE("[CRITICAL] CAMERA DEVICE ERROR: session=%p error=%d — closing camera", s, error);
     s->cameraError.store(error);
-    s->previewRunning.store(false);
-
-    {
-        std::lock_guard<std::mutex> lock(s->cameraMutex);
-        if (s->captureSession) {
-            ACameraCaptureSession_stopRepeating(s->captureSession);
-            s->captureSession = nullptr;
-        }
-        if (s->cameraDevice) {
-            ACameraDevice_close(s->cameraDevice);
-            s->cameraDevice = nullptr;
-        }
-        releaseCaptureSessionOutputs(s);
-    }
 }
 
 static void onCameraDeviceDisconnected(void* context, ACameraDevice* device) {
@@ -261,7 +247,6 @@ static void releaseCaptureSession(MediaSession *s) {
 
 static void closeCamera(MediaSession *s) {
     LOGI("[CRITICAL] closeCamera ENTRY: s=%p", s);
-    std::lock_guard<std::mutex> lock(s->cameraMutex);
     if (s->captureSession) {
         ACameraCaptureSession_stopRepeating(s->captureSession);
         s->captureSession = nullptr;
@@ -1033,7 +1018,6 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
 
     // Switch repeating request to include encoder target (no session rebuild)
     if (session->cameraDevice && session->cameraInputReady) {
-        std::lock_guard<std::mutex> lock(session->cameraMutex);
         switchRepeatingRequest(session, true);
     }
     LOGD("Video encoder started");
@@ -1059,7 +1043,6 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
 
-    std::lock_guard<std::mutex> lock(session->cameraMutex);
     if (session->captureSession) {
         ACameraCaptureSession_stopRepeating(session->captureSession);
         session->captureSession = nullptr;
@@ -1241,7 +1224,6 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
     }
 
     if (session->cameraDevice && session->cameraInputWindow) {
-        std::lock_guard<std::mutex> lock(session->cameraMutex);
 
         if (session->cameraInputSurfaceTexture) {
             ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);

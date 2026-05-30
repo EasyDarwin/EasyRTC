@@ -62,7 +62,6 @@ struct MediaSession {
     ACameraOutputTarget *previewTarget = nullptr;
     ACameraOutputTarget *cameraInputTarget = nullptr;
     ACaptureRequest *captureRequest = nullptr;
-    std::mutex cameraMutex;
 
     std::shared_ptr<MediaPipeline> videoEncoder = nullptr;
     std::shared_ptr<EncoderGlBridge> encoderGlBridge = nullptr;
