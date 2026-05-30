@@ -343,7 +343,7 @@ static bool createCaptureSession(MediaSession *s, bool withEncoder) {
     }
 
     // Build initial request (preview-only by default, encoder target added when needed)
-    s->captureRequest = buildRequestWithTargets(s, false);
+    s->captureRequest = buildRequestWithTargets(s, withEncoder);
     if (!s->captureRequest) {
         releaseCaptureSession(s);
         return false;
@@ -1069,7 +1069,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
         session->cameraDevice = nullptr;
     }
     releaseCaptureSessionOutputs(session);
-
+    auto rendering = session->renderThreadRunning.load();
     session->cameraFacing = (session->cameraFacing == 0) ? 1 : 0;
 
     ACameraManager *cameraMgr = ACameraManager_create();
@@ -1086,8 +1086,7 @@ Java_cn_easyrtc_media_MediaSession_nativeSwitchCamera(
                                                               &device);
         if (camStatus == ACAMERA_OK && device) {
             session->cameraDevice = device;
-            createCaptureSession(session,
-                                 session->videoEncoder && session->videoEncoder->running.load());
+            createCaptureSession(session,rendering);
         }
     }
     ACameraManager_delete(cameraMgr);
