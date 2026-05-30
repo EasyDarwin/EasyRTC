@@ -21,8 +21,14 @@ class MediaSession {
         val totalKbps: Double,
     )
 
+    data class TransceiverFrameStats(
+        val videoFramesSent: Long,
+        val audioFramesSent: Long,
+    )
+
     private var nativePtr: Long = 0
     private var inputKbpsStatsListener: ((InputKbpsStats) -> Unit)? = null
+    private var transceiverFrameStatsListener: ((TransceiverFrameStats) -> Unit)? = null
     private var onOfferCallback: WeakReference<(String) -> Unit>? = null
     private var onAnswerCallback: WeakReference<(String) -> Unit>? = null
     private var currentUser: String? = null
@@ -35,6 +41,10 @@ class MediaSession {
 
     fun setInputKbpsStatsListener(listener: ((InputKbpsStats) -> Unit)?) {
         inputKbpsStatsListener = listener
+    }
+
+    fun setTransceiverFrameStatsListener(listener: ((TransceiverFrameStats) -> Unit)?) {
+        transceiverFrameStatsListener = listener
     }
 
     fun create() {
@@ -177,6 +187,11 @@ class MediaSession {
     @Keep
     private fun onInputKbpsStats(videoKbps: Double, audioKbps: Double, totalKbps: Double) {
         inputKbpsStatsListener?.invoke(InputKbpsStats(videoKbps, audioKbps, totalKbps))
+    }
+
+    @Keep
+    private fun onTransceiverFrameStats(videoFrames: Long, audioFrames: Long) {
+        transceiverFrameStatsListener?.invoke(TransceiverFrameStats(videoFrames, audioFrames))
     }
 
     @Keep

@@ -24,6 +24,7 @@ import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 @RunWith(AndroidJUnit4::class)
 class CameraPipelineTest {
@@ -96,6 +97,11 @@ class CameraPipelineTest {
     fun previewToRecording_sendFramesIncrease() {
         val activity = launchAndWaitForSurface()
 
+        val videoFrames = AtomicLong(0)
+        session.setTransceiverFrameStatsListener { stats ->
+            videoFrames.set(stats.videoFramesSent)
+        }
+
         session.setupVideoEncoder(defaultConfig)
         val surface = activity.acquirePreviewSurface()
         assertEquals("startPreview should succeed", 0, session.startPreview(surface))
@@ -116,6 +122,8 @@ class CameraPipelineTest {
 
         SystemClock.sleep(5000)
 
+        val framesSent = videoFrames.get()
+        assertTrue("Video frames should have been sent, got $framesSent", framesSent > 0)
 
         session.releasePeerConnection()
         SystemClock.sleep(1000)
@@ -126,6 +134,11 @@ class CameraPipelineTest {
     @Test
     fun previewRecordingBackToPreview_sendFramesIncreaseThenStop() {
         val activity = launchAndWaitForSurface()
+
+        val videoFrames = AtomicLong(0)
+        session.setTransceiverFrameStatsListener { stats ->
+            videoFrames.set(stats.videoFramesSent)
+        }
 
         session.setupVideoEncoder(defaultConfig)
         val surface = activity.acquirePreviewSurface()
@@ -144,6 +157,9 @@ class CameraPipelineTest {
         session.addDataChannel("test")
         SystemClock.sleep(5000)
 
+        val phase1Frames = videoFrames.get()
+        assertTrue("Phase 1 video frames should have been sent, got $phase1Frames", phase1Frames > 0)
+
         // Phase 3: stop recording
         session.releasePeerConnection()
         SystemClock.sleep(2000)
@@ -159,6 +175,9 @@ class CameraPipelineTest {
         session.addTransceivers(MediaSession.CODEC_H264, 5)
         SystemClock.sleep(5000)
 
+        val phase2Frames = videoFrames.get()
+        assertTrue("Phase 2 video frames should exceed Phase 1 (${phase1Frames}), got $phase2Frames",
+            phase2Frames > phase1Frames)
 
         session.releasePeerConnection()
         session.stopPreview()
@@ -221,6 +240,11 @@ class CameraPipelineTest {
         val activity = launchAndWaitForSurface()
         session.setupVideoEncoder(defaultConfig)
 
+        val videoFrames = AtomicLong(0)
+        session.setTransceiverFrameStatsListener { stats ->
+            videoFrames.set(stats.videoFramesSent)
+        }
+
         val surface = activity.acquirePreviewSurface()
         assertEquals(0, session.startPreview(surface))
 
@@ -230,6 +254,9 @@ class CameraPipelineTest {
         assertTrue(pc != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
         SystemClock.sleep(3000)
+
+        val cycle1Frames = videoFrames.get()
+        assertTrue("Cycle 1 should have sent video frames, got $cycle1Frames", cycle1Frames > 0)
 
         // Simulate screen off: stop preview
         session.stopPreview()
@@ -247,6 +274,10 @@ class CameraPipelineTest {
         assertTrue(pc2 != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
         SystemClock.sleep(3000)
+
+        val cycle2Frames = videoFrames.get()
+        assertTrue("Cycle 2 should have sent more frames than Cycle 1 ($cycle1Frames), got $cycle2Frames",
+            cycle2Frames > cycle1Frames)
 
         session.stopPreview()
         session.setDecoderSurface(null)

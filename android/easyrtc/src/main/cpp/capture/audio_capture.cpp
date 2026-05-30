@@ -150,6 +150,7 @@ static aaudio_data_callback_result_t dataCallback(
     if (result != 0) {
         LOGE("EasyRTC_SendFrame (audio) failed: %d", result);
     }else {
+        session->audioFramesSent.fetch_add(1, std::memory_order_relaxed);
         FLOGI("[AO] EasyRTC_SendFrame (audio) success: size=%u, pts=%llu", frame.size, static_cast<unsigned long long>(frame.presentationTs));
     }
 #endif

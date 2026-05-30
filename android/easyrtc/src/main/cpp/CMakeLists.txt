@@ -19,6 +19,7 @@ add_library(easyrtc_media SHARED
     codec/audio_decoder.cpp
     codec/video_decoder.cpp
     session/media_session.cpp
+    session/transceiver_stats_reporter.cpp
     util/frame_dump.cpp
     util/frame_reader.cpp
     gl/encoder_gl_bridge.cpp

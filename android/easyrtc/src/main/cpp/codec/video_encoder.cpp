@@ -172,6 +172,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
         if (sendResult != 0) {
             LOGE("[VO] EasyRTC_SendFrame failed: %d, size=%u, flags=%u", sendResult, frame.size, frame.flags);
         }else {
+            session->videoFramesSent.fetch_add(1, std::memory_order_relaxed);
             FLOGI("[VO] EasyRTC_SendFrame success: size=%u, flags=%u, pts=%llu", frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
         }
 

@@ -1,5 +1,6 @@
 #include "session/media_session.h"
 #include "session/common.h"
+#include "session/transceiver_stats_reporter.h"
 #include "codec/video_encoder.h"
 #include "capture/audio_capture.h"
 #include "codec/audio_playback.h"
@@ -32,99 +33,6 @@ namespace {
     // std::atomic<uint64_t> gVideoCbAnnexB{0};
     // std::atomic<uint64_t> gVideoCbAvcc{0};
 
-}
-
-static void notifyInputKbpsStats(MediaSession *session,
-                                 double videoKbps,
-                                 double audioKbps,
-                                 double totalKbps) {
-    if (!session || !session->jvm || !session->javaObj) {
-        return;
-    }
-    auto _begin = std::chrono::steady_clock::now();
-    defer({
-        auto _duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - _begin).count();
-        if (_duration > 10) {
-            LOGW("notifyInputKbpsStats took %lld ms", static_cast<long long>(_duration));
-        }
-    });
-    JNIEnv *env = nullptr;
-    bool attached = false;
-    int ret = session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
-    if (ret != JNI_OK) {
-        if (session->jvm->AttachCurrentThread(&env, nullptr) == JNI_OK) {
-            attached = true;
-        } else {
-            LOGW("notifyInputKbpsStats: failed to attach thread to JVM");
-            return;
-        }
-    }
-
-    jclass clazz = env->GetObjectClass(session->javaObj);
-    if (clazz) {
-        jmethodID mid = env->GetMethodID(clazz, "onInputKbpsStats", "(DDD)V");
-        if (mid) {
-            env->CallVoidMethod(session->javaObj, mid,
-                                static_cast<jdouble>(videoKbps),
-                                static_cast<jdouble>(audioKbps),
-                                static_cast<jdouble>(totalKbps));
-        }
-    }
-
-    if (attached) {
-        session->jvm->DetachCurrentThread();
-    }
-}
-
-static void accumulateMediaInputBytes(MediaSession *session, uint32_t videoBytes, uint32_t audioBytes) {
-    if (!session) {
-        return;
-    }
-    if (videoBytes > 0) {
-        session->mediaInputVideoBytesWindow.fetch_add(videoBytes, std::memory_order_relaxed);
-    }
-    if (audioBytes > 0) {
-        session->mediaInputAudioBytesWindow.fetch_add(audioBytes, std::memory_order_relaxed);
-    }
-}
-
-static void reportMediaInputKbpsStats(MediaSession *session) {
-    if (!session) {
-        return;
-    }
-
-    const int64_t nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-    int64_t lastNs = session->mediaInputLastReportNs.load(std::memory_order_relaxed);
-    if (lastNs == 0) {
-        session->mediaInputLastReportNs.compare_exchange_strong(lastNs, nowNs, std::memory_order_relaxed);
-        return;
-    }
-    const int64_t durationNs = nowNs - lastNs;
-    if (durationNs <= 0) {
-        return;
-    }
-    if (!session->mediaInputLastReportNs.compare_exchange_strong(lastNs, nowNs, std::memory_order_relaxed)) {
-        return;
-    }
-
-    const uint64_t videoWindowBytes = session->mediaInputVideoBytesWindow.exchange(0, std::memory_order_relaxed);
-    const uint64_t audioWindowBytes = session->mediaInputAudioBytesWindow.exchange(0, std::memory_order_relaxed);
-    const double elapsedSec = static_cast<double>(durationNs) / 1e9;
-    if (elapsedSec <= 0.0) {
-        return;
-    }
-
-    const double videoKbps = static_cast<double>(videoWindowBytes) * 8.0 / 1000.0 / elapsedSec;
-    const double audioKbps = static_cast<double>(audioWindowBytes) * 8.0 / 1000.0 / elapsedSec;
-    const double totalKbps = videoKbps + audioKbps;
-
-    session->mediaInputVideoKbpsX100.store(static_cast<uint32_t>(videoKbps * 100.0), std::memory_order_relaxed);
-    session->mediaInputAudioKbpsX100.store(static_cast<uint32_t>(audioKbps * 100.0), std::memory_order_relaxed);
-    session->mediaInputTotalKbpsX100.store(static_cast<uint32_t>(totalKbps * 100.0), std::memory_order_relaxed);
-
-    notifyInputKbpsStats(session, videoKbps, audioKbps, totalKbps);
 }
 
 // ─── Early EGL / OES texture creation (before GL bridge exists) ────────────
@@ -532,7 +440,9 @@ static int mediaTransceiverCallback(void *userPtr,
                 
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_VIDEO, frame->frameData,
                                frame->size, frame->flags);
-                accumulateMediaInputBytes(session, frame->size, 0);
+                if (session->statsReporter) {
+                    session->statsReporter->accumulateVideoBytes(frame->size);
+                }
                 videoDecoderEnqueueFrame(session->videoDecoder, frame);
             } else {
                 LOGW("VIDEO_CB empty dec=%p frame=%p data=%p size=%u codec=%d",
@@ -566,7 +476,9 @@ static int mediaTransceiverCallback(void *userPtr,
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
                 frameDumpWrite(&session->frameDump, FrameDumpWriter::KIND_AUDIO, frame->frameData,
                                frame->size, frame->flags);
-                accumulateMediaInputBytes(session, 0, frame->size);
+                if (session->statsReporter) {
+                    session->statsReporter->accumulateAudioBytes(frame->size);
+                }
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame);
                 if (session->videoDecoder) {
                     session->videoDecoder->audio_master_clock_us_from_begining_to_now = estimateAudioMasterClockUs(session->audioPlayback);
@@ -885,23 +797,8 @@ Java_cn_easyrtc_media_MediaSession_nativeAddTransceivers(
 
     frameDumpInit(&session->frameDump, session->videoCodec, session->audioCodec);
 
-    session->statThread = std::thread([session]() {
-        LOGI("MediaSession stats thread started");
-        auto lastReportTime = std::chrono::steady_clock::now();
-        while (session->transceiversAdded.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(3));
-            if (!session->transceiversAdded.load()) {
-                break;
-            }
-            auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastReportTime).count();
-            if (elapsed >= 1000) {
-                lastReportTime = now;
-                reportMediaInputKbpsStats(session);
-            }
-        }
-        LOGI("MediaSession stats thread exiting");
-    });
+    session->statsReporter = std::make_shared<TransceiverStatsReporter>(session);
+
     session->audioPlaybackInitAttempted = false;
     session->videoDecoderInitAttempted = false;
     return 0;
@@ -1375,12 +1272,7 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         session->videoDecoder = nullptr;
     }
     LOGI("[CRITICAL] StopRecv: DONE");
-
-    // 3. Join stats thread
-    if (session->statThread.joinable()) {
-        LOGI("[CRITICAL] RemoveTransceivers: joining stats thread");
-        session->statThread.join();
-    }
+    session->statsReporter.reset();
 
     //
     if (session->peerConnection) {

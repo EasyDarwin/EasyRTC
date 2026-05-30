@@ -33,6 +33,7 @@ struct VideoDecoderPipeline;
 struct AudioCapturePipeline;
 struct MediaPipeline;
 struct EncoderGlBridge;
+class TransceiverStatsReporter;
 
 struct EncoderParams {
     int width = 0;
@@ -95,13 +96,9 @@ struct MediaSession {
     std::thread renderThread;
     FrameDumpWriter frameDump;
 
-    std::thread statThread;
-    std::atomic<uint64_t> mediaInputVideoBytesWindow{0};
-    std::atomic<uint64_t> mediaInputAudioBytesWindow{0};
-    std::atomic<int64_t> mediaInputLastReportNs{0};
-    std::atomic<uint32_t> mediaInputVideoKbpsX100{0};
-    std::atomic<uint32_t> mediaInputAudioKbpsX100{0};
-    std::atomic<uint32_t> mediaInputTotalKbpsX100{0};
+    std::shared_ptr<TransceiverStatsReporter> statsReporter;
+    std::atomic<uint64_t> videoFramesSent{0};
+    std::atomic<uint64_t> audioFramesSent{0};
 
     int connectState{};
     uint64_t videoTrackId = 0;
