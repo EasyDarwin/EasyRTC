@@ -941,16 +941,10 @@ static void startRenderThread(MediaSession *session) {
         if (!encoderGlMakeCurrent(session->encoderGlBridge)) {
             LOGE("[Render] thread makeCurrent failed");
         }
-        if (session->cameraInputSurfaceTexture && session->encoderGlBridge) {
-            ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
-            int attach = ASurfaceTexture_attachToGLContext(session->cameraInputSurfaceTexture,
-                                                            session->encoderGlBridge->cameraOesTex);
-            LOGI("[Render] thread attachToGLContext=%d tex=%u",
-                 attach, session->encoderGlBridge->cameraOesTex);
-        }
+        int attach = ASurfaceTexture_attachToGLContext(session->cameraInputSurfaceTexture, session->encoderGlBridge->cameraOesTex);
+        assert(attach == 0 && "Failed to attach SurfaceTexture to GL context in render thread");
         while (session->renderThreadRunning.load()) {
-            if (session->cameraInputSurfaceTexture && session->encoderGlBridge && session->encoderGlBridge->initialized) {
-                float m[16];
+            float m[16];
                 int64_t ts = 0;
                 if (encoderGlUpdateTexImage(session->cameraInputSurfaceTexture, m, &ts)) {
                     // Keep SurfaceTexture drained, but only feed encoder when connected.
@@ -967,13 +961,11 @@ static void startRenderThread(MediaSession *session) {
                     LOGE("[Render] thread updateTexImage failed");
                     assert(false && "Encoder updateTexImage failed");
                 }
-            }
             usleep(frameIntervalUs);
         }
-        if (session->cameraInputSurfaceTexture) {
-            LOGI("[Render] thread: detaching SurfaceTexture");
-            ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
-        }
+        assert (session->cameraInputSurfaceTexture);
+        LOGI("[Render] thread: detaching SurfaceTexture");
+        ASurfaceTexture_detachFromGLContext(session->cameraInputSurfaceTexture);
     });
     pthread_t th = session->renderThread.native_handle();
     sched_param sch_params;
