@@ -180,7 +180,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
             cameraVideoWidth = encodeConfig.getWidth()
             cameraVideoHeight = encodeConfig.getHeight()
             session.setupVideoEncoder(encodeConfig)
-            session.addSendOnlyTransceivers(
+            session.addTransceivers(
                 videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264,
                 audioCodec = EasyRTCCodec.ALAW
             )
