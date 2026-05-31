@@ -117,9 +117,14 @@ class MediaSession {
 
     fun addTransceivers(videoCodec: Int, audioCodec: Int): Int {
         val i = nativeAddTransceivers(nativePtr, videoCodec, audioCodec)
-        val send = nativeStartSend(nativePtr)
-        EasyRTCLog.i("MediaSession", "addTransceivers: nativePtr=$nativePtr videoCodec=$videoCodec audioCodec=$audioCodec add=$i send=$send")
+        EasyRTCLog.i("MediaSession", "addTransceivers: nativePtr=$nativePtr videoCodec=$videoCodec audioCodec=$audioCodec add=$i")
         return i;
+    }
+
+    fun startSend(): Int {
+        val ret = nativeStartSend(nativePtr)
+        EasyRTCLog.i("MediaSession", "startSend: nativePtr=$nativePtr ret=$ret")
+        return ret
     }
 
     fun setupVideoEncoder(config: VideoEncodeConfig): Int {

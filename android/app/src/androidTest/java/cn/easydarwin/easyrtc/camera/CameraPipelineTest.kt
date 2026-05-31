@@ -122,6 +122,7 @@ class CameraPipelineTest {
 
 
         session.addTransceivers(MediaSession.CODEC_H264, 5)
+        session.startSend()
         session.addDataChannel("test")
 
         SystemClock.sleep(5000)
@@ -158,6 +159,7 @@ class CameraPipelineTest {
         )
         assertTrue(pc != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
+        session.startSend()
         session.addDataChannel("test")
         SystemClock.sleep(5000)
 
@@ -177,6 +179,7 @@ class CameraPipelineTest {
         )
         assertTrue(pc2 != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
+        session.startSend()
         SystemClock.sleep(5000)
 
         val phase2Frames = videoFrames.get()
@@ -257,6 +260,7 @@ class CameraPipelineTest {
             "turn:turn.example.com:3478", "user", "pass")
         assertTrue(pc != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
+        session.startSend()
         SystemClock.sleep(3000)
 
         val cycle1Frames = videoFrames.get()
@@ -277,6 +281,7 @@ class CameraPipelineTest {
             "turn:turn.example.com:3478", "user", "pass")
         assertTrue(pc2 != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
+        session.startSend()
         SystemClock.sleep(3000)
 
         val cycle2Frames = videoFrames.get()

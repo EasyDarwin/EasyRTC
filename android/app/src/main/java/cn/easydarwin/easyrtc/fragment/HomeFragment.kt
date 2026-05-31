@@ -135,6 +135,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
                 val config = getVideoEncodeConfig()
                 val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
                 session.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
+                session.startSend()
                 session.addDataChannel("")
 
                 if (callSetup.callout) {

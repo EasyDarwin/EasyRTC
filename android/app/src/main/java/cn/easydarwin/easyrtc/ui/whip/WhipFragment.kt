@@ -184,6 +184,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
                 videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264,
                 audioCodec = EasyRTCCodec.ALAW
             )
+            session.startSend()
             appendLog("创建 Offer SDP...")
             session.createOffer { sdp ->
                 appendLog("发送 Offer SDP 到服务器...")

@@ -215,6 +215,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         val config = getVideoEncodeConfig()
         val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
         session.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
+        session.startSend()
         session.addDataChannel("")
         appendLog("创建 Offer...")
         session.createOffer { sdp ->
