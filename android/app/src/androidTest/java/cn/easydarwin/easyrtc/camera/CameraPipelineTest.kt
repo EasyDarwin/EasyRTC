@@ -88,7 +88,7 @@ class CameraPipelineTest {
         val surface = activity.acquirePreviewSurface()
         assertEquals("startPreview should succeed", 0, session.startPreview(surface))
 
-        SystemClock.sleep(3000)
+        SystemClock.sleep(1500)
 
         session.stopPreview()
         session.setDecoderSurface(null)
@@ -110,7 +110,7 @@ class CameraPipelineTest {
         val surface = activity.acquirePreviewSurface()
         assertEquals("startPreview should succeed", 0, session.startPreview(surface))
 
-        SystemClock.sleep(1000)
+        SystemClock.sleep(300)
 
         val pc = session.createPeerConnection(
             "stun:stun.l.google.com:19302",
@@ -125,14 +125,12 @@ class CameraPipelineTest {
         session.startSend()
         session.addDataChannel("test")
 
-        SystemClock.sleep(5000)
+        SystemClock.sleep(1500)
 
         val framesSent = videoFrames.get()
         assertTrue("Video frames should have been sent, got $framesSent", framesSent > 0)
 
         session.releasePeerConnection()
-        SystemClock.sleep(1000)
-
         assertTrue("Activity should survive", !activity.isDestroyed)
     }
 
@@ -148,7 +146,7 @@ class CameraPipelineTest {
         session.setupVideoEncoder(defaultConfig)
         val surface = activity.acquirePreviewSurface()
         assertEquals(0, session.startPreview(surface))
-        SystemClock.sleep(1000)
+        SystemClock.sleep(100)
 
         // Phase 2: start recording
         val pc = session.createPeerConnection(
@@ -161,14 +159,14 @@ class CameraPipelineTest {
         session.addTransceivers(MediaSession.CODEC_H264, 5)
         session.startSend()
         session.addDataChannel("test")
-        SystemClock.sleep(5000)
+        SystemClock.sleep(1500)
 
         val phase1Frames = videoFrames.get()
         assertTrue("Phase 1 video frames should have been sent, got $phase1Frames", phase1Frames > 0)
 
         // Phase 3: stop recording
         session.releasePeerConnection()
-        SystemClock.sleep(2000)
+        SystemClock.sleep(100)
 
         // Phase 4: start recording again
         val pc2 = session.createPeerConnection(
@@ -180,7 +178,7 @@ class CameraPipelineTest {
         assertTrue(pc2 != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
         session.startSend()
-        SystemClock.sleep(5000)
+        SystemClock.sleep(1500)
 
         val phase2Frames = videoFrames.get()
         assertTrue("Phase 2 video frames should exceed Phase 1 (${phase1Frames}), got $phase2Frames",
@@ -204,10 +202,10 @@ class CameraPipelineTest {
         SystemClock.sleep(1000)
 
         session.switchCamera()
-        SystemClock.sleep(3000)
+        SystemClock.sleep(2000)
 
         session.switchCamera()
-        SystemClock.sleep(3000)
+        SystemClock.sleep(2000)
 
         session.stopPreview()
         session.setDecoderSurface(null)
@@ -261,16 +259,16 @@ class CameraPipelineTest {
         assertTrue(pc != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
         session.startSend()
-        SystemClock.sleep(3000)
+        SystemClock.sleep(1500)
 
         val cycle1Frames = videoFrames.get()
         assertTrue("Cycle 1 should have sent video frames, got $cycle1Frames", cycle1Frames > 0)
 
         // Simulate screen off: stop preview
+        session.releasePeerConnection()
         session.stopPreview()
         session.setDecoderSurface(null)
-        session.releasePeerConnection()
-        SystemClock.sleep(500)
+        SystemClock.sleep(100)
 
         // Simulate screen on: restart preview on same surface (TextureView survives activity pause/resume)
         session.setupVideoEncoder(defaultConfig)
@@ -282,15 +280,15 @@ class CameraPipelineTest {
         assertTrue(pc2 != 0L)
         session.addTransceivers(MediaSession.CODEC_H264, 5)
         session.startSend()
-        SystemClock.sleep(3000)
+        SystemClock.sleep(1500)
 
         val cycle2Frames = videoFrames.get()
         assertTrue("Cycle 2 should have sent more frames than Cycle 1 ($cycle1Frames), got $cycle2Frames",
             cycle2Frames > cycle1Frames)
 
+        session.releasePeerConnection()
         session.stopPreview()
         session.setDecoderSurface(null)
-        session.releasePeerConnection()
 
         assertTrue("Activity should survive", !activity.isDestroyed)
     }
