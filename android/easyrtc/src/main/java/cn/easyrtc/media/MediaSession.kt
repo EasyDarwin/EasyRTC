@@ -210,6 +210,25 @@ class MediaSession {
     }
 
     @Keep
+    private fun findEncoderForSurfaceInput(mime: String): String {
+        val targetColorFormat = android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
+        EasyRTCLog.i("MediaSession", "findEncoderForSurfaceInput: searching encoders for $mime")
+        val codecList = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS)
+        val matches = mutableListOf<String>()
+        for (codecInfo in codecList.codecInfos) {
+            if (!codecInfo.isEncoder) continue
+            val caps = try { codecInfo.getCapabilitiesForType(mime) } catch (e: IllegalArgumentException) { null } ?: continue
+            val cf = caps.colorFormats
+            val cfStr = cf?.joinToString(transform = { "0x%08x".format(it) }) ?: "null"
+            val match = cf?.contains(targetColorFormat) == true
+            EasyRTCLog.i("MediaSession", "  ${codecInfo.name} colorFormats=[$cfStr] match=$match")
+            if (match) matches.add(codecInfo.name)
+        }
+        EasyRTCLog.w("MediaSession", "findEncoderForSurfaceInput: ${matches.size} matches for $mime")
+        return matches.joinToString(";")
+    }
+
+    @Keep
     private fun onConnectionStateChangeEvent(state: Int) {
         if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
             currentUser = ""

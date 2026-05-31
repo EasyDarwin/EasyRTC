@@ -996,7 +996,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartSend(JNIEnv *env, jobject thiz, jl
     assert(!session->videoEncoder->running.load() && "videoEncoder already running");
     LOGI("[CRITICAL] StartSend: initializing video encoder");
     auto p = session->videoEncoder;
-    if (!p->initEncoder()) {
+    if (!p->initEncoder(session)) {
         LOGE("[CRITICAL] StartSend: initEncoder FAILED");
         return -1;
     }

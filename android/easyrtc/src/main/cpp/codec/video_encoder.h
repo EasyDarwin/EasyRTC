@@ -35,7 +35,7 @@ struct MediaPipeline {
     MediaPipeline& operator=(MediaPipeline&&) = delete;
 
 
-    bool initEncoder();
+    bool initEncoder(struct MediaSession *session = nullptr);
     void startEncoder(MediaSession *);
 };
 

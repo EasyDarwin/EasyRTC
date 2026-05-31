@@ -2,9 +2,11 @@
 #include "EasyRTCAPI.h"
 #include "session/common.h"
 #include "session/media_session.h"
+#include "session/camera_error_handler.h"
 #include <cassert>
 #include <cstring>
 #include <string>
+#include <sstream>
 #include <camera/NdkCameraManager.h>
 #include <camera/NdkCameraMetadataTags.h>
 #include <media/NdkMediaCodec.h>
@@ -45,36 +47,63 @@ std::string findCameraId(int facing) {
     return result;
 }
 
-bool MediaPipeline::initEncoder()
+bool MediaPipeline::initEncoder(MediaSession *session)
 {
     LOGI("[CRITICAL] initEncoder: mime=%s %dx%d @ %dbps fps=%d",
          mime.c_str(), width, height, bitrate, fps);
-    AMediaCodec* encoder = AMediaCodec_createEncoderByType(mime.c_str());
-    if (!encoder) {
-        LOGE("[CRITICAL] initEncoder: createEncoderByType FAILED for %s", mime.c_str());
-        return false;
-    }
-    assert(format);
-    media_status_t status = AMediaCodec_configure(encoder, format.get(), nullptr, nullptr,
-            AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
-    if (status != AMEDIA_OK) {
-        LOGE("[CRITICAL] initEncoder: configure FAILED status=%d", status);
-        AMediaCodec_delete(encoder);
-        return false;
+
+    auto tryCreate = [this](const std::string &name) -> AMediaCodec* {
+        if (name.empty()) {
+            LOGI("[CRITICAL] initEncoder: trying createEncoderByType(%s)", mime.c_str());
+            return AMediaCodec_createEncoderByType(mime.c_str());
+        }
+        LOGI("[CRITICAL] initEncoder: trying createCodecByName(%s)", name.c_str());
+        return AMediaCodec_createCodecByName(name.c_str());
+    };
+
+    auto tryConfigure = [this](AMediaCodec *encoder) -> bool {
+        if (!encoder) {
+            LOGE("[CRITICAL] initEncoder: createCodec FAILED");
+            return false;
+        }
+        assert(format);
+        media_status_t status = AMediaCodec_configure(encoder, format.get(), nullptr, nullptr,
+                AMEDIACODEC_CONFIGURE_FLAG_ENCODE);
+        if (status != AMEDIA_OK) {
+            LOGE("[CRITICAL] initEncoder: configure FAILED status=%d", status);
+            AMediaCodec_delete(encoder);
+            return false;
+        }
+        ANativeWindow* inputWindow = nullptr;
+        media_status_t surfStatus = AMediaCodec_createInputSurface(encoder, &inputWindow);
+        if (surfStatus != AMEDIA_OK || !inputWindow) {
+            LOGW("[CRITICAL] initEncoder: createInputSurface FAILED status=%d", surfStatus);
+            AMediaCodec_delete(encoder);
+            return false;
+        }
+        this->encoderInputSurface = std::shared_ptr<ANativeWindow>(inputWindow, ANativeWindow_release);
+        this->encoder = encoder;
+        LOGI("[CRITICAL] initEncoder: SUCCESS encoder=%p window=%p", encoder, inputWindow);
+        return true;
+    };
+
+    if (tryConfigure(tryCreate(""))) return true;
+
+    if (session) {
+        std::string candidates = queryEncoderForSurfaceInput(session, mime);
+        if (!candidates.empty()) {
+            LOGI("[CRITICAL] initEncoder: candidates for mime=%s: %s", mime.c_str(), candidates.c_str());
+            std::istringstream iss(candidates);
+            std::string name;
+            while (std::getline(iss, name, ';')) {
+                if (name.empty()) continue;
+                if (tryConfigure(tryCreate(name))) return true;
+            }
+        }
     }
 
-
-    ANativeWindow* inputWindow = nullptr;
-    media_status_t surfStatus = AMediaCodec_createInputSurface(encoder, &inputWindow);
-    if (surfStatus != AMEDIA_OK || !inputWindow) {
-        LOGE("[CRITICAL] initEncoder: createInputSurface FAILED status=%d", surfStatus);
-        AMediaCodec_delete(encoder);
-        return false;
-    }
-    this->encoderInputSurface = std::shared_ptr<ANativeWindow>(inputWindow, ANativeWindow_release);
-    this->encoder = encoder;
-    LOGI("[CRITICAL] initEncoder: SUCCESS encoder=%p window=%p", encoder, inputWindow);
-    return true;
+    LOGE("[CRITICAL] initEncoder: all attempts failed for mime=%s", mime.c_str());
+    return false;
 }
 
 void MediaPipeline::startEncoder(MediaSession *session)
