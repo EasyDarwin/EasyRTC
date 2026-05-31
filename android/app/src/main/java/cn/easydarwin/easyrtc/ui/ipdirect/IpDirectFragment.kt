@@ -2,6 +2,7 @@ package cn.easydarwin.easyrtc.ui.ipdirect
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.hardware.Camera
 import android.media.AudioManager
 import android.os.Bundle
 import android.util.Log
@@ -123,8 +124,9 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     private fun initViews(view: View) {
         localPreview = view.findViewById(R.id.local_preview_)
         localPreview.post {
-            localPreview.layoutParams.height =
-                localPreview.layoutParams.width * getVideoEncodeConfig().getHeight() / getVideoEncodeConfig().getWidth()
+            val config = getVideoEncodeConfig()
+            localPreview.layoutParams.height = localPreview.width * config.getWidth() / config.getHeight()
+            localPreview.requestLayout()
         }
         remotePreview = view.findViewById(R.id.remote_preview_)
         remotePreviewContainer = view.findViewById(R.id.remote_preview_container)
@@ -201,10 +203,10 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
         endCallButton.visibility = View.GONE
         remotePreviewContainer.visibility = View.GONE
-        val lp = localPreview.layoutParams
-        lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-        lp.height = ViewGroup.LayoutParams.MATCH_PARENT
-        localPreview.layoutParams = lp
+//        val lp = localPreview.layoutParams
+//        lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+//        lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+//        localPreview.layoutParams = lp
         localPreview.translationX = 0f
         localPreview.translationY = 0f
         bandwidthTV?.text = ""
@@ -318,6 +320,8 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     private fun switchCamera() {
+        val config = getVideoEncodeConfig()
+        mainSurfaceTexture?.setDefaultBufferSize(config.getWidth(), config.getHeight())
         session.switchCamera()
     }
 

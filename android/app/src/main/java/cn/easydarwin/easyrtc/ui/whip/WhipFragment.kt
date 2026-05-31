@@ -66,7 +66,9 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
         tvWhipServer = view.findViewById(R.id.tvWhipServer)
         localPreview = view.findViewById(R.id.local_preview_)
         localPreview.post {
-            localPreview.layoutParams.height = localPreview.layoutParams.width * cameraVideoHeight / cameraVideoWidth
+            val config = getVideoEncodeConfig()
+            localPreview.layoutParams.height = localPreview.width * config.getWidth() / config.getHeight()
+            localPreview.requestLayout()
         }
 
         tvStatus.movementMethod = ScrollingMovementMethod()
@@ -86,9 +88,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
     }
 
-    /** Camera video size — landscape (native sensor) dimensions. */
-    private var cameraVideoWidth = 1280
-    private var cameraVideoHeight = 720
 
     private fun updateServerAddressDisplay() {
         val sharedPrefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -177,8 +176,6 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
 
             session.createPeerConnection("", "", "", "")
             val encodeConfig = getVideoEncodeConfig()
-            cameraVideoWidth = encodeConfig.getWidth()
-            cameraVideoHeight = encodeConfig.getHeight()
             session.setupVideoEncoder(encodeConfig)
             session.addTransceivers(
                 videoCodec = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264,
@@ -272,6 +269,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
             AppLogStore.appendCritical(TAG, "startLocalPreviewIfAvailable skipped: preview already running")
             return
         }
+        session.setupVideoEncoder(getVideoEncodeConfig())
         val result = session.startPreview(Surface(localSurfaceTexture)) ?: -1
         if (result != 0) {
             appendLog("本地预览启动失败: $result")

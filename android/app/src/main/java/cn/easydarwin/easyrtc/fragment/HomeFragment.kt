@@ -260,6 +260,11 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             appendLog(if (isSpeakerOn) "扬声器已开启" else "扬声器已关闭")
         }
 
+        local_preview_.post {
+            val config = getVideoEncodeConfig()
+            local_preview_.layoutParams.height = local_preview_.width *  config.getWidth() / config.getHeight()
+            local_preview_.requestLayout()
+        }
         Log.d(TAG, "视图初始化完成")
     }
 
@@ -323,6 +328,8 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
     }
 
     private fun switchCamera() {
+        val config = getVideoEncodeConfig()
+        mainSurfaceTexture?.setDefaultBufferSize(config.getWidth(), config.getHeight())
         session.switchCamera()
     }
 
@@ -405,17 +412,9 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
     }
 
     private fun resetCallUI() {
-        val lp = local_preview_.layoutParams
-        lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-        lp.height = ViewGroup.LayoutParams.WRAP_CONTENT
-        local_preview_.layoutParams = lp
         local_preview_.translationX = 0f
         local_preview_.translationY = 0f
         local_preview_.setOnTouchListener(null)
         bandwidthTV?.text = ""
-    }
-
-    private fun stopEasyRTC() {
-        session.releasePeerConnection()
     }
 }
