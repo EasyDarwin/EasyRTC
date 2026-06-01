@@ -200,10 +200,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             remote_preview_container.layoutParams = lp
             Log.d(TAG, "Remote video size: ${size.width}x${size.height}, container: ${lp.width}x${lp.height}")
 
-            val desiredWidthDp = 120
-            local_preview_.layoutParams.width = Math.round(desiredWidthDp * density)
-            local_preview_.layoutParams.height = Math.round(local_preview_.layoutParams.width * 1280f / 720f)
-            local_preview_.requestLayout()
+            resetLocalPreview(false)
             local_preview_.setOnTouchListener { view, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
@@ -259,12 +256,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             speakerButton.setImageResource(if (isSpeakerOn) R.drawable.ic_speaker_on else R.drawable.ic_speaker_off)
             appendLog(if (isSpeakerOn) "扬声器已开启" else "扬声器已关闭")
         }
-
-        local_preview_.post {
-            val config = getVideoEncodeConfig()
-            local_preview_.layoutParams.height = local_preview_.width *  config.getWidth() / config.getHeight()
-            local_preview_.requestLayout()
-        }
+        resetLocalPreview(true)
         Log.d(TAG, "视图初始化完成")
     }
 
@@ -412,6 +404,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
     }
 
     private fun resetCallUI() {
+        resetLocalPreview(true)
         local_preview_.translationX = 0f
         local_preview_.translationY = 0f
         local_preview_.setOnTouchListener(null)

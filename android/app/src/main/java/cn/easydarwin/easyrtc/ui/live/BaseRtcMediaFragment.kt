@@ -3,12 +3,15 @@ package cn.easydarwin.easyrtc.ui.live
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.MutableLiveData
 import cn.easyrtc.media.MediaSession
 import cn.easyrtc.model.VideoEncodeConfig
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
+import cn.easyrtc.R
+import kotlin.math.roundToInt
 
 abstract class BaseRtcMediaFragment : Fragment() {
     protected lateinit var session: MediaSession
@@ -86,6 +89,19 @@ abstract class BaseRtcMediaFragment : Fragment() {
             action()
         } else {
             activity?.runOnUiThread(action) ?: view?.post(action)
+        }
+    }
+
+    fun resetLocalPreview(fillParent: Boolean = false){
+        view?.post {
+            val v = view ?: return@post
+            val local_preview_ = v.findViewById<View>(cn.easydarwin.easyrtc.R.id.local_preview_)
+            val p = local_preview_.parent as View
+            val width = if (fillParent) p.width else (114 * resources.displayMetrics.density).roundToInt()
+            val config = getVideoEncodeConfig()
+            local_preview_.layoutParams.width = width
+            local_preview_.layoutParams.height = width *  config.getWidth() / config.getHeight()
+            local_preview_.requestLayout()
         }
     }
 }

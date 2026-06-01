@@ -65,11 +65,7 @@ class WhipFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener{
         buttonWhipMenu = view.findViewById(R.id.button_whip_menu)
         tvWhipServer = view.findViewById(R.id.tvWhipServer)
         localPreview = view.findViewById(R.id.local_preview_)
-        localPreview.post {
-            val config = getVideoEncodeConfig()
-            localPreview.layoutParams.height = localPreview.width * config.getWidth() / config.getHeight()
-            localPreview.requestLayout()
-        }
+        resetLocalPreview(true)
 
         tvStatus.movementMethod = ScrollingMovementMethod()
         localPreview.surfaceTextureListener = this

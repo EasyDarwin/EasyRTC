@@ -123,11 +123,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
 
     private fun initViews(view: View) {
         localPreview = view.findViewById(R.id.local_preview_)
-        localPreview.post {
-            val config = getVideoEncodeConfig()
-            localPreview.layoutParams.height = localPreview.width * config.getWidth() / config.getHeight()
-            localPreview.requestLayout()
-        }
+        resetLocalPreview(true)
         remotePreview = view.findViewById(R.id.remote_preview_)
         remotePreviewContainer = view.findViewById(R.id.remote_preview_container)
         tvStatus = view.findViewById(R.id.tvIpDirectStatus)
@@ -203,10 +199,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
         endCallButton.visibility = View.GONE
         remotePreviewContainer.visibility = View.GONE
-//        val lp = localPreview.layoutParams
-//        lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-//        lp.height = ViewGroup.LayoutParams.MATCH_PARENT
-//        localPreview.layoutParams = lp
+        resetLocalPreview(true)
         localPreview.translationX = 0f
         localPreview.translationY = 0f
         bandwidthTV?.text = ""
@@ -235,10 +228,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
         lp.height = desiredHeightPx
         remotePreviewContainer.layoutParams = lp
 
-        val desiredWidthDp = 120
-        localPreview.layoutParams.width = Math.round(desiredWidthDp * density)
-        localPreview.layoutParams.height = Math.round(localPreview.layoutParams.width * 1280f / 720f)
-        localPreview.requestLayout()
+        resetLocalPreview(false)
         localPreview.setOnTouchListener { view, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
