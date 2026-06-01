@@ -58,12 +58,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    var cFragmentTag: String?
-        get() = currentFragmentTag
-        set(value) {
-            currentFragmentTag = value
-        }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_EasyRTCDevice_Device)
         SPUtil.init(this)
@@ -134,6 +128,13 @@ class MainActivity : AppCompatActivity() {
         }
         supportFragmentManager.addOnBackStackChangedListener { syncChromeVisibility() }
         syncChromeVisibility()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (BuildConfig.FLAVOR == "mock") {
+            Toast.makeText(this,"MOCK!!!!", Toast.LENGTH_LONG).show();
+        }
     }
 
     private fun bindWebSocketService() {
