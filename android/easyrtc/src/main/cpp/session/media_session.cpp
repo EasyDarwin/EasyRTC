@@ -543,6 +543,9 @@ static int sdpCallback(void *userPtr, const int isOffer, const char *sdp) {
     auto *session = static_cast<MediaSession *>(userPtr);
     if (!session || !session->jvm || !session->javaObj) return 0;
     LOGI("[CRITICAL] PC sdp: session=%p isOffer=%d len=%zu", session, isOffer, sdp ? strlen(sdp) : 0);
+    if (strlen(sdp) > 0) {
+        LOGI("[CRITICAL] %s content:\n%s", isOffer ? "Offer" : "Answer", sdp);
+    }
     JNIEnv *env = nullptr;
     bool attached = false;
     if (session->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {
