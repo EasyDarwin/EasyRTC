@@ -631,6 +631,7 @@ Java_cn_easyrtc_media_MediaSession_nativeStartPreview(
     }
 
     // Log all camera-supported output formats/resolutions for diagnostics.
+    if (0)
     {
         ACameraMetadata *metadata = nullptr;
         camera_status_t charStatus = ACameraManager_getCameraCharacteristics(
