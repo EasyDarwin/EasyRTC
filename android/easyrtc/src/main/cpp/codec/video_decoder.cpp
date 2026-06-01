@@ -251,7 +251,8 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
                 });
                 return false;
             }
-            defer(pipeline->frameQueue.commitPop());
+            bool decoderOK = false;
+            defer(if (!decoderOK) pipeline->frameQueue.commitPop());
             if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
                 auto hex = uint8_to_hex(packet->data(), std::min(uint32_t(56), packet->size));
                 LOGI("Frame:%s", hex.c_str());
@@ -277,8 +278,9 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
                 LOGI("Decoder configure size:%dx%d (actual from FORMAT_CHANGED)", pipeline->width, pipeline->height);
 
                 if (initDecoder(pipeline)){
-                    auto sureConsumed = enqueueDecoder(pipeline->decoder.get(), packet);
-                    assert(sureConsumed && "Failed to enqueue key frame after decoder init");
+                    decoderOK = true;
+//                    auto sureConsumed = enqueueDecoder(pipeline->decoder.get(), packet);
+//                    assert(sureConsumed && "Failed to enqueue key frame after decoder init");
                     return true;
                 }else {
                     assert(false && "initDecoder failed!");
@@ -314,12 +316,9 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
                 continue;
             }
             bool sureConsumed = true;
-            auto _do_not_delete_me = make_defer([&] {
-                if (sureConsumed)
-                    pipeline->frameQueue.commitPop();
-            });
+            defer(if (sureConsumed) pipeline->frameQueue.commitPop());
             FLOGI("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
-            if (droppingPackets && packet->frameFlags == 0) {
+            if (droppingPackets && (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) != EASYRTC_FRAME_FLAG_KEY_FRAME) {
                 LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
                 continue;
             }
