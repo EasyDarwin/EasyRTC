@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import cn.easydarwin.easyrtc.utils.AppLogStore
+import cn.easydarwin.easyrtc.utils.CallLog
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
 import cn.easydarwin.easyrtc.utils.WebSocketManager.Companion.HPNTIWEBRTCOFFERINFO2
@@ -123,7 +124,7 @@ class WebSocketService : Service() {
         var st = WebSocketManager.StunTurnInfo()
         if (callout) {
             val sdp = manager.handlerPeerConnection(data, true, st)
-            AppLogStore.appendTimestamped("offer from remote:\n$sdp")
+            CallLog.append("offer from remote:\n$sdp")
             var videoCodec = 0
             var audioCodec = 0
             if (sdp.contains("m=video", ignoreCase = true)) {

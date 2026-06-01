@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="16dp"
     android:background="@color/white">
@@ -15,22 +15,22 @@
         android:textSize="16sp"
         android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/tv_logs_sheet"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_logs"
         android:layout_width="match_parent"
-        android:layout_height="240dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:layout_marginTop="12dp"
+        android:layout_marginBottom="12dp"
         android:background="@drawable/popup_background"
-        android:padding="12dp"
-        android:scrollbars="vertical"
-        android:textColor="@color/color_1a1a1a"
-        android:textSize="13sp" />
+        android:padding="8dp"
+        android:clipToPadding="false"
+        android:scrollbars="vertical" />
 
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/et_msg_sheet"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
         android:background="@drawable/bg_input_field"
         android:hint="@string/home_logs_hint"
         android:inputType="text"
@@ -43,7 +43,7 @@
         style="@style/Widget.MaterialComponents.Button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="8dp"
         android:text="@string/home_logs_send" />
 
 </LinearLayout>

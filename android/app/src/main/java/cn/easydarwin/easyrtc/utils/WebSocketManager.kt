@@ -207,7 +207,7 @@ public class WebSocketManager(private val url: String, private val token: String
             this.uuidClientB = byteArrayToUuid(data.copyOfRange(8, 24))   //16字节
             val sdplen = bytesToIntLE(data.copyOfRange(24, 26))           //2字节
             val answerSdp = String(data.copyOfRange(26, 26 + sdplen), Charsets.UTF_8)
-            AppLogStore.appendTimestamped("answer from remote:\n$answerSdp")
+            CallLog.append("answer from remote:\n$answerSdp")
             callback.onWSAnswerSDP(answerSdp)
         } else if (HPACKGETONLINEDEVICESINFO == type) {
             val users = mutableListOf<EasyRTCUser>()
@@ -230,6 +230,8 @@ public class WebSocketManager(private val url: String, private val token: String
 
     fun sendOfferSDP(sdp: String, isOffer: Boolean) {
 //        Log.d(TAG, "sdp = : $sdp this.uuidClientB = ${this.uuidClientB}")
+        val label = if (isOffer) "send offer" else "send answer"
+        CallLog.append("$label:\n$sdp")
         val sdpBytes = sdp.toByteArray(Charsets.UTF_8)
         val sdpBytesLength = sdpBytes.size.toLong()
         val msgType = fillBytes(if (isOffer) 65542 else 65544, 4)

@@ -29,6 +29,7 @@ import cn.easydarwin.easyrtc.ui.hub.HubFragment
 
 import cn.easydarwin.easyrtc.BuildConfig
 import cn.easydarwin.easyrtc.utils.AppLogStore
+import cn.easydarwin.easyrtc.utils.CallLog
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
 import cn.easyrtc.EasyRTCCodec
@@ -341,7 +342,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             if (json.getInt("status") == 0) {
                 requireActivity().runOnUiThread {
                     appendLog(json.getString("msg"))
-                    appendLog("长按日志 复制当前日志！！！")
+                    AppLogStore.appendTimestamped("长按日志 复制当前日志！！！")
                 }
             } else appendLog("登录失败！")
         }
@@ -365,8 +366,8 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
         }
     }
 
-    private fun appendLog2(message: String) { AppLogStore.appendRaw("$message \n") }
-    private fun appendLog(message: String) { AppLogStore.appendTimestamped(message) }
+    private fun appendLog2(message: String) { AppLogStore.appendRaw("$message \n"); CallLog.append(message) }
+    private fun appendLog(message: String) { AppLogStore.appendTimestamped(message); CallLog.append(message) }
 
     private fun updateOnlineUsers(users: List<EasyRTCUser>) { userList = users }
 
