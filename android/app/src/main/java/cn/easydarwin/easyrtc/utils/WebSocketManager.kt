@@ -105,7 +105,12 @@ public class WebSocketManager(private val url: String, private val token: String
             ws.close(code, reason)
             stopOnlineClientsTask()
             callback.onWSDisconnected(code, reason)
+            attemptReconnect()
+        }
 
+        override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+            stopOnlineClientsTask()
+            callback.onWSDisconnected(code, reason)
             attemptReconnect()
         }
 
