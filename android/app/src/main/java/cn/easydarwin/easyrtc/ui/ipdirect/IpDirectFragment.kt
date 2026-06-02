@@ -206,6 +206,7 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
     }
 
     private fun createAndSendOffer() {
+        session.releasePeerConnection()
         session.createPeerConnection("", "", "", "")
         val config = getVideoEncodeConfig()
         val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264

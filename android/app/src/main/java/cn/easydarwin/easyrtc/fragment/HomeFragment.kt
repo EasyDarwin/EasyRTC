@@ -121,6 +121,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             event.handled = true
             activeSessionUser = event.uuid
             tvFragmentUUID.text = "来电: ${event.uuid}"
+            session.releasePeerConnection()
             appendLog("来电: ${event.uuid}")
             view.post {
                 val ws = webSocketService
