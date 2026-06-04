@@ -140,6 +140,7 @@ int64_t fixSleepTime(int64_t sleepTimeUs, int64_t totalTimestampDifferUs, int64_
 }
 
 int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
+    LOGI("Starting video decoder thread");
     pipeline->running.store(true);
     pipeline->decodeThread = std::thread([pipeline]() {
         LOGI("Video decode thread started");
@@ -204,7 +205,8 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
                 const int64_t ptsDurationUs = bufferInfo.presentationTimeUs - firstPtsUs;
                 int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
                 if (pipeline->audio_master_clock_us_from_begining_to_now > 0) {
-                    masterClockDurationUs = pipeline->audio_master_clock_us_from_begining_to_now;
+                    auto audioClockDurationUs = pipeline->audio_master_clock_us_from_begining_to_now;
+                    FLOGI("[VI] audio master clock used:%lldms, wall master clock:%lldms, delta:%lldms", audioClockDurationUs/1000, (getMonoUs() - firstSystemUs)/1000, (audioClockDurationUs - (getMonoUs() - firstSystemUs))/1000);
                 }
                 const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
                 FLOGI("[VI] DEC_OUT process:%lldms, master clock:%lldms, delta:%lldms", ptsDurationUs/1000, masterClockDurationUs/1000, delta_us_to_master/1000);
@@ -214,9 +216,6 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
                 if (sleepUs > 0) {
                     sleepInterruptibleUs(sleepUs, [&]() {
                         int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
-                        if (pipeline->audio_master_clock_us_from_begining_to_now > 0) {
-                            masterClockDurationUs = pipeline->audio_master_clock_us_from_begining_to_now;
-                        }
                         const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
                         return !pipeline->running.load() || delta_us_to_master < 10000;
                     });
@@ -379,6 +378,7 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
     sched_param sch_params;
     sch_params.sched_priority = 0;//sched_get_priority_max(SCHED_FIFO);
     pthread_setschedparam(th, SCHED_FIFO, &sch_params);
+    LOGI("Starting video decoder thread and st set realtime priority");
     return 0;
 }
 
