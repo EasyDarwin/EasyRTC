@@ -10,17 +10,66 @@
 
     <string name="app_name">EasyRTC</string>
     <string name="logo_name">EasyRTC</string>
-    <string name="logo_navbar_title">关于EasyRTC</string>
     <string name="setting_navbar_title">流媒体设置</string>
     <string name="change_camera">切换摄像头</string>
-    <string name="rtc_user_label">在线用户</string>
-    <string name="rtc_user_online_empty">暂无在线用户</string>
-    <string name="open_rtc_user_label">打开用户列表</string>
+    <string name="rtc_user_label">在线设备</string>
+    <string name="rtc_user_online_empty">暂无在线设备</string>
+    <string name="open_rtc_user_label">设备列表</string>
+    <string name="hub_title">在线设备</string>
+    <string name="hub_filter_hint">按设备名或 UUID 过滤</string>
+    <string name="hub_loading">正在加载设备列表…</string>
+    <string name="hub_retry">重试</string>
+    <string name="hub_empty">暂无在线设备</string>
+    <string name="hub_empty_filter">没有匹配的设备</string>
+    <string name="hub_calling_user">正在呼叫 %1$s…</string>
+    <string name="hub_type_user">DEVICE</string>
+    <string name="hub_status_online">Online</string>
     <string name="close_rtc_label">关闭通话</string>
+    <string name="upload_log">上传日志</string>
+    <string name="upload_log_empty">暂无可上传的日志</string>
+    <string name="upload_log_success">日志上传成功</string>
+    <string name="upload_log_failed">日志上传失败</string>
+    <string name="settings_section_logs">日志上报</string>
+    <string name="settings_upload_logs_desc">点击本项将当前本地日志打包为 logs.zip 并上传到服务器。</string>
+    <string name="settings_upload_logs_tap_hint">点击本项立即上传</string>
+    <string name="home_menu_users">设备</string>
+    <string name="home_menu_logs">日志</string>
+    <string name="home_menu_settings">设置</string>
+    <string name="home_logs_title">日志、消息</string>
+    <string name="home_logs_hint">请输入要发送的消息</string>
+    <string name="home_logs_send">发送</string>
+    <string name="home_no_users">暂无在线设备</string>
+    <string name="navigation_p2p_call">P2P呼叫</string>
+    <string name="navigation_whip_push">WHIP推流</string>
+    <string name="navigation_ip_direct">IP直连</string>
+    <string name="ip_direct_idle">等待连接…</string>
+    <string name="ip_direct_listening">监听中 %1$s</string>
+    <string name="ip_direct_connected">IP直连 [已连接]</string>
 
 
     <string name="rtc_device_id_label">设备ID</string>
     <string name="rtc_device_id_placeholder">请输入设备ID</string>
+    <string name="settings_section_identity">设备身份</string>
+    <string name="settings_device_id_helper">设备 ID 需要使用标准 UUID 格式，保存后将用于连接注册。</string>
+    <string name="settings_device_id_error_empty">设备ID不能为空</string>
+    <string name="settings_device_id_error_format">请输入有效的UUID，例如 550e8400-e29b-41d4-a716-446655440000</string>
+    <string name="settings_section_video">视频设置</string>
+    <string name="settings_section_audio">音频设置</string>
+    <string name="settings_label_codec">编码</string>
+    <string name="settings_label_resolution">分辨率</string>
+    <string name="settings_label_frame_rate">帧率</string>
+    <string name="settings_label_bitrate">码率</string>
+    <string name="settings_label_gop">关键帧间隔</string>
+    <string name="settings_label_sample_rate">采样率</string>
+    <string name="settings_label_channel">声道</string>
+    <string name="about_title">关于 EasyRTC</string>
+    <string name="about_product_name">EasyRTC Android</string>
+    <string name="about_product_subtitle">企业级实时音视频演示客户端</string>
+    <string name="about_build_label">应用版本</string>
+    <string name="about_version_value">Version %1$s</string>
+    <string name="about_version_unknown">Unknown</string>
+    <string name="about_company_name">EasyDarwin Open Platform</string>
+    <string name="about_company_note">Copyright © 2026 EasyDarwin. All rights reserved.</string>
 
 
     <string-array name="videocodearr">
@@ -45,15 +94,24 @@
 <!--        <item>8192</item>-->
 <!--        <item>6144</item>-->
         <item>4096</item>
-        <item>2024</item>
+        <item>2048</item>
         <item>1024</item>
         <item>512</item>
+        <item>256</item>
     </string-array>
 
     <string-array name="audiocodearr">
         <item>G711A</item>
         <!--        <item>G711U</item>-->
         <!--        <item>AAC</item>-->
+    </string-array>
+
+    <string-array name="goparr">
+        <item>1s</item>
+        <item>2s</item>
+        <item>5s</item>
+        <item>10s</item>
+        <item>15s</item>
     </string-array>
 
     <string-array name="samplingratearr">

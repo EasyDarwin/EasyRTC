@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory android:title="@string/settings_section_identity">
+
+        <EditTextPreference
+            android:key="pref_device_id"
+            android:title="@string/rtc_device_id_label"
+            android:dialogTitle="@string/rtc_device_id_label"
+            android:summary="@string/settings_device_id_helper" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="WHIP 推流">
+
+        <EditTextPreference
+            android:key="pref_whip_server"
+            android:title="推流服务器地址"
+            android:dialogTitle="推流服务器地址"
+            android:defaultValue="https://demo.easygbs.com:10010/live/test0508_01.whip"
+            android:inputType="text" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/settings_section_video">
+
+        <ListPreference
+            android:key="pref_video_codec"
+            android:title="@string/settings_label_codec" />
+
+        <ListPreference
+            android:key="pref_video_resolution"
+            android:title="@string/settings_label_resolution" />
+
+        <ListPreference
+            android:key="pref_video_frame_rate"
+            android:title="@string/settings_label_frame_rate" />
+
+        <ListPreference
+            android:key="pref_video_bit_rate"
+            android:title="@string/settings_label_bitrate" />
+
+        <ListPreference
+            android:key="pref_video_gop"
+            android:title="@string/settings_label_gop" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/settings_section_audio">
+
+        <ListPreference
+            android:key="pref_audio_codec"
+            android:title="@string/settings_label_codec" />
+
+        <ListPreference
+            android:key="pref_audio_sample_rate"
+            android:title="@string/settings_label_sample_rate" />
+
+        <ListPreference
+            android:key="pref_audio_channel"
+            android:title="@string/settings_label_channel" />
+
+        <ListPreference
+            android:key="pref_audio_bit_rate"
+            android:title="@string/settings_label_bitrate" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/settings_section_logs">
+
+        <Preference
+            android:key="pref_upload_logs"
+            android:title="@string/upload_log"
+            android:summary="@string/settings_upload_logs_desc" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="@string/about_title">
+
+        <Preference
+            android:key="pref_about_version"
+            android:title="@string/about_build_label" />
+
+        <Preference
+            android:title="@string/about_company_name"
+            android:summary="@string/about_company_note" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

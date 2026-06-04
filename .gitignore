@@ -3,7 +3,26 @@ windows/EasyRTC_Open/x64/
 windows/EasyRTC-P2P/x64/
 windows/x64/
 android/.gradle/
-android/build/
-android/app/build/
+build/
 android/release/
+.worktrees/
 
+.DS_Store
+.idea/
+superpowers/
+android/local.properties
+
+.cxx
+.settings
+.classpath
+.project
+
+.cache/
+android/easyrtc/src/main/cpp/toolchain-android.cmake
+docs/files
+docs/浏览器 whip 推流.docx
+.claude
+android/.kotlin
+android/CLAUDE.md
+*.log
+android/.qwen

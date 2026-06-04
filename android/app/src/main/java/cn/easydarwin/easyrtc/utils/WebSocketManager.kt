@@ -6,8 +6,6 @@ import android.util.Log
 import cn.easyrtc.EasyRTCCodec
 import cn.easyrtc.EasyRTCDirection
 import cn.easyrtc.EasyRTCIceTransportPolicy
-import cn.easyrtc.EasyRTCSdk
-import cn.easyrtc.EasyRTCStreamTrack
 import cn.easyrtc.EasyRTCUser
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,7 +16,6 @@ import okio.ByteString
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
-import kotlin.let
 
 public class WebSocketManager(private val url: String, private val token: String? = null, private val callback: WebSocketCallback) {
 
@@ -26,8 +23,8 @@ public class WebSocketManager(private val url: String, private val token: String
 
     private val client = OkHttpClient.Builder().pingInterval(0, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS).build()
 
-    private var uuidClientA = ""
-    private var uuidClientB = ""
+    var uuidClientA = ""
+    var uuidClientB = ""
 
     private val handler = Handler(Looper.getMainLooper())
     private var onlineTask: Runnable? = null
@@ -36,6 +33,7 @@ public class WebSocketManager(private val url: String, private val token: String
 
     private var reconnectTask: Runnable? = null
     private var isReconnecting = false
+    private var allowReconnect = true
     private var reconnectDelay = 3000L // 初始重连延迟 3 秒
     private val maxReconnectDelay = 60000L // 最大重连延迟 60 秒
 
@@ -58,13 +56,25 @@ public class WebSocketManager(private val url: String, private val token: String
         webSocket?.close(1000, "normal close")
     }
 
+    fun shutdown() {
+        allowReconnect = false
+        stopReconnectTask()
+        stopOnlineClientsTask()
+        webSocket?.cancel()
+        webSocket?.close(1000, "shutdown")
+        webSocket = null
+    }
+
     interface WebSocketCallback {
         fun onWSConnected()
         fun onWSMessage(text: String)
         fun onWSDisconnected(code: Int, reason: String)
         fun onWSError(error: Throwable)
         fun onWSOnlineUsers(users: List<EasyRTCUser>)
-        fun onWSLogs(txt: String)  
+        fun onWSLogs(txt: String)
+        fun onWSIncomingCall(uuid: String)
+        fun onTypeAndData(type: Int, data: ByteArray)
+        fun onWSAnswerSDP(sdp: String)
     }
 
     private val listener = object : WebSocketListener() {
@@ -95,7 +105,12 @@ public class WebSocketManager(private val url: String, private val token: String
             ws.close(code, reason)
             stopOnlineClientsTask()
             callback.onWSDisconnected(code, reason)
+            attemptReconnect()
+        }
 
+        override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+            stopOnlineClientsTask()
+            callback.onWSDisconnected(code, reason)
             attemptReconnect()
         }
 
@@ -148,7 +163,7 @@ public class WebSocketManager(private val url: String, private val token: String
         sendBinary(bos.toByteArray())
     }
 
-    fun handlerPeerConnection(data: ByteArray, isCaller: Boolean = false): String {
+    fun handlerPeerConnection(data: ByteArray, isCaller: Boolean = false, mStunTurnInfo:StunTurnInfo): String {
 //        Log.d(TAG, " handlerPeerConnection ...")
         val uuid = byteArrayToUuid(data.copyOfRange(8, 24))
         val exTraDataLen = bytesToIntLE(data.copyOfRange(24, 26))
@@ -156,7 +171,6 @@ public class WebSocketManager(private val url: String, private val token: String
         val strCount = bytesToIntLE(data.copyOfRange(28, 29))
         val sturnTypes = data.copyOfRange(29, 37)
         val sturnDatas = splitByZero(data.copyOfRange(37, 37 + strDataLen))  // sturndatas 数据
-        val mStunTurnInfo = StunTurnInfo()
         for ((index, b) in sturnTypes.withIndex()) {
             if (index >= 4) break;
             when (b.toInt() and 0xFF) {
@@ -168,57 +182,8 @@ public class WebSocketManager(private val url: String, private val token: String
         }
 //        Log.d(TAG, " mStunTurnInfo= ${mStunTurnInfo.toString()},uuid = $uuid")
         this.uuidClientB = uuid
-        EasyRTCSdk.connection(
-            "stun:${mStunTurnInfo.stunServer}",
-            "turn:${mStunTurnInfo.turnServer}",
-            mStunTurnInfo.turnUsername,
-            mStunTurnInfo.turnPassword,
-            1,
-            EasyRTCIceTransportPolicy.EaSyRTC_ICE_TRANSPORT_POLICY_ALL,
-            0L
-        );
         if (isCaller) return String(data.copyOfRange(37 + strDataLen, data.size), Charsets.UTF_8)
         return ""
-    }
-
-
-    fun handlerCallerSDP(sdp: String) {
-        if (sdp.isNotEmpty()) {
-            if (sdp.contains("m=video", ignoreCase = true)) {
-//                Log.d(TAG, "handlerSDP sdp=${SPUtil.Companion.getInstance().hevaddDataChannelcCodec}")
-                var codeID = 0;
-                if (sdp.contains("H264/90000")) {
-                    codeID = EasyRTCCodec.H264
-//                    remoteRTCHelper?.reinitVideoDecoder(RemoteRTCHelper.CODEC_H264)
-                } else if (sdp.contains("H265/90000")) {
-//                    remoteRTCHelper?.reinitVideoDecoder(RemoteRTCHelper.CODEC_H265)
-                    codeID = EasyRTCCodec.H265
-                } else if (sdp.contains("VP8/90000")) {
-                    codeID = EasyRTCCodec.VP8
-                }
-                if (codeID != 0) {
-                    EasyRTCSdk.addTransceiver(codeID, "0", "0", EasyRTCStreamTrack.VIDEO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
-                }
-            }
-
-            if (sdp.contains("m=audio", ignoreCase = true)) {
-                var codeID = 0;
-                if (sdp.contains("PCMA/8000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.ALAW
-                } else if (sdp.contains("PCMU/8000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.MULAW
-                } else if (sdp.contains("opus/48000", ignoreCase = true)) {
-                    codeID = EasyRTCCodec.OPUS
-                }
-                if (codeID != 0) {
-                    EasyRTCSdk.addTransceiver(codeID, "0", "1", EasyRTCStreamTrack.AUDIO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
-                }
-
-            }
-            if (sdp.contains("webrtc-datachannel", ignoreCase = true)) EasyRTCSdk.addDataChannel()
-            EasyRTCSdk.createAnswer(sdp)  //创建 Answer 的 SDP
-        }
-
     }
 
     fun handlerEventByteArray(data: ByteArray) {
@@ -243,27 +208,12 @@ public class WebSocketManager(private val url: String, private val token: String
             val extradatalen = bytesToIntLE(data.copyOfRange(44, 46))
             val extradata = String(data.copyOfRange(46, 46 + extradatalen), Charsets.UTF_8)
             Log.d(TAG, "播放 ack uuid=${this.uuidClientB} , play_uuid= ${this.uuidClientA} status=$status extradatalen=$extradatalen extradata=$extradata")
-        } else if (HPREQGETWEBRTCOFFERINFO == type) {
-            //device 设备端逻辑
-            handlerPeerConnection(data)
-            val videoCodeID = if (SPUtil.getInstance().getIsHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
-            //创建音视频轨道
-            EasyRTCSdk.addTransceiver(videoCodeID, "0", "0", EasyRTCStreamTrack.VIDEO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
-            EasyRTCSdk.addTransceiver(EasyRTCCodec.ALAW, "0", "1", EasyRTCStreamTrack.AUDIO, EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV)
-            //创建消息轨道
-            EasyRTCSdk.addDataChannel("123") //name 设备端随机字符串
-            EasyRTCSdk.createOffer()  //创建  Offer  sdp
-
-        } else if (HPNTIWEBRTCOFFERINFO2 == type) {
-            //caller 逻辑
-            val sdp = handlerPeerConnection(data, true)
-            handlerCallerSDP(sdp)
-            callback.onWSLogs(sdp)
         } else if (HPNTIWEBRTCANSWERINFO == type) {
             this.uuidClientB = byteArrayToUuid(data.copyOfRange(8, 24))   //16字节
             val sdplen = bytesToIntLE(data.copyOfRange(24, 26))           //2字节
             val answerSdp = String(data.copyOfRange(26, 26 + sdplen), Charsets.UTF_8)
-            EasyRTCSdk.setRemoteDescription(answerSdp)
+            CallLog.append("answer from remote:\n$answerSdp")
+            callback.onWSAnswerSDP(answerSdp)
         } else if (HPACKGETONLINEDEVICESINFO == type) {
             val users = mutableListOf<EasyRTCUser>()
             if (data.size < 12) return
@@ -278,11 +228,15 @@ public class WebSocketManager(private val url: String, private val token: String
                 offset += 16
             }
             callback.onWSOnlineUsers(users)
+        }else {
+            callback.onTypeAndData(type, data)
         }
     }
 
     fun sendOfferSDP(sdp: String, isOffer: Boolean) {
 //        Log.d(TAG, "sdp = : $sdp this.uuidClientB = ${this.uuidClientB}")
+        val label = if (isOffer) "send offer" else "send answer"
+        CallLog.append("$label:\n$sdp")
         val sdpBytes = sdp.toByteArray(Charsets.UTF_8)
         val sdpBytesLength = sdpBytes.size.toLong()
         val msgType = fillBytes(if (isOffer) 65542 else 65544, 4)
@@ -435,6 +389,7 @@ public class WebSocketManager(private val url: String, private val token: String
 
     // ==================== 重连逻辑 ====================
     private fun attemptReconnect() {
+        if (!allowReconnect) return
         if (isReconnecting) return
         isReconnecting = true
         reconnectTask?.let { handler.removeCallbacks(it) }

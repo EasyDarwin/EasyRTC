@@ -1,0 +1,1542 @@
+  EASYRTC ANDROID APP — COMPLETE CLASS CALL GRAPH
+  RTC Signaling & Media Processing (Master Branch)
+  Generated: 2026-04-20
+================================================================================
+
+
+================================================================================
+1. LEGEND
+================================================================================
+
+  Notation:
+  ─────────────────────────────────────────────────────
+  A --> B              A calls method B (outgoing call)
+  A <-- B              A receives callback from B
+  A ==> B              JNI: Java calls Native method
+  A <== B              JNI: Native calls Java static callback
+  [line N]             Source line number reference
+  {file.ext}           Source file containing the code
+  ─────────────────────────────────────────────────────
+
+  Thread Context:
+    [main]      Android main/UI thread
+    [io]        Coroutine IO dispatcher
+    [executor]  EasyRTCSdk single-thread executor
+    [encoder]   CameraHelper encoder consumer thread
+    [decoder]   RemoteRTCHelper VideoDecoder HandlerThread
+    [audio-cap] AudioHelper coroutine / AudioCapturePipeline AAudio thread
+    [audio-play]RemoteRTCAudioHelper playback thread / AudioPlaybackPipeline AAudio thread
+    [ws-okhttp] OkHttp WebSocket background thread
+    [handler]   Handler on Looper.getMainLooper()
+
+
+================================================================================
+2. CLASS INVENTORY WITH FILE PATHS
+================================================================================
+
+  APPLICATION LAYER (app module):
+  ─────────────────────────────────────────────────────────────────────────────
+  HomeFragment
+    android/app/src/main/java/cn/easydarwin/easyrtc/fragment/HomeFragment.kt
+    Main UI fragment. Implements: TextureView.SurfaceTextureListener,
+    CameraHelper.CameraListener, AudioHelper.OnAudioDataListener,
+    WebSocketManager.WebSocketCallback, EasyRTCSdk.EasyRTCEventListener
+
+  DrawerManager
+    android/app/src/main/java/cn/easydarwin/easyrtc/modal/DrawerManager.kt
+    Manages the navigation drawer for online user list
+
+  SPUtil
+    android/app/src/main/java/cn/easydarwin/easyrtc/utils/SPUtil.kt
+    SharedPreferences wrapper for settings (UUID, codec, resolution, etc.)
+
+  WebSocketManager
+    android/app/src/main/java/cn/easydarwin/easyrtc/utils/WebSocketManager.kt
+    WebSocket binary protocol client for EasyRTC signaling server
+
+  MagicFileHelper
+    android/easyrtc/src/main/java/cn/easyrtc/helper/MagicFileHelper.kt
+    Debug utility for saving raw frame data to files
+
+  SDK LAYER (easyrtc module):
+  ─────────────────────────────────────────────────────────────────────────────
+  EasyRTCSdk (object singleton)
+    android/easyrtc/src/main/java/cn/easyrtc/EasyRTCSdk.kt
+    Central SDK facade. Wraps peerconnection JNI and dispatches callbacks.
+
+  peerconnection (class, loads libEasyRTC.so)
+    android/easyrtc/src/main/java/cn/easyrtc/peerconnection.java
+    JNI bridge to native EasyRTC WebRTC engine
+
+  EasyRTCCodec (object)
+    android/easyrtc/src/main/java/cn/easyrtc/EasyRTCSdk.kt [lines 11-20]
+    Codec ID constants: H264=1, OPUS=2, VP8=3, MULAW=4, ALAW=5, H265=6, AAC=7
+
+  EasyRTCStreamTrack (object)
+    android/easyrtc/src/main/java/cn/easyrtc/EasyRTCSdk.kt [lines 22-25]
+    Track type constants: AUDIO=1, VIDEO=2
+
+  EasyRTCDirection (object)
+    android/easyrtc/src/main/java/cn/easyrtc/EasyRTCSdk.kt [lines 28-33]
+    Direction constants: SENDRECV=1, SENDONLY=2, RECVONLY=3, INACTIVE=4
+
+  EasyRTCPeerConnectionState (object)
+    android/easyrtc/src/main/java/cn/easyrtc/EasyRTCSdk.kt [lines 35-44]
+    State constants: NONE=0, NEW=1, CONNECTING=2, CONNECTED=3,
+                     DISCONNECTED=4, FAILED=5, CLOSED=6
+
+  EasyRTCIceTransportPolicy (object)
+    android/easyrtc/src/main/java/cn/easyrtc/EasyRTCSdk.kt [lines 46-49]
+    Policy constants: RELAY=1, ALL=2
+
+  EasyRTCUser (data class)
+    android/easyrtc/src/main/java/cn/easyrtc/EasyRTCSdk.kt [line 9]
+    Data class: (uuid: String, username: String)
+
+  MEDIA HELPERS (easyrtc module):
+  ─────────────────────────────────────────────────────────────────────────────
+  CameraHelper
+    android/easyrtc/src/main/java/cn/easyrtc/helper/CameraHelper.kt
+    Camera1 API capture + encoding pipeline orchestration
+
+  VideoEncoder
+    android/easyrtc/src/main/java/cn/easyrtc/helper/VideoEncoder.kt
+    MediaCodec hardware video encoder (H.264/H.265)
+
+  RemoteRTCHelper
+    android/easyrtc/src/main/java/cn/easyrtc/helper/RemoteRTCHelper.kt
+    MediaCodec hardware video decoder for remote video frames
+
+  AudioHelper
+    android/easyrtc/src/main/java/cn/easyrtc/helper/AudioHelper.kt
+    AudioRecord-based microphone capture pipeline (Java)
+
+  RemoteRTCAudioHelper
+    android/easyrtc/src/main/java/cn/easyrtc/helper/RemoteRTCAudioHelper.kt
+    AudioTrack-based speaker playback pipeline (Java)
+
+  MediaHelper (object)
+    android/easyrtc/src/main/java/cn/easyrtc/helper/MediaHelper.kt
+    Enumerates hardware encoder capabilities
+
+  VideoEncodeConfig (data class)
+    android/easyrtc/src/main/java/cn/easyrtc/model/VideoEncodeConfig.kt
+    Configuration for video encoder (codec, resolution, bitrate, etc.)
+
+  NATIVE MEDIA PIPELINES (easyrtc module, JNI):
+  ─────────────────────────────────────────────────────────────────────────────
+  AudioCapturePipeline (loads libeasyrtc_media.so)
+    android/easyrtc/src/main/java/cn/easyrtc/media/AudioCapturePipeline.kt
+    AAudio low-latency native audio capture → direct EasyRTC_SendFrame
+
+  AudioPlaybackPipeline (loads libeasyrtc_media.so)
+    android/easyrtc/src/main/java/cn/easyrtc/media/AudioPlaybackPipeline.kt
+    AAudio low-latency native audio playback with jitter buffer
+
+  JNIUtil (loads libUtils.so)
+    android/easyrtc/src/main/java/org/easydarwin/sw/JNIUtil.java
+    YUV format conversion utilities (libyuv wrapper)
+
+  NATIVE SOURCE FILES (C++):
+  ─────────────────────────────────────────────────────────────────────────────
+  easyrtc_common.h
+    android/easyrtc/src/main/cpp/easyrtc_common.h
+    Common logging macros and constants
+
+  easyrtc_audio.h / easyrtc_audio.cpp
+    android/easyrtc/src/main/cpp/easyrtc_audio.{h,cpp}
+    AAudio capture pipeline native implementation
+
+  easyrtc_audio_playback.h / easyrtc_audio_playback.cpp
+    android/easyrtc/src/main/cpp/easyrtc_audio_playback.{h,cpp}
+    AAudio playback pipeline native implementation
+
+  easyrtc_video_decoder.cpp
+    android/easyrtc/src/main/cpp/easyrtc_video_decoder.cpp
+    Stub — not yet implemented
+
+  NATIVE LIBRARY HEADER (prebuilt, not in Android tree):
+  ─────────────────────────────────────────────────────────────────────────────
+  EasyRTCAPI.h
+    include/EasyRTCAPI.h
+    C API for libEasyRTC.so: PeerConnection, Transceiver, DataChannel,
+    SDP offer/answer, ICE candidate stats
+
+
+================================================================================
+3. SIGNALING FLOW: WebSocket Connect → Register → Online Users → Call →
+   SDP Exchange → ICE
+================================================================================
+
+  3.1  CONNECTION & REGISTRATION
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.onViewCreated() [line 102]
+    │
+    ├── WebSocketManager(url="ws://rts.easyrtc.cn:19000", callback=this)
+    │     [line 106]
+    │
+    ├── WebSocketManager.connect() [line 107]
+    │     │
+    │     ├── OkHttpClient.newWebSocket(request, listener) [line 48]
+    │     │
+    │     └── [ws-okhttp] listener.onOpen() [line 72]
+    │           │
+    │           ├── reset reconnectDelay, stopReconnectTask [lines 73-75]
+    │           │
+    │           ├── register(SPUtil.getInstance().rtcUserUUID) [line 77]
+    │           │     │
+    │           │     ├── handlerRegister(uuid) [line 112]
+    │           │     │     └── builds binary packet: [length|type=0x10001|uuid|sn|key|extra]
+    │           │     │        returns ByteArray [lines 304-324]
+    │           │     │
+    │           │     └── sendBinary(data) [line 113]
+    │           │           └── webSocket.send(ByteString) [line 54]
+    │           │
+    │           ├── startOnlineClientsTask() [line 79]
+    │           │     └── handler.postDelayed(runnable, 15000ms) [line 333]
+    │           │           └── getOnlineClients() [line 332]
+    │           │                 └── sendBinary([length|type=0x20001])
+    │           │                    [lines 142-149]
+    │           │
+    │           └── callback.onWSConnected() [line 80]
+    │                 └── HomeFragment.onWSConnected() [line 407] (no-op)
+    │
+    ├── EasyRTCSdk.getInstance() [line 117]
+    │     └── returns peerconnection instance (creates if null)
+    │
+    └── EasyRTCSdk.setEventListener(this) [line 118]
+          └── stores HomeFragment as EasyRTCEventListener
+
+  3.2  LOGIN ACK
+  ─────────────────────────────────────────────────────────────────────────────
+
+  [ws-okhttp] listener.onMessage(bytes) [line 87]
+    │
+    └── handlerEventByteArray(bytes.toByteArray()) [line 91]
+          │
+          ├── parse: length = bytesToIntLE(data[0..4])
+          │           type   = bytesToIntLE(data[4..8])  [lines 225-226]
+          │
+          ├── if type == HPACKLOGINUSERINFO (65538):  [line 229]
+          │     ├── uuid = byteArrayToUuid(data[8..24])
+          │     ├── status = bytesToIntLE(data[24..length])
+          │     ├── build JSON {"code":65538, "msg":"$uuid 登录成功", "status":status}
+          │     └── callback.onWSMessage(json.toString()) [line 237]
+          │           └── HomeFragment.onWSMessage(text) [line 411]
+          │                 ├── parse JSON
+          │                 ├── if code==65538 && status==0:
+          │                 │     appendLog("登录成功") [line 416-418]
+          │                 └── else: appendLog("登录失败!") [line 419]
+          │
+  3.3  ONLINE USERS LIST
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Periodic (every 15s): getOnlineClients() → server responds with:
+  [ws-okhttp] listener.onMessage(bytes)
+    │
+    └── handlerEventByteArray(data)
+          │
+          └── if type == HPACKGETONLINEDEVICESINFO (131074):  [line 267]
+                ├── count = bytesToIntLE(data[8..12])
+                ├── for each user: parse 16-byte UUID
+                ├── build List<EasyRTCUser>
+                └── callback.onWSOnlineUsers(users) [line 280]
+                      └── HomeFragment.onWSOnlineUsers(users) [line 433]
+                            └── drawerManager.updateUserListUI(users) [line 437]
+                                  └── DrawerManager.UserAdapter.updateUsers(users)
+                                     → notifyDataSetChanged() [lines 127-131]
+
+  3.4  INITIATE CALL (Caller Side)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  User clicks device in drawer:
+    DrawerManager.UserAdapter.onCallClick(user) [line 157]
+      └── onUserCallClick lambda [HomeFragment line 111-114]
+            │
+            └── mWebSocketManager.call(user.uuid) [line 113]
+                  │
+                  ├── build binary: [length=60 | type=65539 | hisUuid | hisKey(32B) | extraLen(0)]
+                  │    [lines 116-136]
+                  │
+                  └── sendBinary(data) [line 135]
+
+  Server responds with HPACKGETONLINEDEVICESINFO → call delivered to device.
+  Server sends HPNTIWEBRTCOFFERINFO2 (65543) back to caller with remote SDP.
+
+  3.5  DEVICE SIDE: RECEIVE CALL REQUEST (Offer Generation)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  [ws-okhttp] listener.onMessage(bytes)
+    │
+    └── handlerEventByteArray(data)
+          │
+          └── if type == HPREQGETWEBRTCOFFERINFO (65541):  [line 246]
+                │
+                ├── handlerPeerConnection(data) [line 248]
+                │     │
+                │     ├── parse UUID from data[8..24]
+                │     ├── parse STUN/TURN info from sturnTypes + sturnDatas
+                │     │     [lines 151-168]
+                │     ├── build StunTurnInfo(stunServer, turnServer,
+                │     │                       turnUsername, turnPassword)
+                │     │
+                │     └── EasyRTCSdk.connection(
+                │           "stun:${stunServer}",
+                │           "turn:${turnServer}",
+                │           turnUsername, turnPassword,
+                │           version=1,
+                │           EasyRTCIceTransportPolicy.EaSyRTC_ICE_TRANSPORT_POLICY_ALL,
+                │           userPtr=0L
+                │         ) [lines 171-179]
+                │           │
+                │           └── peerconnection.create(version, iceTransportPolicy,
+                │                 stun, turn, username, credential, userPtr)
+                │                 [EasyRTCSdk line 93]
+                │                 ==> JNI: EasyRTC_CreatePeerConnection()
+                │                 returns mPeerConnection handle (long)
+                │
+                ├── Determine video codec from SPUtil.getIsHevc()
+                │     [line 249]
+                │
+                ├── EasyRTCSdk.addTransceiver(
+                │     videoCodeID, "0", "0",
+                │     EasyRTCStreamTrack.VIDEO,
+                │     EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV
+                │   ) [lines 251]
+                │     │
+                │     └── peerconnection.AddTransceiver(mPeerConnection, codecID,
+                │           streamId, trackId, streamTrackType, direction, userPtr)
+                │           [EasyRTCSdk line 98]
+                │           ==> JNI: EasyRTC_AddTransceiver()
+                │           stores returned handle as video_transceiver [line 100]
+                │
+                ├── EasyRTCSdk.addTransceiver(
+                │     EasyRTCCodec.ALAW, "0", "1",
+                │     EasyRTCStreamTrack.AUDIO,
+                │     EasyRTCDirection.EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV
+                │   ) [lines 252]
+                │     ==> JNI: EasyRTC_AddTransceiver()
+                │     stores returned handle as audio_transceiver [line 102]
+                │
+                ├── EasyRTCSdk.addDataChannel("123") [line 254]
+                │     ==> JNI: EasyRTC_AddDataChannel()
+                │     stores returned handle as data_channel
+                │
+                └── EasyRTCSdk.createOffer() [line 255]
+                      │
+                      └── peerconnection.CreateOffer(mPeerConnection, userPtr)
+                            [EasyRTCSdk line 123]
+                            ==> JNI: EasyRTC_CreateOffer()
+                              └── native ICE gathering starts
+                                  └── <== peerconnection.OnEasyRTC_IceCandidate_Callback(
+                                        userPtr, isOffer=1, sdp)
+                                        [peerconnection line 52-55]
+                                        │
+                                        └── EasyRTCSdk.onSDPCallback(userPtr, 1, sdp)
+                                              [EasyRTCSdk line 171-178]
+                                              │
+                                              └── executor + mainHandler.post:
+                                                    eventListener.onSDPCallback(1, sdp)
+                                                    [line 174]
+                                                    │
+                                                    └── HomeFragment.onSDPCallback(1, sdp)
+                                                          [line 497]
+                                                          │
+                                                          └── mWebSocketManager.sendOfferSDP(
+                                                                sdp, isOffer=true)
+                                                                [line 498]
+                                                                │
+                                                                ├── build binary:
+                                                                │   [length | type=65542 |
+                                                                │    uuid(16B) | sdpLen(2B) |
+                                                                │    sdpBytes | 0x00]
+                                                                │   [lines 284-301]
+                                                                │
+                                                                └── sendBinary(data)
+                                                                      [line 301]
+
+  3.6  CALLER SIDE: RECEIVE OFFER + SEND ANSWER
+  ─────────────────────────────────────────────────────────────────────────────
+
+  [ws-okhttp] listener.onMessage(bytes)
+    │
+    └── handlerEventByteArray(data)
+          │
+          └── if type == HPNTIWEBRTCOFFERINFO2 (65543):  [line 257]
+                │
+                ├── sdp = handlerPeerConnection(data, isCaller=true)
+                │     [line 259]
+                │     │
+                │     ├── parse STUN/TURN info, call EasyRTCSdk.connection(...)
+                │     │     (same as 3.5 above, creates PeerConnection)
+                │     │
+                │     └── return String(data[37+strDataLen .. end]) as SDP
+                │           [line 180]
+                │
+                ├── handlerCallerSDP(sdp) [line 260]
+                │     │
+                │     ├── if sdp contains "m=video":  [line 187]
+                │     │     parse codec from SDP string:
+                │     │       H264/90000 → EasyRTCCodec.H264
+                │     │       H265/90000 → EasyRTCCodec.H265
+                │     │       VP8/90000  → EasyRTCCodec.VP8
+                │     │     EasyRTCSdk.addTransceiver(codeID, "0", "0",
+                │     │         VIDEO, SENDRECV) [lines 199-201]
+                │     │       ==> JNI: EasyRTC_AddTransceiver()
+                │     │
+                │     ├── if sdp contains "m=audio":  [line 204]
+                │     │     parse codec from SDP string:
+                │     │       PCMA/8000  → EasyRTCCodec.ALAW
+                │     │       PCMU/8000  → EasyRTCCodec.MULAW
+                │     │       opus/48000 → EasyRTCCodec.OPUS
+                │     │     EasyRTCSdk.addTransceiver(codeID, "0", "1",
+                │     │         AUDIO, SENDRECV) [lines 213-215]
+                │     │       ==> JNI: EasyRTC_AddTransceiver()
+                │     │
+                │     ├── if sdp contains "webrtc-datachannel":  [line 218]
+                │     │     EasyRTCSdk.addDataChannel()
+                │     │       ==> JNI: EasyRTC_AddDataChannel()
+                │     │
+                │     └── EasyRTCSdk.createAnswer(sdp) [line 219]
+                │           │
+                │           └── peerconnection.CreateAnswer(mPeerConnection, sdp, userPtr)
+                │                 [EasyRTCSdk line 114]
+                │                 ==> JNI: EasyRTC_CreateAnswer(offerSdp)
+                │                   └── native generates answer SDP + gathers ICE
+                │                       └── <== peerconnection.OnEasyRTC_IceCandidate_Callback(
+                │                             userPtr, isOffer=0, sdp)
+                │                             │
+                │                             └── EasyRTCSdk.onSDPCallback(userPtr, 0, sdp)
+                │                                   [EasyRTCSdk line 171-178]
+                │                                   │
+                │                                   └── HomeFragment.onSDPCallback(0, sdp)
+                │                                         [line 497]
+                │                                         │
+                │                                         └── mWebSocketManager.sendOfferSDP(
+                │                                               sdp, isOffer=false)
+                │                                               [line 498]
+                │                                               type=65544 (answer)
+                │                                               → sendBinary(...)
+                │
+                └── callback.onWSLogs(sdp) [line 261]
+                      └── HomeFragment.onWSLogs(sdp) → appendLog(sdp) [line 441-443]
+
+  3.7  DEVICE SIDE: RECEIVE ANSWER SDP
+  ─────────────────────────────────────────────────────────────────────────────
+
+  [ws-okhttp] listener.onMessage(bytes)
+    │
+    └── handlerEventByteArray(data)
+          │
+          └── if type == HPNTIWEBRTCANSWERINFO (65544):  [line 262]
+                │
+                ├── uuidClientB = byteArrayToUuid(data[8..24])
+                ├── sdpLen = bytesToIntLE(data[24..26])
+                ├── answerSdp = String(data[26..26+sdpLen])
+                │
+                └── EasyRTCSdk.setRemoteDescription(answerSdp) [line 266]
+                      │
+                      └── peerconnection.SetRemoteDescription(mPeerConnection, sdp)
+                            [EasyRTCSdk line 128]
+                            ==> JNI: EasyRTC_SetRemoteDescription(sdp)
+                              └── native applies remote SDP, connects ICE
+
+  3.8  ICE CANDIDATE EXCHANGE
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ICE candidates are embedded within the SDP (not trickled separately).
+  The full SDP (offer or answer) is sent via WebSocket binary protocol:
+    - Offer: type=65542 (HPNTIWEBRTCOFFER)
+    - Answer: type=65544 (HPNTIWEBRTCANSWERINFO)
+
+  After setRemoteDescription, native ICE agent establishes connectivity.
+
+  3.9  RECONNECT LOGIC
+  ─────────────────────────────────────────────────────────────────────────────
+
+  WebSocketManager.listener.onClosing() [line 94]
+    │
+    ├── ws.close(code, reason) [line 95]
+    ├── stopOnlineClientsTask() [line 96]
+    ├── callback.onWSDisconnected(code, reason) [line 97]
+    └── attemptReconnect() [line 99]
+          │
+          └── handler.postDelayed(reconnectTask, reconnectDelay) [line 451]
+                └── connect() → reconnectDelay *= 2 (max 60s)
+
+  WebSocketManager.listener.onFailure() [line 102]
+    │
+    ├── stopOnlineClientsTask() [line 103]
+    ├── callback.onWSError(t) [line 104]
+    │     └── HomeFragment.onWSError(t) [line 428]
+    └── attemptReconnect() [line 105]
+
+
+================================================================================
+4. MEDIA SETUP FLOW: Connection State Change → Transceiver Setup →
+   Pipeline Creation
+================================================================================
+
+  4.1  CONNECTION STATE CHANGE NOTIFICATION
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Native ICE agent state change:
+    <== peerconnection.OnEasyRTC_ConnectionStateChange_Callback(
+          userPtr, state)  [peerconnection line 40-43]
+          │
+          └── EasyRTCSdk.connectionStateChange(userPtr, state)
+                [EasyRTCSdk line 165-168]
+                │
+                └── eventListener.connectionStateChange(state)  [line 166]
+                      │
+                      └── HomeFragment.connectionStateChange(state) [line 451]
+
+  4.2  STATE: CONNECTED (state == 3)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.connectionStateChange(EASYRTC_PEER_CONNECTION_STATE_CONNECTED)
+    [line 453]
+    │
+    ├── EasyRTCSdk.getAudioTransceiver() [line 454]
+    │     returns audio_transceiver handle
+    │
+    ├── if audioTransceiver != 0 && audioHelper == null:  [lines 456-459]
+    │     ├── audioHelper = AudioHelper()  [line 457]
+    │     ├── audioHelper.setOnAudioDataListener(this)  [line 458]
+    │     └── audioHelper.start()  [line 459]
+    │           (see Section 7: Audio Capture Flow)
+    │
+    ├── if mRemoteRTCAudioHelper == null:  [lines 462-464]
+    │     └── mRemoteRTCAudioHelper = RemoteRTCAudioHelper(requireContext())
+    │           (see Section 8: Audio Playback Flow)
+    │
+    ├── if remoteRTCHelper == null:  [lines 466-468]
+    │     └── remoteRTCHelper = RemoteRTCHelper(
+    │           Surface(smallSurfaceTexture or mainSurfaceTexture))
+    │           (see Section 6: Remote Video Flow)
+    │
+    ├── appendLog("连接成功") [line 472]
+    ├── getIceCandidateTypeDesc() [line 473]
+    │     ├── EasyRTCSdk.getIceCandidateType()
+    │     │     └── peerconnection.GetIceCandidateType(mPeerConnection)
+    │     │           ==> JNI: EasyRTC_GetIceCandidatePairStats()
+    │     └── returns "连接模式(P2P直连)" or "连接模式(Relay中转)"
+    │
+    └── [main] UI updates: show endCallButton, update UUID text [lines 475-478]
+
+  4.3  STATE: FAILED (state == 5)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.connectionStateChange(EASYRTC_PEER_CONNECTION_STATE_FAILED)
+    [line 480]
+    ├── appendLog("连接失败") [line 481]
+    └── [main] hide endCallButton, show "[连接失败]" [lines 482-485]
+
+  4.4  STATE: CLOSED (state == 6)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.connectionStateChange(EASYRTC_PEER_CONNECTION_STATE_CLOSED)
+    [line 486]
+    ├── appendLog("连接断开") [line 487]
+    ├── stopEasyRTC()  [line 488]
+    │     (see Section 10: Teardown Flow)
+    └── [main] hide endCallButton, show "[已断开]" [lines 489-492]
+
+
+================================================================================
+5. LOCAL VIDEO FLOW: Camera → Encode → Send
+================================================================================
+
+  5.1  CAMERA INITIALIZATION
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.onSurfaceTextureAvailable(surface, width, height) [line 213]
+    │
+    ├── if surface == mainVideoView: store mainSurfaceTexture
+    ├── if surface == smallVideoView:
+    │     ├── store smallSurfaceTexture
+    │     └── remoteRTCHelper = RemoteRTCHelper(Surface(surface),
+    │           MediaFormat.MIMETYPE_VIDEO_AVC, 720, 1280)
+    │           [lines 226-227]
+    │
+    └── if both surfaces ready && hasCameraPermission():
+          └── setupCameraPreviews() [line 235]
+                └── startMainCameraPreview() [line 286]
+                      │
+                      ├── config = getVideoEncodeConfig() [line 296]
+                      │     ├── SPUtil.getIsHevc() → useHevc
+                      │     ├── SPUtil.cameraId
+                      │     ├── SPUtil.getVideoResolution() → Size
+                      │     ├── SPUtil.getVideoBitRateKbps() → Int
+                      │     ├── SPUtil.getVideoFrameRate() → Int
+                      │     └── return VideoEncodeConfig(useHevc, frameRate,
+                      │           cameraId, resolution, 90, bitRate)
+                      │           [lines 203-211]
+                      │
+                      ├── mainCameraHelper = CameraHelper(context, config)
+                      │     [line 297]
+                      │
+                      └── mainCameraHelper.openCamera(mainSurfaceTexture, this)
+                            [line 298]
+                            │
+                            ├── releaseCamera() (cleanup old) [line 70]
+                            │
+                            ├── getEncodedDimensions() [line 72]
+                            │     ├── MediaHelper.getListEncoders(mime)
+                            │     │     └── enumerate MediaCodecList for matching encoder
+                            │     │        return first CodecInfo(name, colorFormat)
+                            │     │        [lines 393-406]
+                            │     └── compute encodedWidth/encodedHeight/encodedRotation
+                            │           based on camera ID and rotation
+                            │           [lines 408-416]
+                            │
+                            ├── Camera.open(mCameraID) [line 74]
+                            ├── configure preview size, focus mode, format
+                            ├── setDisplayOrientation(displayOrientation)
+                            ├── setPreviewTexture(surfaceTexture)
+                            ├── startPreview()
+                            ├── listener.onCameraOpened(camera) [line 133]
+                            │     └── HomeFragment.onCameraOpened(camera) [line 330]
+                            │           (logs only)
+                            │
+                            ├── setupPreviewCallback() [line 136]
+                            │     └── (see 5.2 below)
+                            │
+                            ├── initVideoEncoder(listener) [line 139]
+                            │     └── (see 5.3 below)
+                            │
+                            └── startEncoderThread() [line 146]
+                                  └── (see 5.4 below)
+
+  5.2  PREVIEW FRAME CALLBACK (per-frame)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Camera.setPreviewCallbackWithBuffer { data, camera } [CameraHelper line 250]
+    │  (runs on camera handler thread)
+    │
+    ├── JNIUtil.ConvertToI420(
+    │     data, i420_buffer,
+    │     previewWidth, previewHeight,
+    │     0, 0, previewWidth, previewHeight,
+    │     encodedRotation % 360, 2)
+    │     [line 256]
+    │     ==> JNI libUtils.so: rotates NV21 → I420
+    │
+    ├── encodeBuf = encodeBufferPool.poll() [line 259]
+    │     (non-blocking; if null, drop frame and return camera buffer)
+    │
+    ├── Convert I420 → encoder color format:
+    │     ├── if COLOR_FormatYUV420SemiPlanar:
+    │     │     JNIUtil.ConvertFromI420(i420, encodeBuf, w, h, 3)
+    │     │       [line 270]
+    │     │       ==> JNI libUtils.so: I420 → NV12
+    │     │
+    │     ├── if COLOR_FormatYUV420Planar:
+    │     │     JNIUtil.ConvertFromI420(i420, encodeBuf, w, h, 0)
+    │     │       [line 274]
+    │     │       ==> JNI libUtils.so: I420 → I420 (copy)
+    │     │
+    │     └── else: fallback conversion [line 279]
+    │
+    ├── frameQueue.offer(encodeBuf) [line 284]
+    │     (if full, recycle to pool and drop)
+    │
+    └── camera.addCallbackBuffer(data) [line 297]
+          (return buffer to camera for reuse)
+
+  5.3  VIDEO ENCODER INITIALIZATION
+  ─────────────────────────────────────────────────────────────────────────────
+
+  CameraHelper.initVideoEncoder(listener) [line 157]
+    │
+    ├── mVideoEncoder = VideoEncoder(videoEncodeConfig, info.mColorFormat) [line 158]
+    │
+    └── mVideoEncoder.startEncoder(object : OnEncodedFrameListener { ... })
+          [lines 160-168]
+          │
+          └── [encoder handler thread]:
+                initMediaCodec() [VideoEncoder line 214]
+                  │
+                  ├── MediaFormat.createVideoFormat(mime, w, h)
+                  ├── set COLOR_FORMAT, BIT_RATE, FRAME_RATE, I_FRAME_INTERVAL
+                  ├── set BITRATE_MODE = CBR
+                  │
+                  ├── MediaCodec.createEncoderByType(mime)
+                  ├── setCallback(AsyncCallback, encoderHandler)
+                  │     ├── onInputBufferAvailable → processInputBuffer()
+                  │     ├── onOutputBufferAvailable → processOutputBuffer()
+                  │     ├── onError → recoverMediaCodec()
+                  │
+                  ├── configure(format, null, null, CONFIGURE_FLAG_ENCODE)
+                  └── start()
+
+  5.4  ENCODER CONSUMER THREAD
+  ─────────────────────────────────────────────────────────────────────────────
+
+  CameraHelper.startEncoderThread() [line 172]
+    │
+    └── Thread (daemon, loop while encoderRunning):
+          │
+          ├── buf = frameQueue.poll(200ms) [line 180]
+          │
+          ├── mVideoEncoder.sendFrameToMediaCodec(buf) [line 183]
+          │     [VideoEncoder line 370]
+          │     ├── obtainFrameData(requiredSize) → FrameData from pool
+          │     ├── fd.copyFrom(data, size, timestampUs)
+          │     └── frameQueue.offer(fd) → enqueue for MediaCodec
+          │
+          └── encodeBufferPool.offer(buf) [line 188]
+                (recycle buffer to pool)
+
+  5.5  MediaCodec ASYNC CALLBACKS (inside VideoEncoder)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  VideoEncoder.processInputBuffer(index) [line 263]
+    │
+    ├── fd = frameQueue.poll() (non-blocking) [line 269]
+    ├── codec.getInputBuffer(index)
+    ├── inputBuffer.put(fd.buffer, 0, fd.size) [line 277]
+    ├── codec.queueInputBuffer(index, 0, fd.size, fd.timestampUs, 0) [line 279]
+    └── recycleFrameData(fd) [line 283]
+
+  VideoEncoder.processOutputBuffer(index, info) [line 300]
+    │
+    ├── codec.getOutputBuffer(index)
+    ├── outBuffer.get(outputFrameBuffer, 0, info.size) [line 321]
+    │
+    ├── if BUFFER_FLAG_CODEC_CONFIG:
+    │     ├── store in codecConfigBuffer
+    │     └── encodedFrameListener.onCodecConfig(data, size) [line 328]
+    │           └── CameraHelper anonymous listener.onCodecConfig() [line 165]
+    │                 (logs only)
+    │
+    ├── if BUFFER_FLAG_KEY_FRAME:
+    │     └── processKeyFrame(outputFrameBuffer, info) [line 332]
+    │           ├── prepend codecConfigBuffer (SPS+PPS) to key frame data
+    │           └── encodedFrameListener.onEncodedFrame(
+    │                 keyFrameBuffer, 0, required, true) [line 365]
+    │
+    └── else (P-frame):
+          └── encodedFrameListener.onEncodedFrame(
+                outputFrameBuffer, 0, info.size, false) [line 336]
+
+  Both KEY and P-frame callbacks reach:
+    CameraHelper anonymous listener.onEncodedFrame(data, length, frameType, pts)
+      [lines 161-163]
+        │
+        └── listener.sendVideoFrame(data, length,
+              if (isKeyFrame) 1 else 0,
+              System.currentTimeMillis())  [line 162]
+              │
+              └── HomeFragment.sendVideoFrame(data, length, frameType, pts)
+                    [line 341]
+                    │
+                    └── EasyRTCSdk.sendVideoFrame(data, frameType, pts)
+                          [line 342]
+                          [EasyRTCSdk line 137]
+                          │
+                          └── peerconnection.SendVideoFrame(
+                                video_transceiver, data, data.size,
+                                keyframe, pts)  [line 140]
+                                ==> JNI: EasyRTC_SendFrame(transceiver, frame)
+                                  └── native RTP packetization + sending
+
+  5.6  CAMERA SWITCH
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.switchCamera() [line 308]
+    │
+    └── mainCameraHelper.switchCamera(surfaceTexture, this) [line 311]
+          │
+          ├── pauseEncoding() [CameraHelper line 361]
+          │     ├── mVideoEncoder.pause() → cleanupMediaCodec()
+          │     └── stopEncoderThread()
+          │
+          ├── toggle mCameraID (FRONT ↔ BACK) [lines 363-367]
+          │
+          └── openCamera(surfaceTexture, listener) [line 369]
+                (re-initializes everything with new camera)
+
+
+================================================================================
+6. REMOTE VIDEO FLOW: Receive Callback → Decode → Render
+================================================================================
+
+  6.1  REMOTE VIDEO FRAME RECEPTION
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Native transceiver receives video RTP packet → decodes → callback:
+    <== peerconnection.OnEasyRTC_Transceiver_Callback(
+          userPtr, type=VIDEO_FRAME(0x01), codecId,
+          frameType, frameData, frameSize, pts, bandwidthEstimation)
+          [peerconnection line 46-49]
+          │
+          └── EasyRTCSdk.onTransceiverCallback(
+                userPtr, type, codecId, frameType,
+                frameData, frameSize, pts, bandwidthEstimation)
+                [EasyRTCSdk line 181-188]
+                │
+                └── executor + mainHandler.post:
+                      eventListener.onTransceiverCallback(
+                        type, codecId, frameType,
+                        frameData, frameSize, pts)  [line 184]
+                      │
+                      └── HomeFragment.onTransceiverCallback(
+                            track, codecId, frameType,
+                            frameData, frameSize, pts)  [line 505]
+                            │
+                            └── if track == VIDEO:  [line 509]
+                                  remoteRTCHelper.onRemoteVideoFrame(frameData)
+                                    [line 511]
+
+  6.2  DECODER INITIALIZATION (RemoteRTCHelper)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  RemoteRTCHelper constructor [line 16-24]
+    │
+    └── initVideoDecoder() [line 86]
+          │
+          ├── MediaCodec.createDecoderByType(currentCodecType) [line 115]
+          │     (default: "video/avc" = H.264)
+          │
+          ├── MediaFormat.createVideoFormat(codecType, width, height)
+          ├── set FRAME_RATE, I_FRAME_INTERVAL, COLOR_FORMAT (Surface)
+          ├── configure(format, surface, null, 0)  [line 121]
+          │     surface = the smallVideoView's Surface
+          │
+          ├── start() [line 122]
+          │
+          ├── videoDecoderThread = HandlerThread("VideoDecoder") [line 125]
+          ├── videoDecoderHandler = Handler(decoderThread.looper)
+          │
+          ├── isDecoderRunning = true
+          └── startFrameConsumer() [line 132]
+
+  6.3  FRAME CONSUMER THREAD
+  ─────────────────────────────────────────────────────────────────────────────
+
+  RemoteRTCHelper.startFrameConsumer() [line 145]
+    │
+    └── videoDecoderHandler.post { getVideoFrameConsumer().run() }
+          [lines 151-156]
+          │
+          └── [decoder thread loop]:
+                while (isDecoderRunning && !isDestroyed):
+                  │
+                  ├── frameData = videoFrameQueue.take() [line 66]
+                  │     (blocking wait)
+                  │
+                  └── processVideoFrame(frameData, bufferInfo) [line 67]
+                        [RemoteRTCHelper line 219]
+                        │
+                        ├── inputBufferId = decoder.dequeueInputBuffer(10000us)
+                        │     [line 227]
+                        │
+                        ├── if inputBufferId >= 0:
+                        │     ├── inputBuffer.clear()
+                        │     ├── inputBuffer.put(data) [line 231]
+                        │     ├── decoder.queueInputBuffer(
+                        │     │     inputBufferId, 0, data.size,
+                        │     │     System.nanoTime()/1000, 0) [lines 233-235]
+                        │     │
+                        │     └── dequeueOutputBuffer loop: [line 256]
+                        │           ├── if outputBufferId >= 0:
+                        │           │     decoder.releaseOutputBuffer(id, true)
+                        │           │       [line 261]
+                        │           │       ↑ render=true → renders to Surface
+                        │           │
+                        │           ├── if INFO_TRY_AGAIN_LATER → break
+                        │           └── if INFO_OUTPUT_FORMAT_CHANGED → log
+                        │
+                        └── on error:
+                              decoderErrorCount++
+                              if count >= 5: reinitVideoDecoder(currentCodecType)
+
+  6.4  FRAME QUEUE FEED
+  ─────────────────────────────────────────────────────────────────────────────
+
+  RemoteRTCHelper.onRemoteVideoFrame(data) [line 296]
+    │
+    ├── if !isDecoderRunning || isDestroyed → drop frame [lines 297-299]
+    │
+    ├── if !isConsumerRunning → startFrameConsumer() [lines 303-305]
+    │
+    └── videoFrameQueue.offer(data) [line 309]
+          (if full: poll oldest, then offer again)
+
+  6.5  CODEC SWITCHING (H.264 ↔ H.265)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  RemoteRTCHelper.reinitVideoDecoder(newCodecType) [line 169]
+    │
+    ├── isDecoderRunning = false, isConsumerRunning = false
+    ├── videoFrameQueue.clear()
+    ├── releaseVideoDecoderOnly() [line 183]
+    ├── currentCodecType = newCodecType
+    └── initVideoDecoder() [line 189]
+
+
+================================================================================
+7. AUDIO CAPTURE FLOW: Microphone → Send
+================================================================================
+
+  7.1  AUDIO CAPTURE START (Java AudioRecord path)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Triggered from HomeFragment.connectionStateChange(CONNECTED) [line 456]:
+    │
+    ├── audioHelper = AudioHelper()
+    ├── audioHelper.setOnAudioDataListener(this)
+    └── audioHelper.start() [AudioHelper line 42]
+          │
+          ├── AudioRecord.getMinBufferSize(8000, MONO, PCM_16BIT) [line 46]
+          ├── audioRecord = AudioRecord(
+          │     VOICE_RECOGNITION, 8000, MONO, PCM_16BIT,
+          │     minBufferSize * 2) [lines 56-60]
+          ├── audioRecord.startRecording() [line 67]
+          ├── enableAudioEffects() [line 69]
+          │     ├── AcousticEchoCanceler.create(sessionId) [line 91]
+          │     ├── NoiseSuppressor.create(sessionId) [line 96]
+          │     └── AutomaticGainControl.create(sessionId) [line 101]
+          │
+          ├── isRecording = true
+          └── startRecordingLoop() [line 77]
+                │
+                └── CoroutineScope(Dispatchers.IO).launch { recordAudio() }
+                      [lines 128-130]
+                      │
+                      └── [io coroutine loop]:
+                            recordAudio() [line 133]
+                              │
+                              ├── buffer = ByteArray(320) [line 134]
+                              │     (20ms @ 8kHz * 2 bytes)
+                              │
+                              └── while isRecording:
+                                    │
+                                    ├── readResult = audioRecord.read(
+                                    │     buffer, 0, 320) [line 138]
+                                    │
+                                    └── if readResult > 0:
+                                          audioData = buffer.copyOf(readResult)
+                                          audioDataListener.onAudioData(
+                                            audioData,
+                                            System.currentTimeMillis())
+                                            [line 144]
+                                            │
+                                            └── HomeFragment.onAudioData(data, pts)
+                                                  [line 400]
+                                                  │
+                                                  └── EasyRTCSdk.sendAudioFrame(
+                                                        data, pts) [line 401]
+                                                        [EasyRTCSdk line 143]
+                                                        │
+                                                        └── peerconnection.SendAudioFrame(
+                                                              audio_transceiver,
+                                                              data, data.size, pts)
+                                                              [line 146]
+                                                              ==> JNI: EasyRTC_SendFrame()
+                                                                → native RTP send
+
+  7.2  NATIVE AUDIO CAPTURE PIPELINE (AAudio — alternative, not active in
+       HomeFragment but available)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  AudioCapturePipeline constructor [line 3]
+    │
+    ├── nativeCreate(transceiverHandle) [line 5]
+    │     ==> JNI: Java_cn_easyrtc_media_AudioCapturePipeline_nativeCreate()
+    │           [easyrtc_audio.cpp line 74]
+    │           └── new AudioCapturePipeline{audioTransceiver = handle}
+    │               returns native pointer
+    │
+    └── (stored as nativePtr)
+
+  AudioCapturePipeline.start() [line 7]
+    │
+    └── nativeStart(nativePtr) [line 8]
+          ==> JNI: Java_cn_easyrtc_media_AudioCapturePipeline_nativeStart()
+                [easyrtc_audio.cpp line 83]
+                │
+                ├── AAudio_createStreamBuilder()
+                ├── setDirection(INPUT), setSampleRate(8000),
+                │   setChannelCount(1), setFormat(PCM_I16),
+                │   setSharingMode(EXCLUSIVE),
+                │   setPerformanceMode(LOW_LATENCY),
+                │   setInputPreset(VOICE_COMMUNICATION)
+                ├── setDataCallback(dataCallback, pipeline) [line 102]
+                │     └── dataCallback() [line 9]:
+                │           ├── compute dataSize = numFrames * 1 * 2
+                │           ├── get timestamp via AAudioStream_getTimestamp
+                │           ├── build EasyRTC_Frame{size, pts, frameData=pcmData}
+                │           └── EasyRTC_SendFrame(realTransceiver, &frame)
+                │                 [line 56]
+                │                 → direct native send (no Java round-trip)
+                │
+                ├── AAudioStreamBuilder_openStream()
+                └── AAudioStream_requestStart()
+
+  AudioCapturePipeline.stop() [line 11]
+    └── nativeStop(nativePtr)
+          ==> JNI: stop + close AAudio stream
+
+  AudioCapturePipeline.release() [line 15]
+    └── nativeRelease(nativePtr)
+          ==> JNI: stop + delete pipeline struct
+
+
+================================================================================
+8. AUDIO PLAYBACK FLOW: Receive → Jitter Buffer → Playback
+================================================================================
+
+  8.1  JAVA AUDIO PLAYBACK (RemoteRTCAudioHelper — active in HomeFragment)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Created in HomeFragment.connectionStateChange(CONNECTED) [line 463]:
+    │
+    └── mRemoteRTCAudioHelper = RemoteRTCAudioHelper(requireContext())
+          [RemoteRTCAudioHelper constructor]
+          │
+          ├── audioManager = context.getSystemService(AUDIO_SERVICE)
+          └── audioQueue = LinkedBlockingQueue<ByteArray>(200)
+
+  Triggered from transceiver callback:
+    HomeFragment.onTransceiverCallback(track=AUDIO, ...) [line 506]
+      │
+      └── mRemoteRTCAudioHelper.processRemoteAudioFrameSafe(
+            frameData, frameData.size)  [line 507]
+            │
+            ├── if size <= 0 → return [line 55]
+            ├── ensureStarted() [line 56]
+            │     │
+            │     └── if !playing: startInternal() [line 91]
+            │           │
+            │           ├── setupAudioRoute() [line 97]
+            │           │     └── audioManager.isSpeakerphoneOn = true
+            │           │         audioManager.mode = MODE_NORMAL [lines 202-206]
+            │           │
+            │           ├── AudioTrack.Builder()
+            │           │     .setAudioAttributes(USAGE_VOICE_COMMUNICATION,
+            │           │       CONTENT_TYPE_SPEECH)
+            │           │     .setAudioFormat(8000Hz, MONO, PCM_16BIT)
+            │           │     .setBufferSizeInBytes(minBuffer * 2)
+            │           │     .setTransferMode(MODE_STREAM)
+            │           │     .build() [lines 107-123]
+            │           │
+            │           ├── audioTrack.play() [line 125]
+            │           ├── audioTrack.setVolume(1.0F) [line 126]
+            │           │
+            │           └── startPlaybackThread() [line 128]
+            │                 │
+            │                 └── Thread("RTC-AudioPlayback"):
+            │                       [lines 136-163]
+            │                       │
+            │                       └── THREAD_PRIORITY_AUDIO loop:
+            │                             │
+            │                             ├── frame = audioQueue.poll(0ms)
+            │                             │     [line 145]
+            │                             │
+            │                             ├── if frame != null:
+            │                             │     └── writeFrame(frame) [line 147]
+            │                             │           [line 166]
+            │                             │           └── audioTrack.write(
+            │                             │                 data, offset,
+            │                             │                 remaining,
+            │                             │                 WRITE_BLOCKING)
+            │                             │                 [lines 173-177]
+            │                             │
+            │                             └── if frame == null:
+            │                                   writeFrame(silenceFrame)
+            │                                     [line 150]
+            │                                     (320 bytes of zeros)
+            │
+            └── enqueue(data.copyOf(size)) [line 57]
+                  [line 190]
+                  └── audioQueue.offer(data)
+                        (if full: poll oldest, then offer again)
+
+  8.2  NATIVE AUDIO PLAYBACK PIPELINE (AAudio — alternative, not active in
+       HomeFragment but available)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  AudioPlaybackPipeline constructor [line 5]
+    │
+    └── nativeCreate() [line 5]
+          ==> JNI: Java_cn_easyrtc_media_AudioPlaybackPipeline_nativeCreate()
+                [easyrtc_audio_playback.cpp line 96]
+                └── new AudioPlaybackPipeline{}
+                    returns native pointer
+
+  AudioPlaybackPipeline.writeFrame(data, size) [line 7]
+    │
+    └── nativeWriteFrame(nativePtr, data, size) [line 9]
+          ==> JNI: Java_cn_easyrtc_media_AudioPlaybackPipeline_nativeWriteFrame()
+                [easyrtc_audio_playback.cpp line 104]
+                │
+                ├── if !playing: ensureStreamCreated(pipeline) [line 110]
+                │     └── AAudio_createStreamBuilder()
+                │         setDirection(OUTPUT), 8000Hz, 1ch, PCM_I16
+                │         EXCLUSIVE, LOW_LATENCY
+                │         USAGE_VOICE_COMMUNICATION, CONTENT_TYPE_SPEECH
+                │         setDataCallback(playbackCallback, pipeline)
+                │         AAudioStreamBuilder_openStream()
+                │         AAudioStream_requestStart()
+                │
+                ├── copy jbyteArray → std::vector<uint8_t>
+                └── push to jitterBuffer (queue, max 200)
+                      [lines 119-126]
+                      │
+                      └── playbackCallback() [line 5] (AAudio thread):
+                            ├── lock queueMutex
+                            ├── if !jitterBuffer.empty():
+                            │     frame = std::move(jitterBuffer.front())
+                            │     jitterBuffer.pop()
+                            │     memcpy to output
+                            │     pad remainder with silence
+                            └── if empty: memset output to 0 (silence)
+
+  AudioPlaybackPipeline.release() [line 13]
+    └── nativeRelease(nativePtr) [line 15]
+          ==> JNI: Java_cn_easyrtc_media_AudioPlaybackPipeline_nativeRelease()
+                [easyrtc_audio_playback.cpp line 130]
+                └── AAudioStream_requestStop + close + delete pipeline
+
+
+================================================================================
+9. DATA CHANNEL FLOW: Send / Receive Messages
+================================================================================
+
+  9.1  SEND MESSAGE
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment mSendBtn click listener [line 190]:
+    │
+    ├── text = mEditText.getText().toString() [line 192]
+    ├── data = text.toByteArray(UTF_8) [line 195]
+    ├── EasyRTCSdk.sendMsg(0, data) [line 196]
+    │     [EasyRTCSdk line 131]
+    │     │
+    │     └── if data_channel == 0L → return [line 132]
+    │     └── peerconnection.DataChannelSend(
+    │           data_channel, isBinary=0, data, data.size)
+    │           [line 133]
+    │           ==> JNI: EasyRTC_DataChannelSend(dataChannel, 0, data, len)
+    │             → native SCTP data channel send
+    │
+    └── mEditText.setText("") [line 197]
+
+  Auto-reply on open (type==1):
+    HomeFragment.onDataChannelCallback(type=1, ...) [line 516]
+      └── EasyRTCSdk.sendMsg(0, "Hello EasyRTC!!!".toByteArray(UTF_8))
+            [lines 517-518]
+
+  9.2  RECEIVE MESSAGE
+  ─────────────────────────────────────────────────────────────────────────────
+
+  Native data channel receives data:
+    <== peerconnection.OnEasyRTC_DataChannel_Callback(
+          userPtr, type, binary, data, size)
+          [peerconnection line 57-59]
+          │
+          └── EasyRTCSdk.onDataChannelCallback(
+                userPtr, type, binary, data, size)
+                [EasyRTCSdk line 191-198]
+                │
+                └── executor + mainHandler.post:
+                      eventListener.onDataChannelCallback(
+                        type, binary, data, size) [line 194]
+                      │
+                      └── HomeFragment.onDataChannelCallback(
+                            type, binary, data, size) [line 515]
+                            │
+                            ├── if type == 1 (EASYRTC_DATACHANNEL_CALLBACK_OPENED):
+                            │     └── EasyRTCSdk.sendMsg(0,
+                            │           "Hello EasyRTC!!!".toByteArray(UTF_8))
+                            │           [lines 517-518]
+                            │
+                            └── if type == 2 (EASYRTC_DATACHANNEL_CALLBACK_DATA):
+                                  └── if binary == 0 (text):
+                                        [main] appendLog(
+                                          data.toString(UTF_8))
+                                          [lines 520-524]
+
+
+================================================================================
+10. TEARDOWN FLOW: Cleanup All Resources
+================================================================================
+
+  10.1  USER-INITIATED HANGUP (end call button)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment endCallButton click [line 168]:
+    │
+    ├── endCallButton.visibility = INVISIBLE [line 170]
+    ├── stopEasyRTC() [line 172]
+    │     [HomeFragment line 594]
+    │     │
+    │     ├── audioHelper.stop() [line 596]
+    │     │     [AudioHelper line 107]
+    │     │     ├── isRecording = false
+    │     │     ├── recordingJob.cancel()
+    │     │     ├── audioRecord.stop() + release()
+    │     │     └── audioRecord = null
+    │     │
+    │     ├── remoteRTCHelper.release() [line 597]
+    │     │     └── RemoteRTCHelper.releaseVideoHandler() [line 328]
+    │     │           ├── isDecoderRunning = false, isDestroyed = true
+    │     │           ├── videoFrameQueue.clear()
+    │     │           ├── videoDecoderHandler.removeCallbacksAndMessages()
+    │     │           ├── videoDecoderThread.quitSafely()
+    │     │           ├── videoDecoder.stop() + release()
+    │     │           └── null all references
+    │     │
+    │     ├── mRemoteRTCAudioHelper.release() [line 598]
+    │     │     [RemoteRTCAudioHelper line 62]
+    │     │     ├── stopped = true, playing = false
+    │     │     ├── playbackThread.interrupt()
+    │     │     ├── audioQueue.clear()
+    │     │     ├── audioTrack.stop() + release()
+    │     │     └── audioTrack = null
+    │     │
+    │     └── null all helper references [lines 600-602]
+    │
+    ├── EasyRTCSdk.release() [line 174]
+    │     [EasyRTCSdk line 150]
+    │     │
+    │     ├── if video_transceiver != 0:
+    │     │     peerconnection.FreeTransceiver(video_transceiver) [line 151]
+    │     │       ==> JNI: EasyRTC_FreeTransceiver()
+    │     │
+    │     ├── if audio_transceiver != 0:
+    │     │     peerconnection.FreeTransceiver(audio_transceiver) [line 152]
+    │     │       ==> JNI: EasyRTC_FreeTransceiver()
+    │     │
+    │     ├── if data_channel != 0:
+    │     │     peerconnection.FreeDataChannel(data_channel) [line 153]
+    │     │       ==> JNI: EasyRTC_FreeDataChannel()
+    │     │
+    │     ├── if mPeerConnection != 0:
+    │     │     peerconnection.release(mPeerConnection) [line 155]
+    │     │       ==> JNI: EasyRTC_ReleasePeerConnection()
+    │     │
+    │     └── zero all handles [lines 157-160]
+    │
+    └── appendLog("连接断开") [line 175]
+
+  10.2  PEER DISCONNECT (CLOSED state)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.connectionStateChange(CLOSED) [line 486]
+    │
+    ├── appendLog("连接断开")
+    ├── stopEasyRTC() [line 488]
+    └── [main] hide endCallButton, show "[已断开]"
+
+  10.3  FRAGMENT LIFECYCLE CLEANUP
+  ─────────────────────────────────────────────────────────────────────────────
+
+  HomeFragment.onDestroyView() [line 378]
+    │
+    ├── stopCameraPreviews() [line 381]
+    │     [HomeFragment line 320]
+    │     ├── mainCameraHelper.release() [line 322]
+    │     │     [CameraHelper line 373]
+    │     │     ├── releaseCamera() [line 377]
+    │     │     │     ├── pauseEncoding()
+    │     │     │     │     ├── mVideoEncoder.pause()
+    │     │     │     │     │     → cleanupMediaCodec() (stop+release MediaCodec)
+    │     │     │     │     └── stopEncoderThread()
+    │     │     │     ├── camera.setPreviewCallbackWithBuffer(null)
+    │     │     │     ├── camera.stopPreview()
+    │     │     │     ├── callbackBuffers.clear()
+    │     │     │     ├── frameQueue.clear()
+    │     │     │     ├── stopEncoderThread()
+    │     │     │     └── camera.release() → camera = null
+    │     │     │
+    │     │     └── mVideoEncoder.stop() [lines 379-385]
+    │     │           → cleanupMediaCodec()
+    │     │           mVideoEncoder = null
+    │     │
+    │     ├── mainCameraHelper = null [line 323]
+    │     ├── remoteRTCHelper.release() [line 325]
+    │     └── remoteRTCHelper = null [line 326]
+    │
+    ├── stopEasyRTC() [line 384]
+    └── EasyRTCSdk.release() [line 386]
+
+  HomeFragment.onPause() (when switching to another fragment) [line 349]
+    │
+    ├── stopCameraPreviews() [line 353]
+    ├── remoteRTCHelper.release() [line 354]
+    ├── stopEasyRTC() [line 358]
+    ├── EasyRTCSdk.release() [line 360]
+    ├── endCallButton.visibility = INVISIBLE [line 361]
+    └── isRelease = true [line 363]
+
+  HomeFragment.onResume() (when returning) [line 367]
+    │
+    └── if isRelease:
+          ├── setupCameraPreviews() (re-init camera)
+          └── remoteRTCHelper = RemoteRTCHelper(Surface(...))
+
+
+================================================================================
+11. JNI BOUNDARY SUMMARY: All Java ↔ Native Calls
+================================================================================
+
+  11.1  LIBRARY: libEasyRTC.so (loaded by peerconnection.java)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  JAVA → NATIVE (==>):
+  ┌──────────────────────────────────────────┬───────────────────────────────┬────────────────────────────────────┐
+  │ Java Method                              │ C API Function                │ Description                        │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.create(                   │ EasyRTC_CreatePeerConnection  │ Create PeerConnection with ICE     │
+  │   version, iceTransportPolicy,           │   (ppPeerConnection,          │   config (STUN/TURN)               │
+  │   stun, turn, username, credential,      │    pRtcConfiguration,         │                                    │
+  │   userPtr)                               │    callback, userptr)         │                                    │
+  │ [peerconnection.java:9]                  │ [EasyRTCAPI.h:253]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.release(                  │ EasyRTC_ReleasePeerConnection │ Release PeerConnection             │
+  │   peer_connection)                       │   (ppPeerConnection)          │                                    │
+  │ [peerconnection.java:12]                 │ [EasyRTCAPI.h:257]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.AddTransceiver(           │ EasyRTC_AddTransceiver        │ Add media transceiver (audio/video)│
+  │   peer_connection, codecID,              │   (ppTransceiver,             │                                    │
+  │   streamId, trackId,                     │    pPeerConnection,           │                                    │
+  │   streamTrackType, direction,            │    pRtcMediaStreamTrack,      │                                    │
+  │   userPtr)                               │    pRtcRtpTransceiverInit,    │                                    │
+  │ [peerconnection.java:14]                 │    callback, userptr)         │                                    │
+  │                                          │ [EasyRTCAPI.h:260]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.AddDataChannel(           │ EasyRTC_AddDataChannel        │ Create SCTP DataChannel            │
+  │   peer_connection, name, userPtr)        │   (ppDataChannel,             │                                    │
+  │ [peerconnection.java:16]                 │    pPeerConnection,           │                                    │
+  │                                          │    name, callback, userptr)   │                                    │
+  │                                          │ [EasyRTCAPI.h:271]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.FreeDataChannel(          │ EasyRTC_FreeDataChannel       │ Release DataChannel                │
+  │   data_channel)                          │   (ppDataChannel)             │                                    │
+  │ [peerconnection.java:18]                 │ [EasyRTCAPI.h:279]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.SendVideoFrame(           │ EasyRTC_SendFrame             │ Send encoded video frame via RTP   │
+  │   video_transceiver, data, size,         │   (pTransceiver, pFrame)      │                                    │
+  │   keyframe, pts)                         │ [EasyRTCAPI.h:266]           │                                    │
+  │ [peerconnection.java:20]                 │                               │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.SendAudioFrame(           │ EasyRTC_SendFrame             │ Send PCM audio frame via RTP       │
+  │   audio_transceiver, data, size,         │   (pTransceiver, pFrame)      │                                    │
+  │   pts)                                   │ [EasyRTCAPI.h:266]           │                                    │
+  │ [peerconnection.java:22]                 │                               │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.FreeTransceiver(          │ EasyRTC_FreeTransceiver       │ Release Transceiver                │
+  │   transceiver)                           │   (ppTransceiver)             │                                    │
+  │ [peerconnection.java:24]                 │ [EasyRTCAPI.h:268]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.DataChannelSend(          │ EasyRTC_DataChannelSend       │ Send data via SCTP DataChannel     │
+  │   data_channel, isBinary, data,          │   (pDataChannel, isBinary,    │                                    │
+  │   size)                                  │    pMessage, messageLen)      │                                    │
+  │ [peerconnection.java:26]                 │ [EasyRTCAPI.h:276]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.CreateAnswer(             │ EasyRTC_CreateAnswer          │ Generate answer SDP from offer     │
+  │   peer_connection, offer_sdp,            │   (pPeerConnection, offersdp, │                                    │
+  │   userPtr)                               │    callback, userptr)         │                                    │
+  │ [peerconnection.java:28]                 │ [EasyRTCAPI.h:287]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.CreateOffer(              │ EasyRTC_CreateOffer           │ Generate offer SDP                 │
+  │   peer_connection, userPtr)              │   (pPeerConnection,           │                                    │
+  │ [peerconnection.java:31]                 │    callback, userptr)         │                                    │
+  │                                          │ [EasyRTCAPI.h:283]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.SetRemoteDescription(     │ EasyRTC_SetRemoteDescription  │ Apply remote SDP (answer)          │
+  │   peer_connection, sdp)                  │   (pPeerConnection, sdp)      │                                    │
+  │ [peerconnection.java:34]                 │ [EasyRTCAPI.h:285]           │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ peerconnection.GetIceCandidateType(      │ EasyRTC_GetIceCandidatePairStats│ Get ICE stats (P2P vs Relay)    │
+  │   peer_connection)                       │   (pPeerConnection, pStats)   │                                    │
+  │ [peerconnection.java:36]                 │ [EasyRTCAPI.h:290]           │                                    │
+  └──────────────────────────────────────────┴───────────────────────────────┴────────────────────────────────────┘
+
+  NATIVE → JAVA (<==):
+  ┌──────────────────────────────────────────┬───────────────────────────────┬────────────────────────────────────┐
+  │ C Callback                               │ Java Static Method            │ Description                        │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ EasyRTC_ConnectionStateChange_Callback   │ peerconnection.               │ ICE connection state changed       │
+  │ (userPtr, state)                         │   OnEasyRTC_ConnectionState   │                                    │
+  │ [EasyRTCAPI.h:231]                       │   Change_Callback(userPtr,    │                                    │
+  │                                          │   state)                      │                                    │
+  │                                          │ [peerconnection.java:40]      │                                    │
+  │                                          │ → EasyRTCSdk.connectionState  │                                    │
+  │                                          │   Change(userPtr, state)      │                                    │
+  │                                          │ [EasyRTCSdk.kt:165]          │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ EasyRTC_Transceiver_Callback             │ peerconnection.               │ Received decoded media frame       │
+  │ (userPtr, type, codecId, frame,          │   OnEasyRTC_Transceiver_      │ (video or audio) or bandwidth      │
+  │  bandwidthEstimation)                    │   Callback(userPtr, type,     │ estimate or keyframe request       │
+  │ [EasyRTCAPI.h:232]                       │   codecId, frameType,         │                                    │
+  │                                          │   frameData, frameSize,       │                                    │
+  │                                          │   pts, bandwidth)             │                                    │
+  │                                          │ [peerconnection.java:46]      │                                    │
+  │                                          │ → EasyRTCSdk.onTransceiver    │                                    │
+  │                                          │   Callback(userPtr, type,     │                                    │
+  │                                          │   codecId, frameType,         │                                    │
+  │                                          │   frameData, frameSize, pts)  │                                    │
+  │                                          │ [EasyRTCSdk.kt:181]          │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ EasyRTC_IceCandidate_Callback            │ peerconnection.               │ SDP offer/answer ready with ICE    │
+  │ (userPtr, isOffer, sdp)                  │   OnEasyRTC_IceCandidate_     │ candidates                         │
+  │ [EasyRTCAPI.h:234]                       │   Callback(userPtr, isOffer,  │                                    │
+  │                                          │   sdp)                        │                                    │
+  │                                          │ [peerconnection.java:52]      │                                    │
+  │                                          │ → EasyRTCSdk.onSDPCallback(   │                                    │
+  │                                          │   userPtr, isOffer, sdp)      │                                    │
+  │                                          │ [EasyRTCSdk.kt:171]          │                                    │
+  ├──────────────────────────────────────────┼───────────────────────────────┼────────────────────────────────────┤
+  │ EasyRTC_DataChannel_Callback             │ peerconnection.               │ DataChannel opened or data received│
+  │ (userPtr, type, isBinary, msgData,       │   OnEasyRTC_DataChannel_      │                                    │
+  │  msgLen)                                 │   Callback(userPtr, type,     │                                    │
+  │ [EasyRTCAPI.h:233]                       │   binary, data, size)         │                                    │
+  │                                          │ [peerconnection.java:57]      │                                    │
+  │                                          │ → EasyRTCSdk.onDataChannel    │                                    │
+  │                                          │   Callback(userPtr, type,     │                                    │
+  │                                          │   binary, data, size)         │                                    │
+  │                                          │ [EasyRTCSdk.kt:191]          │                                    │
+  └──────────────────────────────────────────┴───────────────────────────────┴────────────────────────────────────┘
+
+  11.2  LIBRARY: libeasyrtc_media.so (loaded by AudioCapturePipeline,
+        AudioPlaybackPipeline)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  JAVA → NATIVE (==>):
+  ┌──────────────────────────────────────────┬──────────────────────────────────────────────────────────┐
+  │ Java Method                              │ JNI Function (easyrtc_audio.cpp / easyrtc_audio_playback)│
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ AudioCapturePipeline.nativeCreate(       │ Java_cn_easyrtc_media_AudioCapturePipeline_nativeCreate  │
+  │   transceiverHandle)                     │ [easyrtc_audio.cpp:74]                                   │
+  │ [AudioCapturePipeline.kt:22]             │ → new AudioCapturePipeline{audioTransceiver=handle}      │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ AudioCapturePipeline.nativeStart(        │ Java_cn_easyrtc_media_AudioCapturePipeline_nativeStart   │
+  │   pipelinePtr)                           │ [easyrtc_audio.cpp:83]                                   │
+  │ [AudioCapturePipeline.kt:23]             │ → Create AAudio INPUT stream, start capture              │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ AudioCapturePipeline.nativeStop(         │ Java_cn_easyrtc_media_AudioCapturePipeline_nativeStop    │
+  │   pipelinePtr)                           │ [easyrtc_audio.cpp:131]                                  │
+  │ [AudioCapturePipeline.kt:24]             │ → Stop + close AAudio stream                             │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ AudioCapturePipeline.nativeRelease(      │ Java_cn_easyrtc_media_AudioCapturePipeline_nativeRelease │
+  │   pipelinePtr)                           │ [easyrtc_audio.cpp:148]                                  │
+  │ [AudioCapturePipeline.kt:25]             │ → Stop + delete pipeline                                 │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ AudioPlaybackPipeline.nativeCreate()     │ Java_cn_easyrtc_media_AudioPlaybackPipeline_nativeCreate │
+  │ [AudioPlaybackPipeline.kt:20]           │ [easyrtc_audio_playback.cpp:96]                          │
+  │                                          │ → new AudioPlaybackPipeline                              │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ AudioPlaybackPipeline.nativeWriteFrame(  │ Java_cn_easyrtc_media_AudioPlaybackPipeline_nativeWrite  │
+  │   pipelinePtr, data, size)               │ Frame [easyrtc_audio_playback.cpp:104]                   │
+  │ [AudioPlaybackPipeline.kt:21]           │ → Ensure AAudio stream, push frame to jitter buffer      │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ AudioPlaybackPipeline.nativeRelease(     │ Java_cn_easyrtc_media_AudioPlaybackPipeline_nativeRelease│
+  │   pipelinePtr)                           │ [easyrtc_audio_playback.cpp:130]                         │
+  │ [AudioPlaybackPipeline.kt:22]           │ → Stop AAudio, clear queue, delete pipeline              │
+  └──────────────────────────────────────────┴──────────────────────────────────────────────────────────┘
+
+  NATIVE → JAVA (<==): None. These pipelines are push-only from Java side.
+  Native AAudio callbacks stay entirely in C++:
+    - Capture: dataCallback → EasyRTC_SendFrame (directly, no Java round-trip)
+    - Playback: playbackCallback → reads from jitter buffer (no Java round-trip)
+
+  11.3  LIBRARY: libUtils.so (loaded by JNIUtil.java)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  JAVA → NATIVE (==>):
+  ┌──────────────────────────────────────────┬──────────────────────────────────────────────────────────┐
+  │ Java Method                              │ Purpose                                                  │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ JNIUtil.ConvertToI420(src, dst, w, h,    │ Rotate + convert camera NV21 to I420 (libyuv wrapper)    │
+  │   cropX, cropY, cropW, cropH, rot, mode) │ [JNIUtil.java:93]                                        │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ JNIUtil.ConvertFromI420(src, dst, w, h,  │ Convert I420 to encoder color format (NV12/YV12/...)     │
+  │   mode)                                  │ [JNIUtil.java:104]                                       │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ JNIUtil.yuvConvert(data, w, h, mode)     │ YUV format conversion (mode 0-6)                         │
+  │ [JNIUtil.java:53]                       │                                                          │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ JNIUtil.Android420ToARGB(yuv, argb,      │ Convert YUV to ARGB                                      │
+  │   w, h, mode)                            │ [JNIUtil.java:62]                                        │
+  ├──────────────────────────────────────────┼──────────────────────────────────────────────────────────┤
+  │ JNIUtil.I420Scale(src, dst, w, h,        │ Scale I420 frame                                          │
+  │   dstW, dstH, mode)                      │ [JNIUtil.java:117]                                       │
+  └──────────────────────────────────────────┴──────────────────────────────────────────────────────────┘
+
+  NATIVE → JAVA (<==): None. All calls are one-way.
+
+
+================================================================================
+APPENDIX A: BINARY PROTOCOL MESSAGE TYPES
+================================================================================
+
+  Type ID    Constant                        Direction    Description
+  ─────────  ──────────────────────────────  ──────────   ────────────────────────
+  0x10001    HPREQLOGINUSERINFO (65537)       Client→Srv   Login/register request
+  0x10002    HPACKLOGINUSERINFO (65538)       Srv→Client   Login ACK (status)
+  0x10003    HPREQCONNECTUSERINFO (65539)     Client→Srv   Initiate call request
+  0x10004    ACKCONNECTUSERINF0 (65540)       Srv→Client   Call ACK
+  0x10005    HPREQGETWEBRTCOFFERINFO (65541)  Srv→Client   Request offer from device
+  0x10006    HPNTIWEBRTCOFFER (65542)         Client→Srv   Send SDP offer
+  0x10007    HPNTIWEBRTCOFFERINFO2 (65543)    Srv→Client   Deliver offer to caller
+  0x10008    HPNTIWEBRTCANSWERINFO (65544)    Client→Srv   Send SDP answer
+  0x20001    HPREQGETONLINEDEVICESINFO        Client→Srv   Get online devices list
+             (131073)
+  0x20002    HPACKGETONLINEDEVICESINFO         Srv→Client   Online devices list
+             (131074)
+
+================================================================================
+APPENDIX B: THREAD MODEL SUMMARY
+================================================================================
+
+  Thread Name            Owner                    Purpose
+  ─────────────────────  ───────────────────────  ──────────────────────────────
+  main                   Android                  UI rendering, button handlers,
+                                                   appendLog, visibility changes
+  OkHttp WebSocket       OkHttp library           WS onOpen/onMessage/onFailure
+  encoder-thread         CameraHelper             Pulls frames from frameQueue,
+                                                   feeds VideoEncoder.sendFrameToMediaCodec
+  VideoEncoder_Async     VideoEncoder             MediaCodec async callback handler
+                                                   (processInputBuffer/processOutputBuffer)
+  VideoDecoder           RemoteRTCHelper          MediaCodec video decoder handler
+                                                   (frame consumer loop)
+  RTC-AudioPlayback      RemoteRTCAudioHelper     AudioTrack write loop
+                                                   (polls audioQueue, writes to AudioTrack)
+  DefaultDispatcher-worker Coroutine (AudioHelper) AudioRecord read loop
+                                                   (reads 320 bytes, calls onAudioData)
+  EasyRTCSdk executor    EasyRTCSdk               Serializes callback dispatch
+                                                   (then posts to mainHandler)
+  AAudio capture thread  AudioCapturePipeline     Low-latency native audio capture
+                                                   (calls EasyRTC_SendFrame directly)
+  AAudio playback thread AudioPlaybackPipeline    Low-latency native audio playback
+                                                   (reads from jitter buffer)
+
+================================================================================
+APPENDIX C: NOTE ON MISSING/STUB FILES
+================================================================================
+
+  The following files specified in the request were NOT FOUND in the repository:
+  - easyrtc/src/main/java/cn/easyrtc/media/MediaPipeline.kt
+  - easyrtc/src/main/cpp/easyrtc_media.cpp
+  - easyrtc/src/main/cpp/easyrtc_media.h
+  - easyrtc/src/main/cpp/CMakeLists.txt
+  - app/.../ui/live/LiveSessionController.kt
+  - app/.../ui/live/NativePipelineController.kt
+  - app/.../ui/live/LiveUiState.kt
+
+  These files may have been removed, renamed, or may exist on a different
+  branch. The call graph was constructed entirely from the files that
+  actually exist on the master branch.
+
+  The following files exist but are stubs or empty implementations:
+  - CameraHelperV2.kt (empty class body)
+  - easyrtc_video_decoder.cpp (contains only: "// Stub - to be implemented")
+
+================================================================================
+END OF DOCUMENT
+================================================================================

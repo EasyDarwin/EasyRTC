@@ -1,11 +1,11 @@
-#include "EasyRTCDeviceAPI.h"
+ï»¿#include "EasyRTCDeviceAPI.h"
 #include "RTCDevice.h"
 #include <stdbool.h>
 #include "EasyRTC_websocket.h"
 
 /****************************************************
- * º¯Êı: getBuildTime
- * ¹¦ÄÜ: »ñÈ¡Èí¼ş±àÒëÊ±¼äºÍÈÕÆÚ
+ * å‡½æ•°: getBuildTime
+ * åŠŸèƒ½: è·å–è½¯ä»¶ç¼–è¯‘æ—¶é—´å’Œæ—¥æœŸ
  ***************************************************/
 void EasyRTCDevice_getBuildTime(int* _year, int* _month, int* _day, int* _hour, int* _minute, int* _second)
 {
@@ -93,7 +93,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Init()
 		gEasyRTCDeviceInitFlag = 1;
 	}
 
-	// ´òÓ¡Á½¸ö¿âµÄ°æ±¾ºÅ
+	// æ‰“å°ä¸¤ä¸ªåº“çš„ç‰ˆæœ¬å·
 
 	char EasyRTCLibVersion[32] = { 0 };
 	websocketGetVersion(EasyRTCLibVersion);
@@ -158,7 +158,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Stop(EASYRTC_HANDLE handle)
 }
 
 
-// ·¢ËÍÊÓÆµÖ¡
+// å‘é€è§†é¢‘å¸§
 int	EASYRTC_DEVICE_API	EasyRTC_Device_SendVideoFrame(EASYRTC_HANDLE handle, char* framedata, const int framesize, int keyframe, unsigned long long pts)
 {
 	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
@@ -171,8 +171,8 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_SendVideoFrame(EASYRTC_HANDLE handle, char
 	return ret;
 }
 
-// ·¢ËÍÒôÆµÖ¡
-int	EASYRTC_DEVICE_API	EasyRTC_Device_SendAudioFrame(EASYRTC_HANDLE handle, char* framedata, const int framesize, unsigned long long pts/*Ê±¼ä´Áµ¥Î»ÊÇ:ºÁÃë*/)
+// å‘é€éŸ³é¢‘å¸§
+int	EASYRTC_DEVICE_API	EasyRTC_Device_SendAudioFrame(EASYRTC_HANDLE handle, char* framedata, const int framesize, unsigned long long pts/*æ—¶é—´æˆ³å•ä½æ˜¯:æ¯«ç§’*/)
 {
 	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
 
@@ -197,7 +197,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_aecm_process(EASYRTC_HANDLE handle, short*
 }
 
 
-// ·¢ËÍ×Ô¶¨ÒåÊı¾İµ½Ö¸¶¨¶Ô¶Ë»òËùÓĞ¶Ô¶Ë
+// å‘é€è‡ªå®šä¹‰æ•°æ®åˆ°æŒ‡å®šå¯¹ç«¯æˆ–æ‰€æœ‰å¯¹ç«¯
 int	EASYRTC_DEVICE_API	EasyRTC_Device_SendCustomData(EASYRTC_HANDLE handle, const char* peerUUID, const int isBinary, const char* data, const int size)
 {
 	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
@@ -223,7 +223,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 }
 
 
-//// »ñÈ¡ÔÚÏßÉè±¸ÁĞ±í
+//// è·å–åœ¨çº¿è®¾å¤‡åˆ—è¡¨
 //int	EASYRTC_DEVICE_API	EasyRTC_GetOnlineDeviceList(EASYRTC_HANDLE handle)
 //{
 //	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
@@ -234,7 +234,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 //	return ret;
 //}
 //
-//// Ö÷¶¯Á¬½Ó¶Ô·½
+//// ä¸»åŠ¨è¿æ¥å¯¹æ–¹
 //int	EASYRTC_DEVICE_API	EasyRTC_OpenPeerConnection(EASYRTC_HANDLE handle, const char* peerUUID)
 //{
 //	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
@@ -244,7 +244,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 //
 //	return ret;
 //}
-//// ¹Ø±Õ¶Ô·½Á¬½Ó
+//// å…³é—­å¯¹æ–¹è¿æ¥
 //int	EASYRTC_DEVICE_API	EasyRTC_ClosePeerConnection(EASYRTC_HANDLE handle, const char* peerUUID)
 //{
 //	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
@@ -255,7 +255,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 //	return 0;
 //}
 //
-//// ´¦Àíºô½ĞÏìÓ¦
+//// å¤„ç†å‘¼å«å“åº”
 //int	EASYRTC_DEVICE_API	EasyRTC_HandleCall(EASYRTC_HANDLE handle, const char* peerUUID, bool isAccepted)
 //{
 //	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
@@ -266,7 +266,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 //	return ret;
 //}
 
-//// ½ÓÊÜÁ¬½Ó
+//// æ¥å—è¿æ¥
 //int	EASYRTC_DEVICE_API	EasyRTC_AcceptConnection(EASYRTC_HANDLE handle, const char* peerUUID)
 //{
 //	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
@@ -276,7 +276,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 //
 //	return ret;
 //}
-//// ¾Ü¾øÁ¬½Ó
+//// æ‹’ç»è¿æ¥
 //int	EASYRTC_DEVICE_API	EasyRTC_RefuseConnection(EASYRTC_HANDLE handle, const char* peerUUID)
 //{
 //	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
@@ -289,7 +289,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Hangup(EASYRTC_HANDLE handle, const char* 
 
 
 
-	// »ñÈ¡ÔÚÏßÉè±¸ÁĞ±í
+	// è·å–åœ¨çº¿è®¾å¤‡åˆ—è¡¨
 int	EASYRTC_DEVICE_API	EasyRTC_GetOnlineDevices(EASYRTC_HANDLE handle, EasyRTC_Data_Callback callback, void* userptr)
 {
 	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
@@ -304,7 +304,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_GetOnlineDevices(EASYRTC_HANDLE handle, EasyRTC_D
 }
 
 
-	// Á¬½ÓÖ¸¶¨Éè±¸
+	// è¿æ¥æŒ‡å®šè®¾å¤‡
 int	EASYRTC_DEVICE_API	EasyRTC_Caller_Connect(EASYRTC_HANDLE handle, const char* peerUUID)
 {
 	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
@@ -334,7 +334,7 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Release(EASYRTC_HANDLE* handle)
 }
 
 
-// ·´³õÊ¼»¯»·¾³
+// ååˆå§‹åŒ–ç¯å¢ƒ
 int	EASYRTC_DEVICE_API	EasyRTC_Device_Deinit()
 {
 	if (gEasyRTCDeviceInitFlag == 1)

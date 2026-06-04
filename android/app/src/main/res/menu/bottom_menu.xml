@@ -1,19 +1,19 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:id="@+id/navigation_home"
+        android:id="@+id/navigation_p2p_call"
+        android:icon="@drawable/ic_white_call"
+        android:title="@string/navigation_p2p_call"
+        android:tooltipText="" />
+
+    <item
+        android:id="@+id/navigation_whip_push"
         android:icon="@drawable/ic_home_selector"
-        android:title="登录"
+        android:title="@string/navigation_whip_push"
         android:tooltipText="" />
 
     <item
-        android:id="@+id/navigation_setting"
+        android:id="@+id/navigation_ip_direct"
         android:icon="@drawable/ic_setting_selector"
-        android:title="设置"
-        android:tooltipText="" />
-
-    <item
-        android:id="@+id/navigation_about"
-        android:icon="@drawable/ic_about_selector"
-        android:title="关于"
+        android:title="@string/navigation_ip_direct"
         android:tooltipText="" />
 </menu>

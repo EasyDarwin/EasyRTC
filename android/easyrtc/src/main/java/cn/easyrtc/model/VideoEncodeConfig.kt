@@ -3,6 +3,22 @@ package cn.easyrtc.model
 import android.util.Size
 import android.hardware.Camera
 import android.util.Log
+import androidx.lifecycle.MutableLiveData
+
+sealed class LiveUiState {
+    data object Idle : LiveUiState()
+    data class Connected(val user: String?) : LiveUiState()
+    data class Disconnected(val user: String?) : LiveUiState()
+    data class Failed(val user: String?, val reason: String?) : LiveUiState()
+}
+
+sealed class DataChannelEvent {
+    data object Open : DataChannelEvent()
+    data object Idle : DataChannelEvent()
+    data class Message(val binary: Int, val data: ByteArray, val size: Int) : DataChannelEvent() {
+        override fun equals(other: Any?): Boolean = other is Message
+    }
+}
 
 data class VideoEncodeConfig(
     private val useHevc: Boolean = false,
@@ -11,7 +27,7 @@ data class VideoEncodeConfig(
     private val resolution: Size = Size(1280, 720),
     private val orientation: Int = ORIENTATION_0, //是否旋转
     private val bitRate: Int = 500_000,
-    private val iFrameInterval: Int = 1,
+    private val iFrameInterval: Int = 10,
 ) {
 
     // 验证参数的有效性

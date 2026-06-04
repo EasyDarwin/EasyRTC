@@ -1,0 +1,96 @@
+2026-05-23 16:21:24.216 [info] [pid:21428 tid:21428] [EasyRTC.Java] 2026-05-23 16:21:24: ======= offer from local ====== 
+ v=0
+o=- 1389913386 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE 0 1 2
+a=msid-semantic: WMS myKvsVideoStream
+m=audio 9 UDP/TLS/RTP/SAVPF 8
+c=IN IP4 127.0.0.1
+a=candidate:6 1 udp 16777215 212.64.34.165 40291 typ relay raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:4 1 udp 1694498815 60.168.245.212 37149 typ srflx raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:3 1 udp 2130706431 192.168.1.107 43192 typ host raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:2 1 udp 2130706431 10.129.203.8 44011 typ host raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:1 1 udp 2130706431 2408:8445:0D73:1FF6:08B9:EBFF:FE49:0395 44948 typ host raddr ::/0 rport 0 generation 0 network-cost 999
+a=candidate:0 1 udp 2130706431 2408:8545:0C43:C54E:6047:27FF:FE41:FB85 49072 typ host raddr ::/0 rport 0 generation 0 network-cost 999
+a=msid:0 1
+a=ssrc:1727432104 cname:1vSkHGHNLV9vm+MI
+a=ssrc:1727432104 msid:0 1
+a=ssrc:1727432104 mslabel:0
+a=ssrc:1727432104 label:1
+a=rtcp:9 IN IP4 0.0.0.0
+a=ice-ufrag:iNqZ
+a=ice-pwd:64EnaHrTY33yyN9kwJhidmIw
+a=fingerprint:sha-256 63:17:78:AE:4D:26:49:BB:73:8E:55:6F:0A:23:B8:68:57:1E:60:17:D0:89:1D:BD:B6:5B:75:73:42:6F:81:70
+a=setup:actpass
+a=mid:0
+a=sendrecv
+a=rtcp-mux
+a=rtpmap:8 PCMA/8000
+a=ssrc:1727432104 cname:1vSkHGHNLV9vm+MI
+a=ssrc:1727432104 msid:0 1
+a=rtcp-fb:8 goog-remb
+m=video 9 UDP/TLS/RTP/SAVPF 127
+c=IN IP4 127.0.0.1
+a=candidate:6 1 udp 16777215 212.64.34.165 40291 typ relay raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:4 1 udp 1694498815 60.168.245.212 37149 typ srflx raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:3 1 udp 2130706431 192.168.1.107 43192 typ host raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:2 1 udp 2130706431 10.129.203.8 44011 typ host raddr 0.0.0.0 rport 0 generation 0 network-cost 999
+a=candidate:1 1 udp 2130706431 2408:8445:0D73:1FF6:08B9:EBFF:FE49:0395 44948 typ host raddr ::/0 r
+
+
+
+
+2026-05-23 16:21:24.273 [info] [pid:21428 tid:26358] [EasyRTC.Java] 2026-05-23 16:21:24: answer from remote:
+v=0
+o=- 5855246113787806798 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE 0 1 2
+a=msid-semantic: WMS 87dd3a59-16f8-49f1-be3f-68f294e9b59e
+m=audio 52445 UDP/TLS/RTP/SAVPF 8
+c=IN IP4 192.168.1.109
+a=rtcp:9 IN IP4 0.0.0.0
+a=candidate:3724049863 1 udp 2122260223 192.168.1.109 52445 typ host generation 0 network-id 1 network-cost 10
+a=ice-ufrag:ozZ1
+a=ice-pwd:AGRpHkMvp/4eojtMjjFgJ/9G
+a=ice-options:trickle
+a=fingerprint:sha-256 6F:94:FF:29:C2:81:2A:64:AD:69:C9:D1:05:02:B0:1E:AC:4C:84:6C:42:8A:C6:49:AA:2B:64:E6:F4:32:AC:A5
+a=setup:active
+a=mid:0
+a=sendrecv
+a=msid:87dd3a59-16f8-49f1-be3f-68f294e9b59e b44c2e4d-29fa-421c-b2c2-4a7398811d18
+a=rtcp-mux
+a=rtpmap:8 PCMA/8000
+a=ssrc:3448429386 cname:1Rx7kAAPIpy/9r+n
+m=video 9 UDP/TLS/RTP/SAVPF 127
+c=IN IP4 0.0.0.0
+a=rtcp:9 IN IP4 0.0.0.0
+a=ice-ufrag:ozZ1
+a=ice-pwd:AGRpHkMvp/4eojtMjjFgJ/9G
+a=ice-options:trickle
+a=fingerprint:sha-256 6F:94:FF:29:C2:81:2A:64:AD:69:C9:D1:05:02:B0:1E:AC:4C:84:6C:42:8A:C6:49:AA:2B:64:E6:F4:32:AC:A5
+a=setup:active
+a=mid:1
+a=sendrecv
+a=msid:87dd3a59-16f8-49f1-be3f-68f294e9b59e 8c29d102-1335-49ad-8e29-a46852d71efd
+a=rtcp-mux
+a=rtcp-rsize
+a=rtpmap:127 H265/90000
+a=rtcp-fb:127 goog-remb
+a=rtcp-fb:127 nack
+a=rtcp-fb:127 nack pli
+a=fmtp:127 level-id=93;profile-id=1;tier-flag=0;tx-mode=SRST
+a=ssrc:609641861 cname:1Rx7kAAPIpy/9r+n
+m=application 9 UDP/DTLS/SCTP webrtc-datachannel
+c=IN IP4 0.0.0.0
+a=ice-ufrag:ozZ1
+a=ice-pwd:AGRpHkMvp/4eojtMjjFgJ/9G
+a=ice-options:trickle
+a=fingerprint:sha-256 6F:94:FF:29:C2:81:2A:64:AD:69:C9:D1:05:02:B0:1E:AC:4C:84:6C:42:8A:C6:49:AA:2B:64:E6:F4:32:AC:A5
+a=setup:active
+a=mid:2
+a=sctp-port:5000
+
+
+2026-05-23 16:21:24.274 [info] [pid:21428 tid:26358] [EasyRTC.Java] 2026-05-23 16:21:24: [INFO][EasyRTCSdk] setRemoteDescription: sdpLength=1650

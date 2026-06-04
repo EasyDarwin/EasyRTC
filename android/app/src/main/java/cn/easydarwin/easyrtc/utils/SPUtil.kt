@@ -93,22 +93,21 @@ class SPUtil private constructor(context: Context) {
         get() {
             val savedUuid = preferences.getString(RTC_USER_UUID, null)
             return if (savedUuid.isNullOrEmpty()) {
-                val newUuid = UUID.randomUUID().toString()
-                // 自动保存生成的 UUID
+                val newUuid = UUID.randomUUID().toString().uppercase()
                 preferences.edit { putString(RTC_USER_UUID, newUuid) }
                 newUuid
             } else {
-                savedUuid
+                savedUuid.uppercase()
             }
         }
-        set(value) = preferences.edit { putString(RTC_USER_UUID, value) }
+        set(value) = preferences.edit { putString(RTC_USER_UUID, value.uppercase()) }
 
     var hevcCodec: Int
         get() = preferences.getInt(KEY_HEVC_CODEC, 0)
         set(hevc) = preferences.edit { putInt(KEY_HEVC_CODEC, hevc) }
 
     var videoResolution: Int
-        get() = preferences.getInt(VIDEORESOLUTION, 1)
+        get() = preferences.getInt(VIDEORESOLUTION, 0)
         set(value) = preferences.edit { putInt(VIDEORESOLUTION, value) }
 
     var frameRate: Int
@@ -116,8 +115,31 @@ class SPUtil private constructor(context: Context) {
         set(value) = preferences.edit { putInt(FRAMERATE, value) }
 
     var bitRateKbps: Int
-        get() = preferences.getInt(KEY_BITRATE_ADDED_KBPS, 3)
+        get() = preferences.getInt(KEY_BITRATE_ADDED_KBPS, 2)
         set(value) = preferences.edit { putInt(KEY_BITRATE_ADDED_KBPS, value) }
+
+    var aacCodec: Int
+        get() = preferences.getInt(KEY_AAC_CODEC, 0)
+        set(value) = preferences.edit { putInt(KEY_AAC_CODEC, value) }
+
+    var samplingRate: Int
+        get() = preferences.getInt(SAMPLINGRATE, 0)
+        set(value) = preferences.edit { putInt(SAMPLINGRATE, value) }
+
+    var audioChannel: Int
+        get() = preferences.getInt(AUDIOCHANNEL, 0)
+        set(value) = preferences.edit { putInt(AUDIOCHANNEL, value) }
+
+    //GOP间隔
+    private val KEY_GOP_INTERVAL = "key_gop_interval"
+
+    var audioCodeRate: Int
+        get() = preferences.getInt(AUDIOCODERATE, 0)
+        set(value) = preferences.edit { putInt(AUDIOCODERATE, value) }
+
+    var gopInterval: Int
+        get() = preferences.getInt(KEY_GOP_INTERVAL, 0)
+        set(value) = preferences.edit { putInt(KEY_GOP_INTERVAL, value) }
 
     var cameraId: Int
         get() = preferences.getInt(CAMERAID, Camera.CameraInfo.CAMERA_FACING_BACK)
@@ -131,7 +153,7 @@ class SPUtil private constructor(context: Context) {
         return when (getInstance().videoResolution) {
             0 -> Size(1920, 1080)
             1 -> Size(1280, 720)
-            3 -> Size(960, 540)
+            2 -> Size(960, 540)
             else -> Size(1280, 720)
         }
     }
@@ -139,10 +161,11 @@ class SPUtil private constructor(context: Context) {
     fun getVideoBitRateKbps(): Int {
         return when (getInstance().bitRateKbps) {
             0 -> 4096
-            1 -> 2024
+            1 -> 2048
             2 -> 1024
             3 -> 512
-            else -> 1024 // 默认值
+            4 -> 256
+            else -> 512 // 默认值
         } * 1024
     }
 
@@ -153,6 +176,17 @@ class SPUtil private constructor(context: Context) {
             2 -> 20
             3 -> 15
             else -> 25 // 默认值
+        }
+    }
+
+    fun getVideoGopInterval(): Int {
+        return when (getInstance().gopInterval) {
+            0 -> 1
+            1 -> 2
+            2 -> 5
+            3 -> 10
+            4 -> 15
+            else -> 10
         }
     }
 

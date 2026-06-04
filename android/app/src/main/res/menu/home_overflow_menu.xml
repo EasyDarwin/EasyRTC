@@ -1,0 +1,11 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_home_users"
+        android:title="@string/home_menu_users" />
+    <item
+        android:id="@+id/action_home_logs"
+        android:title="@string/home_menu_logs" />
+    <item
+        android:id="@+id/action_home_settings"
+        android:title="@string/home_menu_settings" />
+</menu>

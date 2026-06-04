@@ -1,50 +1,44 @@
 package cn.easydarwin.easyrtc.fragment
 
-import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.PackageManager
-import cn.easyrtc.model.VideoEncodeConfig
 import android.graphics.SurfaceTexture
-import android.hardware.Camera
-import android.media.MediaFormat
+import android.media.AudioManager
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
+import android.view.MotionEvent
 import android.view.LayoutInflater
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.Fragment
+import androidx.appcompat.widget.PopupMenu
 import cn.easydarwin.easyrtc.MainActivity
 import cn.easydarwin.easyrtc.R
-import cn.easyrtc.EasyRTCPeerConnectionState
-import cn.easyrtc.EasyRTCSdk
-import cn.easyrtc.EasyRTCStreamTrack
+import cn.easydarwin.easyrtc.service.WebSocketService
 import cn.easyrtc.EasyRTCUser
-import cn.easydarwin.easyrtc.modal.DrawerManager
+import cn.easyrtc.EasyRTCPeerConnectionState
+import cn.easyrtc.EasyRTCStreamTrack
+import cn.easyrtc.helper.MagicFileHelper
+import cn.easyrtc.media.MediaSession
+import cn.easydarwin.easyrtc.ui.live.BaseRtcMediaFragment
+import cn.easydarwin.easyrtc.ui.hub.HubFragment
+
+import cn.easydarwin.easyrtc.BuildConfig
+import cn.easydarwin.easyrtc.utils.AppLogStore
+import cn.easydarwin.easyrtc.utils.CallLog
 import cn.easydarwin.easyrtc.utils.SPUtil
 import cn.easydarwin.easyrtc.utils.WebSocketManager
-import cn.easyrtc.helper.AudioHelper
-import cn.easyrtc.helper.CameraHelper
-import cn.easyrtc.helper.MagicFileHelper
-import cn.easyrtc.helper.RemoteRTCAudioHelper
-import cn.easyrtc.helper.RemoteRTCHelper
+import cn.easyrtc.EasyRTCCodec
+import cn.easyrtc.model.DataChannelEvent
+import cn.easyrtc.model.LiveUiState
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
-
-class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelper.CameraListener, AudioHelper.OnAudioDataListener, WebSocketManager.WebSocketCallback,
-    EasyRTCSdk.EasyRTCEventListener {
+class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener {
 
     companion object {
         private const val TAG = "HomeFragment"
@@ -52,47 +46,45 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
 
     private lateinit var endCallButton: ImageButton
     private lateinit var switchCameraButton: ImageButton
+    private lateinit var speakerButton: ImageButton
+    private val audioManager by lazy { requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
-    // 视频视图
-    private lateinit var mainVideoView: TextureView
+    private lateinit var local_preview_: TextureView
     private lateinit var tvFragmentUUID: TextView
-    private lateinit var smallVideoView: TextureView
-    private lateinit var smallVideoContainer: View
+    private lateinit var remote_preview_: TextureView
+    private lateinit var remote_preview_container: View
 
-    // 摄像头帮助类 - 用于主预览
-    private var mainCameraHelper: CameraHelper? = null
-    private var remoteRTCHelper: RemoteRTCHelper? = null
-
-    // 当前显示状态
-    private var isMainViewShowingLocal = true // 默认主屏显示本地预览
-
-    // Surface 状态
     private var mainSurfaceTexture: SurfaceTexture? = null
     private var smallSurfaceTexture: SurfaceTexture? = null
 
-    private var audioHelper: AudioHelper? = null
-
-    // 抽屉管理器
-    private lateinit var drawerManager: DrawerManager
-
-    // 文件工具类
     private lateinit var mMagicFileHelper: MagicFileHelper
-    private var mRemoteRTCAudioHelper: RemoteRTCAudioHelper? = null
 
+    private var webSocketService: WebSocketService? = null
 
-    private var mWebSocketManager: WebSocketManager? = null
+    private var buttonHomeMenu: ImageButton? = null
+    private var userList: List<EasyRTCUser> = emptyList()
 
+    private var activeSessionUser: String? = null
 
-    private var tvLogs: TextView? = null
-    private var logs: StringBuilder? = null
-    private var mSendBtn: TextView? = null
-    private var mEditText: EditText? = null
-    private val MAX_LOG_LENGTH = 100 * 1024
-    private var isRelease: Boolean = false
+    private var bandwidthTV: TextView? = null
 
+    override fun onMediaSessionCreated(session: MediaSession) {
+        session.setInputKbpsStatsListener { stats ->
+            runOnMainThread {
+                bandwidthTV?.text = String.format(
+                    Locale.getDefault(),
+                    "kbps: v:%.2f a:%.2f",
+                    stats.videoKbps,
+                    stats.audioKbps,
+                    stats.totalKbps
+                )
+            }
+        }
+    }
 
-    private var hasPermissionInit = false
-
+    override fun onMediaSessionReleasing(session: MediaSession) {
+        session.setInputKbpsStatsListener(null)
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         mMagicFileHelper = MagicFileHelper.getInstance()
@@ -101,505 +93,323 @@ class HomeFragment : Fragment(), TextureView.SurfaceTextureListener, CameraHelpe
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        initViews(view)
+        setupSessionObservers()
 
-//        mWebSocketManager = WebSocketManager(url = "wss://rts.easyrtc.cn:19001", token = "", callback = this)
-        mWebSocketManager = WebSocketManager(url = "ws://rts.easyrtc.cn:19000", token = "", callback = this)
-        mWebSocketManager?.connect()
-
-
-        //通话触发
-        drawerManager = DrawerManager(requireContext(), view) { user ->
-            Toast.makeText(requireContext(), "正在连接 ${user.username}", Toast.LENGTH_LONG).show()
-            mWebSocketManager?.call(user.uuid)
+        (activity as? MainActivity)?.webSocketServiceLiveData?.observe(viewLifecycleOwner) { service ->
+            webSocketService = service
+            service?.events?.observe(viewLifecycleOwner) { event ->
+                when (event) {
+                    is WebSocketService.Event.Connected -> onWSConnected()
+                    is WebSocketService.Event.Message -> onWSMessage(event.text)
+                    is WebSocketService.Event.Disconnected -> onWSDisconnected(event.code, event.reason)
+                    is WebSocketService.Event.Error -> onWSError(event.throwable)
+                    is WebSocketService.Event.Logs -> onWSLogs(event.text)
+                    is WebSocketService.Event.IncomingCall -> {}
+                    is WebSocketService.Event.AnswerSDP -> {
+                        if (event.handled) return@observe
+                        event.handled = true
+                        session.setRemoteDescription(event.sdp)
+                    }
+                    is WebSocketService.Event.OnlineUsers -> updateOnlineUsers(event.users)
+                }
+            }
         }
 
-        //初始化 SDK
-        EasyRTCSdk.getInstance();
-        EasyRTCSdk.setEventListener(this)
+        (activity as? MainActivity)?.incomingCallLiveData?.observe(viewLifecycleOwner) { event ->
+            if (event.handled) return@observe
+            event.handled = true
+            activeSessionUser = event.uuid
+            tvFragmentUUID.text = "来电: ${event.uuid}"
+            session.releasePeerConnection()
+            appendLog("来电: ${event.uuid}")
+            view.post {
+                val ws = webSocketService
+                if (BuildConfig.DEBUG) check(ws != null) { "webSocketService is null when handling incoming call" }
+                if (ws == null) return@post
+                val callSetup = ws.prepareIncomingCall(event.data, event.callout)
+                session.createPeerConnection(
+                    "stun:${callSetup.stunTurnInfo.stunServer}",
+                    "turn:${callSetup.stunTurnInfo.turnServer}",
+                    callSetup.stunTurnInfo.turnUsername,
+                    callSetup.stunTurnInfo.turnPassword)
 
-        initViews(view)
+                val config = getVideoEncodeConfig()
+                val videoCodec = if (config.getUseHevc()) EasyRTCCodec.H265 else EasyRTCCodec.H264
+                session.addTransceivers(videoCodec, EasyRTCCodec.ALAW)
+                session.startSend()
+                session.addDataChannel("")
 
+                if (callSetup.callout) {
+                    session.createAnswer(callSetup.sdp) { ws.sendOfferSDP(it, false) }
+                } else {
+                    session.createOffer { ws.sendOfferSDP(it, true) }
+                }
+            }
+        }
+    }
+
+    private fun setupSessionObservers() {
+        val s = session ?: return
+        s.connectionState.observe(viewLifecycleOwner) { state ->
+            when (state) {
+                is LiveUiState.Idle -> {
+                    activeSessionUser = null
+                    resetCallUI()
+                    tvFragmentUUID.text = SPUtil.getInstance().rtcUserUUID
+                    endCallButton.visibility = View.GONE
+                }
+                is LiveUiState.Connected -> {
+                    appendLog2("------------------------------")
+                    appendLog2("------------------------------")
+                    appendLog("连接成功")
+                    appendLog(getIceCandidateTypeDesc())
+                    endCallButton.visibility = View.VISIBLE
+                    tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已连接]"
+                }
+                is LiveUiState.Disconnected -> {
+                    appendLog("连接断开")
+                    session.releasePeerConnection()
+                }
+                is LiveUiState.Failed -> {
+                    appendLog("连接失败")
+                    state.reason?.takeIf { it.isNotBlank() }?.let { appendLog("失败原因: $it") }
+                    session.releasePeerConnection()
+                }
+            }
+        }
+
+        s.dataChannel.observe(viewLifecycleOwner) { event ->
+            when (event) {
+                is DataChannelEvent.Open -> {
+                    s.sendDataChannelMsg(false, "Hello EasyRTC!!!".toByteArray(Charsets.UTF_8))
+                }
+                is DataChannelEvent.Message -> {
+                    if (event.binary == 0) appendLog(event.data.toString(Charsets.UTF_8))
+                }
+                else -> {}
+            }
+        }
+
+        s.remoteVideoSize.observe(viewLifecycleOwner) { size ->
+            if (size.width == 0 && size.height == 0) return@observe
+            val density = resources.displayMetrics.density
+            val desiredWidthPx = remote_preview_container.width
+            val desiredHeightPx = desiredWidthPx * size.height / size.width
+            val lp = remote_preview_container.layoutParams
+            lp.width = desiredWidthPx
+            lp.height = desiredHeightPx
+            remote_preview_container.layoutParams = lp
+            Log.d(TAG, "Remote video size: ${size.width}x${size.height}, container: ${lp.width}x${lp.height}")
+
+            resetLocalPreview(false)
+            local_preview_.setOnTouchListener { view, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.tag = floatArrayOf(event.rawX - view.translationX, event.rawY - view.translationY)
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val anchor = view.tag as? FloatArray ?: return@setOnTouchListener false
+                        view.translationX = event.rawX - anchor[0]
+                        view.translationY = event.rawY - anchor[1]
+                        true
+                    }
+                    else -> false
+                }
+            }
+        }
     }
 
     private fun initViews(view: View) {
-        mainVideoView = view.findViewById(R.id.mainVideoView)
+        local_preview_ = view.findViewById(R.id.local_preview_)
         tvFragmentUUID = view.findViewById(R.id.tvFragmentUUID)
-        smallVideoView = view.findViewById(R.id.smallVideoView)
-        smallVideoContainer = view.findViewById(R.id.smallVideoContainer)
+        remote_preview_ = view.findViewById(R.id.remote_preview_)
+        remote_preview_container = view.findViewById(R.id.remote_preview_container)
         endCallButton = view.findViewById(R.id.endCallButton)
         switchCameraButton = view.findViewById(R.id.switchCameraButton)
+        speakerButton = view.findViewById(R.id.speakerButton)
+        bandwidthTV = view.findViewById(R.id.media_bandwidth)
+        buttonHomeMenu = view.findViewById(R.id.button_home_menu)
 
         endCallButton.visibility = View.GONE
 
-        tvLogs = view.findViewById(R.id.tv_logs)
-        mSendBtn = view.findViewById(R.id.send_msg)
-        mEditText = view.findViewById(R.id.et_msg)
-
         tvFragmentUUID.text = SPUtil.getInstance().rtcUserUUID
 
-        tvLogs?.setOnLongClickListener {
-            copyLogs()
-            true
+        buttonHomeMenu?.setOnClickListener {
+            showHomeMenu(it)
         }
 
-
-        // 设置 SurfaceTexture 监听
-        mainVideoView.surfaceTextureListener = this
-        smallVideoView.surfaceTextureListener = this
-
-
-        smallVideoContainer.setOnClickListener {
-
-//            isMainViewShowingLocal = !isMainViewShowingLocal
-            //先释放资源
-//            mainCameraHelper?.releaseCamera()
-//            remoteRTCHelper?.releaseVideoHandler()
-//
-//            val config = getVideoEncodeConfig()
-//
-//            mainCameraHelper = CameraHelper(requireContext(), config)
-//
-//            mainCameraHelper?.openCamera(if (isMainViewShowingLocal) mainSurfaceTexture else smallSurfaceTexture, this)
-//
-//            remoteRTCHelper = RemoteRTCHelper(Surface(if (isMainViewShowingLocal) smallSurfaceTexture else mainSurfaceTexture))
-
-        }
+        local_preview_.surfaceTextureListener = this
+        remote_preview_.surfaceTextureListener = this
 
         endCallButton.setOnClickListener {
             Log.d(TAG, "挂电话")
-            endCallButton.visibility = View.INVISIBLE
-
-            stopEasyRTC()
-
-            EasyRTCSdk.release()
-            appendLog("连接断开")
+            session.releasePeerConnection()
         }
 
         switchCameraButton.setOnClickListener {
             switchCamera()
         }
 
-        // 抽屉视图已经在 DrawerManager 构造函数中自动初始化
+        speakerButton.setOnClickListener {
+            audioManager.isSpeakerphoneOn = !audioManager.isSpeakerphoneOn
+            val isSpeakerOn = audioManager.isSpeakerphoneOn
+            speakerButton.setImageResource(if (isSpeakerOn) R.drawable.ic_speaker_on else R.drawable.ic_speaker_off)
+            appendLog(if (isSpeakerOn) "扬声器已开启" else "扬声器已关闭")
+        }
+        resetLocalPreview(true)
         Log.d(TAG, "视图初始化完成")
-
-
-        //TODO 消息
-        tvLogs!!.setMovementMethod(ScrollingMovementMethod())
-
-        //发送消息
-        mSendBtn!!.setOnClickListener(object : View.OnClickListener {
-            override fun onClick(view: View?) {
-                val text = mEditText?.getText().toString()
-                if (text.isEmpty()) return
-                appendLog(text)
-                val data = text.toByteArray(Charsets.UTF_8)
-                EasyRTCSdk.sendMsg(0, data)
-                mEditText?.setText("")
-            }
-        })
     }
 
-
-    private fun getVideoEncodeConfig(): VideoEncodeConfig {
-        val useHevc = SPUtil.Companion.getInstance().getIsHevc()
-        val cameraId = SPUtil.Companion.getInstance().cameraId;
-        val resolution = SPUtil.Companion.getInstance().getVideoResolution()
-        val bitRate = SPUtil.Companion.getInstance().getVideoBitRateKbps()
-        val frameRate = SPUtil.Companion.getInstance().getVideoFrameRate()
-
-        return VideoEncodeConfig(useHevc, frameRate, cameraId, resolution, VideoEncodeConfig.ORIENTATION_90, bitRate)
-    }
+    // ─── SurfaceTexture lifecycle ─── drives session create / release ────
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-        Log.d(TAG, "SurfaceTexture 可用: $width x $height")
-
         when (surface) {
-            mainVideoView.surfaceTexture -> {
+            local_preview_.surfaceTexture -> {
                 mainSurfaceTexture = surface
-                Log.d(TAG, "主视频 SurfaceTexture 已创建")
+                val config = getVideoEncodeConfig()
+                surface.setDefaultBufferSize(config.getWidth(), config.getHeight())
+                Log.d(TAG, "主视频 SurfaceTexture 已创建, buffer=${config.getWidth()}x${config.getHeight()}")
             }
-
-            smallVideoView.surfaceTexture -> {
+            remote_preview_.surfaceTexture -> {
                 smallSurfaceTexture = surface
-
-                // 初始化 RemoteRTCHelper
-                remoteRTCHelper = RemoteRTCHelper(Surface(surface), MediaFormat.MIMETYPE_VIDEO_AVC, 720, 1280)
                 Log.d(TAG, "小窗口 SurfaceTexture 已创建")
-                // 设置远程视频渲染表面
             }
         }
 
-        // 当两个 SurfaceTexture 都准备好后，开始摄像头预览
         if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-            if (hasCameraPermission()) {
-                setupCameraPreviews()
-            } else {
-                Log.d(TAG, "等待权限后再初始化Camera")
-            }
+            session.setupVideoEncoder(getVideoEncodeConfig())
+            session.setDecoderSurface(Surface(remote_preview_.surfaceTexture))
+            startNativeCameraPreview()
         }
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
         Log.d(TAG, "SurfaceTexture 尺寸改变: $width x $height")
-
-        // 可以在这里调整摄像头预览尺寸
-        when {
-            surface == mainVideoView.surfaceTexture -> {
-                Log.d(TAG, "主视频视图尺寸改变: $width x $height")
-            }
-
-            surface == smallVideoView.surfaceTexture -> {
-                Log.d(TAG, "小窗口视图尺寸改变: $width x $height")
-            }
-        }
     }
 
     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-        Log.d(TAG, "SurfaceTexture 被销毁")
         when {
-            surface == mainVideoView.surfaceTexture -> {
-                mainSurfaceTexture = null
-            }
-
-            surface == smallVideoView.surfaceTexture -> {
-                smallSurfaceTexture = null
-            }
+            surface == local_preview_.surfaceTexture -> mainSurfaceTexture = null
+            surface == remote_preview_.surfaceTexture -> smallSurfaceTexture = null
+        }
+        if (mainSurfaceTexture == null && smallSurfaceTexture == null) {
+            session.releasePeerConnection()
+            session.stopPreview()
+            session.setDecoderSurface(null)
         }
         return true
     }
 
-    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-        // Surface 内容更新
-    }
+    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
 
-    /**
-     * 设置摄像头预览
-     */
-    private fun setupCameraPreviews() {
+    // ─── Camera preview ───────────────────────────────────────────────────
 
-        if (!hasCameraPermission()) {
-            Log.e(TAG, "没有相机权限，跳过初始化")
-            return
-        }
-
-        // 主屏幕显示摄像头预览
-        startMainCameraPreview()
-        isMainViewShowingLocal = true
-
-    }
-
-    /**
-     * 开始主摄像头预览
-     */
-    private fun startMainCameraPreview() {
+    private fun startNativeCameraPreview() {
         try {
-            val config = getVideoEncodeConfig()
-            mainCameraHelper = CameraHelper(requireContext(), config)
-            mainCameraHelper?.openCamera(mainSurfaceTexture!!, this)
-            Log.d(TAG, "开始主摄像头预览")
-        } catch (e: Exception) {
-            Log.e(TAG, "启动主摄像头失败: ${e.message}")
-        }
-    }
-
-    /**
-     * 切换摄像头（前后置）
-     */
-    private fun switchCamera(): Boolean {
-        Log.d(TAG, "切换视频显示模式")
-        return try {
-            mainCameraHelper?.switchCamera(if (isMainViewShowingLocal) mainSurfaceTexture else smallSurfaceTexture, this)
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "切换摄像头失败: ${e.message}")
-            false
-        }
-    }
-
-
-    private fun stopCameraPreviews() {
-        // 停止主摄像头预览
-        mainCameraHelper?.release()
-        mainCameraHelper = null
-
-        remoteRTCHelper?.release()
-        remoteRTCHelper = null
-
-    }
-
-    override fun onCameraOpened(camera: Camera) {
-        Log.d(TAG, "摄像头已打开")
-    }
-
-    /**
-     * CameraHelper 回调 - 摄像头错误
-     */
-    override fun onCameraError(error: String) {
-        Log.e(TAG, "摄像头错误: $error")
-    }
-
-    override fun sendVideoFrame(data: ByteArray, length: Int, frameType: Int, pts: Long) {
-        EasyRTCSdk.sendVideoFrame(data, frameType, pts)
-    }
-
-
-    /**
-     *  生命周期
-     */
-    override fun onPause() {
-        super.onPause()
-        val tag = (activity as? MainActivity)?.cFragmentTag
-        if (tag !== "home") {
-            stopCameraPreviews()
-            remoteRTCHelper?.release()
-            remoteRTCHelper = null
-
-            // 停止音频录制
-            stopEasyRTC()
-
-            EasyRTCSdk.release()
-            endCallButton.visibility = View.INVISIBLE
-
-            isRelease = true
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        Log.d(TAG, "onResume $tag")
-        if (isRelease) {
-            if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-                setupCameraPreviews()
-                remoteRTCHelper = RemoteRTCHelper(Surface(if (isMainViewShowingLocal) smallSurfaceTexture else mainSurfaceTexture))
+            if (local_preview_.isAvailable) {
+                val result = session.startPreview(Surface(local_preview_.surfaceTexture)) ?: -1
+                if (result != 0) {
+                    Log.e(TAG, "startPreview() failed: $result")
+                    return
+                }
             }
+            Log.d(TAG, "Camera preview started")
+        } catch (e: Exception) {
+            Log.e(TAG, "Camera preview failed: ${e.message}")
         }
     }
+
+    private fun switchCamera() {
+        val config = getVideoEncodeConfig()
+        mainSurfaceTexture?.setDefaultBufferSize(config.getWidth(), config.getHeight())
+        session.switchCamera()
+    }
+
+    // ─── Lifecycle ────────────────────────────────────────────────────────
 
     override fun onDestroyView() {
         super.onDestroyView()
-        Log.d(TAG, "onDestroyView")
-        stopCameraPreviews()
-        // 彻底停止音频录制
-
-        stopEasyRTC()
-
-        EasyRTCSdk.release()
+        buttonHomeMenu = null
     }
 
-    override fun onHiddenChanged(hidden: Boolean) {
-        super.onHiddenChanged(hidden)
-        if (hidden) {
-            Log.d(TAG, "Fragment 被隐藏")
-            onPause()
-        } else {
-            Log.d(TAG, "Fragment 被显示")
-            onResume()
-        }
-    }
+    // ─── WS callbacks ─────────────────────────────────────────────────────
 
-    override fun onAudioData(data: ByteArray, pts: Long) {
-        EasyRTCSdk.sendAudioFrame(data, pts)
-    }
-
-    override fun onError(error: String) {
-    }
-
-    override fun onWSConnected() {
-
-    }
-
-    override fun onWSMessage(text: String) {
+    private fun onWSConnected() {}
+    private fun onWSMessage(text: String) {
         val json = JSONObject(text)
         if (json.getInt("code") == WebSocketManager.HPACKLOGINUSERINFO) {
             if (json.getInt("status") == 0) {
                 requireActivity().runOnUiThread {
                     appendLog(json.getString("msg"))
-                    appendLog("长按日志 复制当前日志！！！")
+                    AppLogStore.appendTimestamped("长按日志 复制当前日志！！！")
                 }
             } else appendLog("登录失败！")
         }
     }
-
-
-    override fun onWSDisconnected(code: Int, reason: String) {
-
-    }
-
-    override fun onWSError(error: Throwable) {
+    private fun onWSDisconnected(code: Int, reason: String) {}
+    private fun onWSError(error: Throwable) {
         Log.d(TAG, "onWSError state =${error.message} ")
     }
-
-
-    override fun onWSOnlineUsers(users: List<EasyRTCUser>) {
-        Log.d(TAG, "现在用户 = ${users.size}")
-
-        requireActivity().runOnUiThread {
-            drawerManager.updateUserListUI(users)
-        }
-    }
-
-    override fun onWSLogs(txt: String) {
-        appendLog(txt)
-    }
+    private fun onWSLogs(txt: String) { appendLog(txt) }
 
     fun getIceCandidateTypeDesc(): String {
-        val type = EasyRTCSdk.getIceCandidateType()
-        val desc = if (type == 1) "P2P直连" else "Relay中转"
-        return "连接模式($desc)"
+        val type = session.getIceCandidateType() ?: 0
+        return "连接模式(${if (type == 1) "P2P直连" else "Relay中转"})"
     }
 
-    override fun connectionStateChange(state: Int) {
-        Log.d(TAG, "connectionStateChange state =$state  ${state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED}")
-        if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
-            val audioTransceiver = EasyRTCSdk.getAudioTransceiver()
-
-            if (audioTransceiver != 0L && audioHelper == null) {
-                audioHelper = AudioHelper()
-                audioHelper?.setOnAudioDataListener(this)
-                audioHelper?.start()
-            }
-
-            if (mRemoteRTCAudioHelper == null) {
-                mRemoteRTCAudioHelper = RemoteRTCAudioHelper(requireContext())
-            }
-
-            if (remoteRTCHelper == null) {
-                remoteRTCHelper = RemoteRTCHelper(Surface(if (isMainViewShowingLocal) smallSurfaceTexture else mainSurfaceTexture))
-            }
-
-            appendLog2("------------------------------")
-            appendLog2("------------------------------")
-            appendLog("连接成功")
-            appendLog(getIceCandidateTypeDesc())
-
-            requireActivity().runOnUiThread {
-                endCallButton.visibility = View.VISIBLE
-                tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已连接]"
-            }
-
-        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED) {
-            appendLog("连接失败")
-            requireActivity().runOnUiThread {
-                tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [连接失败]"
-                endCallButton.visibility = View.INVISIBLE
-            }
-        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED) {
-            appendLog("连接断开")
-            stopEasyRTC()
-            requireActivity().runOnUiThread {
-                tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已断开]"
-                endCallButton.visibility = View.INVISIBLE
-            }
-        }
-    }
-
-
-    override fun onSDPCallback(isOffer: Int, sdp: String) {
-        mWebSocketManager?.sendOfferSDP(sdp, isOffer == 1)
-        if (isOffer == 1) appendLog(sdp) else {
-            appendLog("======= answer ====== \n $sdp")
-        }
-
-    }
-
-    override fun onTransceiverCallback(track: Int, codecId: Int, frameType: Int, frameData: ByteArray, frameSize: Int, pts: Long) {
-        if (track == EasyRTCStreamTrack.AUDIO) {
-            mRemoteRTCAudioHelper?.processRemoteAudioFrameSafe(frameData, frameData.size)
-//            mMagicFileHelper.saveToFile(frameData,"remote.pcm",true)
-        } else if (track == EasyRTCStreamTrack.VIDEO) {
-//            mMagicFileHelper.saveToFile(frameData,"996f.h264",true)
-            remoteRTCHelper?.onRemoteVideoFrame(frameData)
-        }
-    }
-
-    override fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
+    fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
         if (type == 1) {
-            val data1 = "Hello EasyRTC!!!".toByteArray(Charsets.UTF_8)
-            EasyRTCSdk.sendMsg(0, data1)
-        } else if (type == 2) {
-            if (binary == 0) {
-                requireActivity().runOnUiThread {
-                    appendLog(data.toString(Charsets.UTF_8))
+            session.sendDataChannelMsg(false, "Hello EasyRTC!!!".toByteArray(Charsets.UTF_8))
+        } else if (type == 2 && binary == 0) {
+            requireActivity().runOnUiThread { appendLog(data.toString(Charsets.UTF_8)) }
+        }
+    }
+
+    private fun appendLog2(message: String) { AppLogStore.appendRaw("$message \n"); CallLog.append(message) }
+    private fun appendLog(message: String) { AppLogStore.appendTimestamped(message); CallLog.append(message) }
+
+    private fun updateOnlineUsers(users: List<EasyRTCUser>) { userList = users }
+
+    private fun showHomeMenu(anchor: View) {
+        PopupMenu(requireContext(), anchor).apply {
+            menuInflater.inflate(R.menu.home_overflow_menu, menu)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.action_home_users -> { openUserList(); true }
+                    R.id.action_home_logs -> {
+                        HomeLogsBottomSheetFragment().show(childFragmentManager, "home_logs"); true
+                    }
+                    R.id.action_home_settings -> { openSettings(); true }
+                    else -> false
                 }
             }
+            show()
         }
     }
 
-
-    private fun appendLog2(message: String) {
-        if (tvLogs == null) return
-        if (logs == null) logs = StringBuilder()
-
-        logs!!.append("$message \n")
-
-        if (logs!!.length > MAX_LOG_LENGTH) {
-            logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
-        }
-
-        // 更新 TextView
-        tvLogs!!.text = logs.toString()
-        tvLogs!!.post {
-            val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
-            if (scrollAmount > 0) {
-                tvLogs!!.scrollTo(0, scrollAmount)
-            }
-        }
+    private fun openUserList() {
+        requireActivity().supportFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, HubFragment())
+            .addToBackStack("home_users")
+            .commit()
     }
 
-    private fun appendLog(message: String) {
-        if (tvLogs == null) return
-        if (logs == null) logs = StringBuilder()
-        val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        val line = "${formatter.format(Date())}: $message\n"
+    private fun openSettings() { (activity as? MainActivity)?.openSettingsScreen() }
 
-        logs!!.append(line)
-
-        if (logs!!.length > MAX_LOG_LENGTH) {
-            logs!!.delete(0, logs!!.length - MAX_LOG_LENGTH)
-        }
-
-        // 更新 TextView
-        tvLogs!!.text = logs.toString()
-        tvLogs!!.post {
-            val scrollAmount = tvLogs!!.layout.getLineTop(tvLogs!!.lineCount) - tvLogs!!.height
-            if (scrollAmount > 0) {
-                tvLogs!!.scrollTo(0, scrollAmount)
-            }
-        }
+    fun sendTextMessage(text: String) {
+        val message = text.trim()
+        if (message.isEmpty()) return
+        appendLog(message)
+        session.sendDataChannelMsg(false, message.toByteArray(Charsets.UTF_8))
     }
 
-
-    private fun copyLogs() {
-        val cm = requireActivity().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = tvLogs?.text.toString()
-        cm.setPrimaryClip(ClipData.newPlainText("logs", text))
-        Toast.makeText(requireActivity(), "日志已复制", Toast.LENGTH_SHORT).show()
+    private fun resetCallUI() {
+        resetLocalPreview(true)
+        local_preview_.translationX = 0f
+        local_preview_.translationY = 0f
+        local_preview_.setOnTouchListener(null)
+        bandwidthTV?.text = ""
     }
-
-    fun onPermissionGranted() {
-        Log.d(TAG, "权限已授予，重新初始化Camera")
-
-        if (mainSurfaceTexture != null && smallSurfaceTexture != null) {
-            hasPermissionInit = true
-            setupCameraPreviews()
-        }
-    }
-
-    private fun hasCameraPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            requireContext(), Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun stopEasyRTC() {
-
-        audioHelper?.stop()
-        remoteRTCHelper?.release()
-        mRemoteRTCAudioHelper?.release()
-
-        audioHelper = null
-        remoteRTCHelper = null
-        mRemoteRTCAudioHelper = null
-    }
-
 }

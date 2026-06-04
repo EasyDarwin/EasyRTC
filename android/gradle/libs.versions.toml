@@ -22,6 +22,8 @@ recyclerview = "1.4.0"
 preferenceKtx = "1.2.1"
 material = "1.13.0"
 compiler = "3.2.0-alpha11"
+swiperefreshlayout = "1.1.0"
+bugly = "4.1.9.3"
 
 # 新增的版本号
 lifecycleViewModelKtx = "2.7.0"
@@ -30,6 +32,7 @@ retrofit = "2.9.0"
 okhttp = "4.12.0"
 kotlinxCoroutinesAndroid = "1.7.3"
 materialIconsExtended= "1.6.1"
+javaWebsocket = "1.5.7"
 
 [libraries]
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
@@ -60,12 +63,15 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 material-icons= { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
 androidx-compiler = { group = "androidx.databinding", name = "compiler", version.ref = "compiler" }
+androidx-swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version.ref = "swiperefreshlayout" }
+tencent-bugly = { module = "com.tencent.bugly:crashreport", version.ref = "bugly" }
 
 # 新增的库
 retrofit2-retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit2-converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "retrofit" }
 okhttp3-logging-interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesAndroid" }
+java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "javaWebsocket" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

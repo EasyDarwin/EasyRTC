@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- Fullscreen camera preview -->
+
+    <!-- Top overlay: status panel -->
+    <TextureView
+        android:id="@+id/local_preview_"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <LinearLayout
+        android:id="@+id/whipStatusPanel"
+        android:layout_width="match_parent"
+        android:layout_height="?android:actionBarSize"
+        android:layout_gravity="top"
+        android:background="@drawable/logs"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/button_whip_menu"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="center"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_menu" />
+
+        <TextView
+            android:id="@+id/tvWhipServer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/logs"
+            android:layout_marginLeft="@dimen/dp_8"
+            android:gravity="center_vertical"
+            android:textColor="@color/white"
+            android:text="服务器地址"
+            android:visibility="gone"
+            android:textSize="@dimen/sp_14"
+            android:ellipsize="end"
+            android:maxLines="1" />
+    </LinearLayout>
+
+
+    <!-- Bottom overlay: buttons + log -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#88000000"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/tv_status"
+            android:layout_width="match_parent"
+            android:layout_height="180dp"
+            android:background="#44000000"
+            android:padding="6dp"
+            android:scrollbars="vertical"
+            android:textColor="@android:color/white"
+            android:textIsSelectable="true"
+            android:textSize="11sp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_toggle_stream"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="开始推流" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

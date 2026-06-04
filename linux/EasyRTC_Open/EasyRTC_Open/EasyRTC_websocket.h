@@ -1,4 +1,4 @@
-#ifndef __EASYRTC_WS_H__
+Ôªø#ifndef __EASYRTC_WS_H__
 #define __EASYRTC_WS_H__
 
 //#include <winsock2.h>
@@ -20,11 +20,11 @@
 
 typedef enum __CONNECT_STATUS_E
 {
-    EASYRTC_WS_DNS_FAIL =   0x01,                   // DNSΩ‚Œˆ ß∞‹
-    EASYRTC_WS_CONNECTING,                          // ¡¨Ω”÷–
-    EASYRTC_WS_CONNECTED,                           // ¡¨Ω”≥…π¶
-    EASYRTC_WS_CONNECT_FAIL,                        // ¡¨Ω” ß∞‹
-    EASYRTC_WS_DISCONNECT,                          // ¡¨Ω”∂œø™
+    EASYRTC_WS_DNS_FAIL =   0x01,                   // DNSËß£ÊûêÂ§±Ë¥•
+    EASYRTC_WS_CONNECTING,                          // ËøûÊé•‰∏≠
+    EASYRTC_WS_CONNECTED,                           // ËøûÊé•ÊàêÂäü
+    EASYRTC_WS_CONNECT_FAIL,                        // ËøûÊé•Â§±Ë¥•
+    EASYRTC_WS_DISCONNECT,                          // ËøûÊé•Êñ≠ÂºÄ
 }CONNECT_STATUS_E;
 
 
@@ -47,4 +47,4 @@ int websocketGetVersion(char* version);
 #ifdef __cplusplus
 }
 #endif
-#endif
+#endif
