@@ -941,7 +941,7 @@ static void startRenderThread(MediaSession *session) {
                         FLOGI("[Render] thread: not connected, skipping frame");
                     }
                 }else {
-                    LOGE("[Render] thread updateTexImage failed");
+                    // LOGE("[Render] thread updateTexImage failed");
                     // assert(false && "Encoder updateTexImage failed");
                 }
             usleep(frameIntervalUs);

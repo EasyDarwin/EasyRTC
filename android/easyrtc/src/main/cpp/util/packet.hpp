@@ -44,7 +44,7 @@ class PacketRingBuffer : public easyrtc::SpscRingBuffer<Packet> {
 public:
   explicit PacketRingBuffer(size_t capacity) : SpscRingBuffer(capacity) {}
 
-  uint64_t cached_millis() const {
+  uint64_t cached_us() const {
     size_t head = head_.load(std::memory_order_relaxed);
     size_t tail = tail_.load(std::memory_order_acquire);
     if (head == tail) return 0;
@@ -53,7 +53,7 @@ public:
     const Packet &headPacket = buffer_[newest];
     const Packet &tailPacket = buffer_[tail];
     if (headPacket.ptsUs >= tailPacket.ptsUs) {
-      return static_cast<uint64_t>(headPacket.ptsUs - tailPacket.ptsUs) / 1000;
+      return static_cast<uint64_t>(headPacket.ptsUs - tailPacket.ptsUs);
     }
     return 0;
   }

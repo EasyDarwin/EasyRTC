@@ -125,6 +125,20 @@ std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface,
     return pipeline;
 }
 
+
+int64_t fixSleepTime(int64_t sleepTimeUs, int64_t totalTimestampDifferUs, int64_t delayUs) {
+    if (totalTimestampDifferUs < 0) {
+        // LOGW("totalTimestampDifferUs is:%lld, this should not be happen.", static_cast<long long>(totalTimestampDifferUs));
+        totalTimestampDifferUs = 0;
+    }
+
+    double dValue = ((double) (delayUs - totalTimestampDifferUs)) / 1000000.0;
+    double radio = std::exp(dValue);
+    double r = sleepTimeUs * radio + 0.5;
+    LOGI("%lld,%lld,%lld->%lld", static_cast<long long>(sleepTimeUs), static_cast<long long>(totalTimestampDifferUs), static_cast<long long>(delayUs), static_cast<long long>(r));
+    return static_cast<int64_t>(r);
+}
+
 int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
     pipeline->running.store(true);
     pipeline->decodeThread = std::thread([pipeline]() {
@@ -168,7 +182,7 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
             pipeline->enqueuedFrames.store(q);
             enqueued++;
             if (q <= 8 || (q % 120) == 0) {
-                LOGI("DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
+                LOGI("[VI] DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
                      static_cast<unsigned long long>(q),
                      packet->size,
                      static_cast<long long>(packet->ptsUs),
@@ -187,17 +201,26 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
                     firstSystemUs = getMonoUs();
                 }
 
-                int64_t ptsUs = bufferInfo.presentationTimeUs - firstPtsUs;
-                const auto delta_us_to_master = (ptsUs - pipeline->audio_master_clock_us_from_begining_to_now);
-                FLOGI("VIDEO PKT OUT process:%lldms, audio master clock process:%lldms, delta:%lldms", ptsUs/1000, pipeline->audio_master_clock_us_from_begining_to_now/1000, delta_us_to_master/1000);
+                const int64_t ptsDurationUs = bufferInfo.presentationTimeUs - firstPtsUs;
+                int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
+                if (pipeline->audio_master_clock_us_from_begining_to_now > 0) {
+                    masterClockDurationUs = pipeline->audio_master_clock_us_from_begining_to_now;
+                }
+                const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
+                FLOGI("[VI] DEC_OUT process:%lldms, master clock:%lldms, delta:%lldms", ptsDurationUs/1000, masterClockDurationUs/1000, delta_us_to_master/1000);
                 int64_t sleepUs = delta_us_to_master - 3000;
-
+                auto fixedSleepUs = fixSleepTime(sleepUs, pipeline->frameQueue.cached_us(), 0);
+                FLOGI("[VI] DEC_OUT before fix sleepUs=%lld, after fix sleepUs=%lld, cached_packet_us=%lld", sleepUs, fixedSleepUs, pipeline->frameQueue.cached_us());
                 if (sleepUs > 0) {
                     sleepInterruptibleUs(sleepUs, [&]() {
-                        return !pipeline->running.load();
+                        int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
+                        if (pipeline->audio_master_clock_us_from_begining_to_now > 0) {
+                            masterClockDurationUs = pipeline->audio_master_clock_us_from_begining_to_now;
+                        }
+                        const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
+                        return !pipeline->running.load() || delta_us_to_master < 10000;
                     });
                 }
-
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
                 pipeline->errorCount.store(0);
                 uint64_t r = gDecRendered.fetch_add(1) + 1;
@@ -317,14 +340,14 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
             }
             bool sureConsumed = true;
             defer(if (sureConsumed) pipeline->frameQueue.commitPop());
-            FLOGI("VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
+            FLOGI("[VI] VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
             if (droppingPackets && (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) != EASYRTC_FRAME_FLAG_KEY_FRAME) {
                 LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
                 continue;
             }
             droppingPackets = false;
 #if 0
-            const auto cached_packet_millis =  pipeline->frameQueue.cached_millis();
+            const auto cached_packet_millis =  pipeline->frameQueue.cached_us()/1000;
         if (cached_packet_millis > 500 && pipeline->frameQueue.size() > 30) {
             bool hasKeyInside = false;
             pipeline->frameQueue.check([&](const Packet* p) {

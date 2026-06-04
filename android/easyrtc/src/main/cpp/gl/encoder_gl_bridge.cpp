@@ -531,7 +531,7 @@ bool encoderGlRenderFrame(const std::shared_ptr<EncoderGlBridge>& bridge, long l
         return false;
     }
     if ((timestampNs % 120) == 0) {
-        LOGD("Render frame rendered ts=%lld", timestampNs);
+        // LOGD("Render frame rendered ts=%lld", timestampNs);
     }
     return true;
 }
@@ -540,7 +540,7 @@ bool encoderGlUpdateTexImage(ASurfaceTexture* st, float matrix4x4[16], int64_t* 
     assert(st && "ASurfaceTexture is null in updateTexImage");
     int r = ASurfaceTexture_updateTexImage(st);
     if (r != 0) {
-        LOGW("[CRITICAL] EncoderRotate updateTexImage failed: %d", r);
+        // LOGW("[CRITICAL] EncoderRotate updateTexImage failed: %d", r);
         return false;
     }
     if (matrix4x4) {
