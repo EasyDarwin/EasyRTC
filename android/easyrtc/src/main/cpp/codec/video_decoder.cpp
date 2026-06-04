@@ -135,7 +135,7 @@ int64_t fixSleepTime(int64_t sleepTimeUs, int64_t totalTimestampDifferUs, int64_
     double dValue = ((double) (delayUs - totalTimestampDifferUs)) / 1000000.0;
     double radio = std::exp(dValue);
     double r = sleepTimeUs * radio + 0.5;
-    LOGI("%lld,%lld,%lld->%lld", static_cast<long long>(sleepTimeUs), static_cast<long long>(totalTimestampDifferUs), static_cast<long long>(delayUs), static_cast<long long>(r));
+    // LOGI("%lld,%lld,%lld->%lld", static_cast<long long>(sleepTimeUs), static_cast<long long>(totalTimestampDifferUs), static_cast<long long>(delayUs), static_cast<long long>(r));
     return static_cast<int64_t>(r);
 }
 
