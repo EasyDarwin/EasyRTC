@@ -185,12 +185,15 @@
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\common\cJSON.h" />
     <ClInclude Include="..\common\osmutex.h" />
     <ClInclude Include="..\common\osthread.h" />
     <ClInclude Include="ButtonListCtrl.h" />
+    <ClInclude Include="CDlgNewVersion.h" />
     <ClInclude Include="CDlgVideo.h" />
     <ClInclude Include="CharacterTranscoding.h" />
     <ClInclude Include="CreateDump.h" />
+    <ClInclude Include="curlWebClient\curlWebClientAPI.h" />
     <ClInclude Include="EasyRTC-P2P.h" />
     <ClInclude Include="EasyRTC-P2PDlg.h" />
     <ClInclude Include="framework.h" />
@@ -203,6 +206,10 @@
     <ClInclude Include="XmlConfig.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\common\cJSON.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\common\osmutex.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
@@ -212,6 +219,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="ButtonListCtrl.cpp" />
+    <ClCompile Include="CDlgNewVersion.cpp" />
     <ClCompile Include="CDlgVideo.cpp" />
     <ClCompile Include="CharacterTranscoding.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
@@ -259,6 +267,9 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\EasyRTC-P2P.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="curlWebClient\curlWebClient.lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

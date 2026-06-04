@@ -4,6 +4,7 @@
 #include "jni/JNI_EasyRTCDevice.h"
 #endif
 #include "websocketClient.h"
+#include <stdarg.h>
 
 #ifdef _WIN32
 DWORD WINAPI __EasyRTC_Worker_Thread(void* lpParam);
@@ -28,10 +29,14 @@ EASYRTC_DEVICE_T* RTC_Device_Create(const char* serverAddr, const int serverPort
 			InitMutex(pDevice->peerMutex);
 		}
 
-		strncpy(pDevice->serverAddr, serverAddr, sizeof(pDevice->serverAddr) - 1);
-		pDevice->serverAddr[sizeof(pDevice->serverAddr) - 1] = '\0';
+		if (NULL != serverAddr && (0 != strcmp(serverAddr, "\0")))
+		{
+			strncpy(pDevice->serverAddr, serverAddr, sizeof(pDevice->serverAddr) - 1);
+			pDevice->serverAddr[sizeof(pDevice->serverAddr) - 1] = '\0';
+		}
 		pDevice->serverPort = serverPort;
 		pDevice->isSecure = isSecure;
+		pDevice->wsMask = 0x01;
 
 	} while (0);
 
@@ -125,6 +130,11 @@ int __ws_idle_callback(void* userptr)
 			(current->operateType == OPERATE_TYPE_DELETE) ||
 			(isDisconnect))
 		{
+			// 回调: 通知上层停止发送视频和音频
+			CallbackData(pDevice, current->uuid, EASYRTC_CALLBACK_TYPE_STOP_VIDEO, 0, 0, NULL, 0, 0, 0);
+			CallbackData(pDevice, current->uuid, EASYRTC_CALLBACK_TYPE_STOP_AUDIO, 0, 0, NULL, 0, 0, 0);
+			CallbackData(pDevice, current->uuid, EASYRTC_CALLBACK_TYPE_PEER_CLOSED, 0, 0, NULL, 0, 0, 0);
+
 			// 此处释放相应对象
 			EasyRTC_ReleasePeer(current);
 
@@ -144,6 +154,34 @@ int __ws_idle_callback(void* userptr)
 	return 0;
 }
 
+
+// 开启本地监听
+int RTC_Device_StartLocalService(EASYRTC_DEVICE_T* pDevice, EasyRTC_Data_Callback callback, void* userptr)
+{
+	if (NULL == pDevice->websocket)
+	{
+		memset(&pDevice->channelInfo, 0x00, sizeof(CHANNEL_INFO_T));
+
+#if defined(SUPPORT_WEBRTC_AEC)
+		WebRtcAecm_Create(&pDevice->channelInfo.aecmInstHandler);
+		WebRtcAecm_Init(pDevice->channelInfo.aecmInstHandler, 8000);
+
+		AecmConfig aecmConfig;
+		aecmConfig.cngMode = AecmTrue;
+		aecmConfig.echoMode = 4; //3; //4;
+		WebRtcAecm_set_config(pDevice->channelInfo.aecmInstHandler, aecmConfig);
+#endif
+
+		pDevice->dataCallback = callback;
+		pDevice->dataUserptr = userptr;
+
+		pDevice->wsMask = 0x00;
+
+		websocketBindLocalService(pDevice->serverPort, (void*)pDevice, __ws_data_callback, __ws_idle_callback, &pDevice->websocket);
+	}
+
+	return 0;
+}
 
 int RTC_Device_Start(EASYRTC_DEVICE_T* pDevice, const char* local_id, EasyRTC_Data_Callback callback, void* userptr)
 {
@@ -170,8 +208,12 @@ int RTC_Device_Start(EASYRTC_DEVICE_T* pDevice, const char* local_id, EasyRTC_Da
 
 		pDevice->dataCallback = callback;
 		pDevice->dataUserptr = userptr;
+		pDevice->wsMask = 0x01;
 
-		websocketCreate(pDevice->serverAddr, pDevice->serverPort, pDevice->isSecure, (void*)pDevice, __ws_connect_callback, __ws_register_callback, __ws_data_callback, __ws_idle_callback, &pDevice->websocket);
+		if (pDevice->serverPort > 0)
+		{
+			websocketCreate(pDevice->serverAddr, pDevice->serverPort, pDevice->isSecure, (void*)pDevice, __ws_connect_callback, __ws_register_callback, __ws_data_callback, __ws_idle_callback, &pDevice->websocket);
+		}
 	}
 
 	return 0;
@@ -223,7 +265,7 @@ int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char
 		char uuid[64] = { 0 };
 		GetStringFromUUID(uuid, (unsigned int*)&peer->caller_id[0]);
 		CallbackData(pDevice, uuid, EASYRTC_CALLBACK_TYPE_OFFER, 0, 0, (char*)sdp, (int)strlen(sdp), 0, 0);
-		ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)pInfo, iLength);
+		ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, pDevice->wsMask, (char*)pInfo, iLength);
 
 		free(pInfo);
 	}
@@ -251,7 +293,7 @@ int __EasyRTC_IceCandidate_Callback(void* userPtr, const int isOffer, const char
 		GetStringFromUUID(uuid, (unsigned int*)&peer->hisid[0]);
 		CallbackData(pDevice, uuid, EASYRTC_CALLBACK_TYPE_ANSWER, 0, 0, (char*)sdp, (int)strlen(sdp), 0, 0);
 
-		ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)pInfo, iLength);
+		ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, pDevice->wsMask, (char*)pInfo, iLength);
 
 		free(pInfo);
 	}
@@ -286,7 +328,7 @@ int RTC_Device_PassiveCallResponse(EASYRTC_DEVICE_T* pDevice, const char* peer_i
 		}
 
 
-		unsigned int mediaType = EASYRTC_MDIA_TYPE_VIDEO | EASYRTC_MDIA_TYPE_AUDIO;
+		unsigned int mediaType = EASYRTC_MEDIA_TYPE_VIDEO | EASYRTC_MEDIA_TYPE_AUDIO;
 		EasyRTC_RTP_TRANSCEIVER_DIRECTION direction = EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
 
 		pDevice->channelInfo.mediaType = mediaType;
@@ -941,7 +983,7 @@ int	EasyRTC_CreatePeer(EASYRTC_DEVICE_T* pDevice, EASYRTC_PEER_T* peer, EASYRTC_
 	if (EASYRTC_PEER_PUBLISHER == type)
 	{
 		// 配置视频轨道
-		if ((pChannel->videoCodecID > 0) && (pChannel->mediaType & EASYRTC_MDIA_TYPE_VIDEO))
+		if ((pChannel->videoCodecID > 0) && (pChannel->mediaType & EASYRTC_MEDIA_TYPE_VIDEO))
 		{
 			memset(&peer->peerConnection[type].video_track_, 0x00, sizeof(EasyRTC_MediaStreamTrack));
 			peer->peerConnection[type].video_track_.kind = EasyRTC_MEDIA_STREAM_TRACK_KIND_VIDEO;
@@ -968,7 +1010,7 @@ int	EasyRTC_CreatePeer(EASYRTC_DEVICE_T* pDevice, EASYRTC_PEER_T* peer, EASYRTC_
 			CallbackData(pDevice, peer->uuid, EASYRTC_CALLBACK_TYPE_START_VIDEO, pChannel->videoCodecID, true, NULL, 0, 0, 0);
 		}
 
-		if ((pChannel->audioCodecID > 0) && (pChannel->mediaType & EASYRTC_MDIA_TYPE_AUDIO))
+		if ((pChannel->audioCodecID > 0) && (pChannel->mediaType & EASYRTC_MEDIA_TYPE_AUDIO))
 		{
 			memset(&peer->peerConnection[type].audio_track_, 0x00, sizeof(EasyRTC_MediaStreamTrack));
 			peer->peerConnection[type].audio_track_.kind = EasyRTC_MEDIA_STREAM_TRACK_KIND_AUDIO;
@@ -1164,7 +1206,7 @@ int GetOnlineDevices(EASYRTC_DEVICE_T* pDevice, EasyRTC_Data_Callback callback, 
 	reqInfo.length = sizeof(REQ_GETONLINEDEVICES_INFO);
 	reqInfo.msgtype = HP_REQGETONLINEDEVICES_INFO;
 
-	int ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)&reqInfo, reqInfo.length);
+	int ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, 1, (char*)&reqInfo, reqInfo.length);
 
 	return ret;
 }

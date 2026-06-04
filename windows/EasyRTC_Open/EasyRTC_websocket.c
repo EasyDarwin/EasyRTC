@@ -4,6 +4,10 @@
 #include "websocketClient.h"
 #include "osthread.h"
 #include <stdio.h>
+#define MAX_PRIVCLIENTS_COUNT 32
+#define MAX_PRIVCLIENT_RECV_BUFFER_SIZE 8192
+#define WS_ACCEPT_MAGIC_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+#define WS_HANDSHAKE_REPLY_BLUEPRINT "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n"
 
 
 
@@ -27,6 +31,7 @@
 typedef struct __WSS_CLIENT_T
 {
 	OSTHREAD_OBJ_T* workerThread;
+	OSTHREAD_OBJ_T* localServiceWorkerThread;
 
 	char	serverAddr[128];
 	int		serverPort;
@@ -196,9 +201,9 @@ int websocket_send(int sockfd, char* buf, int len)
 
 
 // 发送数据
-static int net_send(WSS_CLIENT_T* ctx, int opcode, const unsigned char* buf, size_t len) {
+static int net_send(WSS_CLIENT_T* ctx, int opcode, int mask, const unsigned char* buf, size_t len) {
 
-	return rtc_websocket_write(ctx->sockfd, opcode, (const char*)buf, (int)len);
+	return rtc_websocket_write(ctx->sockfd, opcode, mask, (const char*)buf, (int)len);
 }
 
 // 接收数据
@@ -247,7 +252,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 			fclose(urandom);
 		}
 #endif
-		mbedtls_base64_encode(shakeKey, 32, &len, tempKey, 16);
+		//mbedtls_base64_encode(shakeKey, 32, &len, tempKey, 16);
 		if (0 == strcmp((char*)shakeKey, "\0"))
 		{
 			strcpy((char*)shakeKey, "uip7XrAOPE634xuUNvv0vg==");
@@ -290,7 +295,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 		}
 
 		// 构造 Host 头（WSS 默认端口 443，WS 默认 80）
-		char hostWithPort[128];
+		char hostWithPort[128] = { 0 };
 		if ((pWssClient->isSecure && pWssClient->serverPort == 443) ||
 			(!pWssClient->isSecure && pWssClient->serverPort == 80)) {
 			snprintf(hostWithPort, sizeof(hostWithPort), "%s", pWssClient->serverAddr);
@@ -310,7 +315,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 			"Sec-WebSocket-Version: 13\r\n"
 			"\r\n";
 
-		char httpHead[2048];
+		char httpHead[2048] = { 0 };
 		int httpHeadLen = snprintf(httpHead, sizeof(httpHead), httpRequest, hostWithPort, shakeKey);
 
 
@@ -423,7 +428,7 @@ void* __EasyRTC_Worker_Thread(void* lpParam)
 
 				// 发送 PONG
 				unsigned char pong[2] = { 0x8A, 0x00 }; // FIN=1, opcode=10 (PONG), no payload
-				net_send(pWssClient, WS_OPCODE_PONG, pong, 2);
+				net_send(pWssClient, WS_OPCODE_PONG, 1, pong, 2);
 
 				if (pos > framesize) memmove(recvbuf, recvbuf + framesize, pos - framesize);
 				pos -= framesize;
@@ -506,6 +511,403 @@ exit_thread:
 }
 
 
+#ifdef _WIN32
+DWORD WINAPI __EasyRTC_LocalService_Worker_Thread(void* lpParam)
+#else
+void* __EasyRTC_LocalService_Worker_Thread(void* lpParam)
+#endif
+{
+	OSTHREAD_OBJ_T* pThread = (OSTHREAD_OBJ_T*)lpParam;
+	WSS_CLIENT_T* pWssClient = (WSS_CLIENT_T*)pThread->userPtr;
+
+	pThread->flag = THREAD_STATUS_RUNNING;
+
+	// ==================================================
+
+
+
+
+	// =============================================================
+//
+//	// 生成 Sec-WebSocket-Key
+//	unsigned char shakeKey[32] = { 0 };
+//	//		if (memcmp(shakeKey, "\0\0\0\0", 4) == 0) 
+//	{
+//		size_t len = 0;
+//		unsigned char tempKey[16] = { 0 };
+//
+//#ifdef _WIN32
+//		GUID* guid = (GUID*)tempKey;
+//		CoCreateGuid(guid);
+//#else
+//		FILE* urandom = fopen("/dev/urandom", "rb");
+//		if (urandom) {
+//			fread(tempKey, 1, sizeof(tempKey), urandom);
+//			fclose(urandom);
+//		}
+//#endif
+//		mbedtls_base64_encode(shakeKey, 32, &len, tempKey, 16);
+//		if (0 == strcmp((char*)shakeKey, "\0"))
+//		{
+//			strcpy((char*)shakeKey, "uip7XrAOPE634xuUNvv0vg==");
+//		}
+//	}
+
+	int maxrecvlen = 400 * 1024;
+	char* recvbuf = (char*)malloc(maxrecvlen);
+	if (!recvbuf) goto exit_thread;
+
+
+
+	while (1) {
+		if (pThread->flag == THREAD_STATUS_EXIT) break;
+
+
+		struct sockaddr_in addr;
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons((unsigned short)pWssClient->serverPort);
+		addr.sin_addr.s_addr = htonl(INADDR_ANY);
+		int sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (sockfd == INVALID_SOCKET)
+		{
+			Sleep(2000);
+			continue;
+		}
+
+		int ret = bind(sockfd, (struct sockaddr*)&addr, sizeof(addr));
+		if (ret < 0)
+		{
+			closesocket(sockfd);
+			sockfd = INVALID_SOCKET;
+			Sleep(2000);
+			continue;
+		}
+
+		ret = listen(sockfd, 5);
+		if (ret < 0)
+		{
+			closesocket(sockfd);
+			sockfd = INVALID_SOCKET;
+			Sleep(2000);
+			continue;
+		}
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_DNS_FAIL);
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_CONNECTING);
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_CONNECT_FAIL);
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_CONNECT_FAIL);
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_DISCONNECT);
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_DISCONNECT);
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_DISCONNECT);
+		//pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_CONNECTED);
+
+		socket_set_keepalive(sockfd);
+
+		// ========== WebSocket 数据循环 ==========
+		int pos = 0;
+		time_t registerTime = 0;
+		pWssClient->registerStatus = 0;
+
+		while (1) {
+			if (pThread->flag == THREAD_STATUS_EXIT) break;
+
+			int maxSockFd = 0;
+			fd_set rfds;
+			FD_ZERO(&rfds);
+			FD_SET(sockfd, &rfds);
+			maxSockFd = sockfd;
+			if (pWssClient->sockfd > 0)
+			{
+				FD_SET(pWssClient->sockfd, &rfds);
+				maxSockFd = pWssClient->sockfd > sockfd ? pWssClient->sockfd : sockfd;
+			}
+
+			struct timeval timeout = { 1, 0 };
+			int rc = select(maxSockFd + 1, &rfds, NULL, NULL, &timeout);
+			if (rc == 0) 
+			{
+				if (pWssClient->idleCallback) pWssClient->idleCallback(pWssClient->userptr);
+				continue;
+			}
+			if (rc < 0) break;
+
+			if (FD_ISSET(sockfd, &rfds))
+			{
+				struct sockaddr_in clientAddr = { 0 };
+				int addrLen = sizeof(clientAddr);
+				int sock = accept(sockfd, (struct sockaddr*)&clientAddr, &addrLen);
+				if (sock > 0)
+				{
+					if (pWssClient->sockfd > 0)			// 关闭之前的连接
+					{
+						closesocket(pWssClient->sockfd);
+						pWssClient->sockfd = INVALID_SOCKET;
+					}
+
+					if (pWssClient->sockfd < 1)		// 同一时间只支持1个客户端
+					{
+						pWssClient->sockfd = sock;
+						pos = 0;
+						memset(recvbuf, 0x00, maxrecvlen);
+					}
+					else
+					{
+						closesocket(sock);
+					}
+				}
+			}
+			else if (FD_ISSET(pWssClient->sockfd, &rfds))
+			{
+
+				rc = net_recv(pWssClient, (unsigned char*)(recvbuf + pos), maxrecvlen - pos - 1);
+				if (rc <= 0) {
+#ifdef _WIN32
+					int err = WSAGetLastError();
+					if (err == WSAEWOULDBLOCK) {
+						continue;
+					}
+#else
+					if (errno == EAGAIN || errno == EWOULDBLOCK) {
+						continue;
+					}
+#endif
+
+					closesocket(pWssClient->sockfd);
+					pWssClient->sockfd = INVALID_SOCKET;
+
+					//if (rc == MBEDTLS_ERR_SSL_WANT_READ || rc == EWOULDBLOCK || rc == EAGAIN) continue;
+					break;
+				}
+				pos += rc;
+				recvbuf[pos] = '\0';
+
+				if (rc > 1000)
+				{
+					rc = rc;
+				}
+
+				//if (pWssClient->registerStatus == 0x00)		// 如果是首次接收数据
+				if (strncmp(recvbuf, "GET", 3) == 0)
+				{
+					if (strstr(recvbuf, "Host: ") == NULL) return -1;
+					if (strstr(recvbuf, "GET ") == NULL || strstr(recvbuf, " HTTP/1.1") == NULL) return -1;
+					if (strstr(recvbuf, "Upgrade: websocket") == NULL) return -1;
+					if (strstr(recvbuf, "Sec-WebSocket-Version: 13") == NULL) return -1;
+
+					// windows firefox 下是这样的: Connection: keep-alive, Upgrade
+					char* start2 = strstr(recvbuf, "Connection: ");
+					if (start2 == NULL) return -1;
+
+					start2 += strlen("Connection: ");
+					char* end2 = strstr(start2, "\r\n");
+					if (end2 == NULL) return -1;
+
+					char* start3 = strstr(start2, "Upgrade"); //一般都是这个(因为前面是"Connection: ", 这里就不能再加前面空格)
+					char* start4 = strstr(start2, "upgrade"); //但不确定是否这个也正确,所以做出兼容处理
+					if ((start3 == NULL) && (start4 == NULL)) return -1;
+					if (((start3 != NULL) && (start3 > end2)) || ((start4 != NULL) && (start4 > end2))) return -1;
+
+					char* start = strstr(recvbuf, "Sec-WebSocket-Key: ");
+					if (start == NULL) return -1;
+					start += strlen("Sec-WebSocket-Key: ");
+					char* end = strstr(start, "\r\n");
+					if (end == NULL) return -1;
+
+					char key[256] = { 0 };
+					size_t length = end - start;
+					strncpy(key, start, length);
+					strcat(key, WS_ACCEPT_MAGIC_KEY);
+
+					unsigned char sha1Hash[21] = { 0 };
+					mbedtls_sha1(key, strlen(key), sha1Hash);
+
+					size_t olen = 0;
+					unsigned char shakeKey[32] = { 0 };
+					mbedtls_base64_encode(shakeKey, 32, &olen, sha1Hash, 20);
+
+/*
+	unsigned char shakeKey[32] = { 0 };
+	//		if (memcmp(shakeKey, "\0\0\0\0", 4) == 0)
+	{
+		size_t len = 0;
+		unsigned char tempKey[16] = { 0 };
+
+#ifdef _WIN32
+		GUID* guid = (GUID*)tempKey;
+		CoCreateGuid(guid);
+#else
+		FILE* urandom = fopen("/dev/urandom", "rb");
+		if (urandom) {
+			fread(tempKey, 1, sizeof(tempKey), urandom);
+			fclose(urandom);
+		}
+#endif
+		mbedtls_base64_encode(shakeKey, 32, &len, tempKey, 16);
+		if (0 == strcmp((char*)shakeKey, "\0"))
+		{
+			strcpy((char*)shakeKey, "uip7XrAOPE634xuUNvv0vg==");
+		}
+	}
+*/
+
+
+
+					char replyHeader[1024] = { 0 };
+					snprintf(replyHeader, sizeof(replyHeader), WS_HANDSHAKE_REPLY_BLUEPRINT, shakeKey);
+
+					pWssClient->registerStatus = 0x01;		//已经转换为了websocket协议
+					send(pWssClient->sockfd, replyHeader, strlen(replyHeader), 0);
+
+					pos = 0;
+					continue;
+				}
+
+				ws_comm_header* wsheader = (ws_comm_header*)recvbuf;
+				ws_0_header* ws0header = (ws_0_header*)recvbuf;
+				ws_1_header* ws1header = (ws_1_header*)recvbuf;
+				ws_0m_header* ws0mheader = (ws_0m_header*)recvbuf;
+				ws_1m_header* ws1mheader = (ws_1m_header*)recvbuf;
+
+				int errCode = 0;
+			NEXTLOOP1:
+				if (pos < (int)sizeof(ws_comm_header)) continue;
+
+				//if ((wsheader->fin == 0) || (wsheader->rsv1 != 0) || (wsheader->rsv2 != 0) || (wsheader->rsv3 != 0) || (wsheader->opcode == WS_OPCODE_CLOSE) || (wsheader->opcode == WS_OPCODE_TEXT)) return -1;
+
+				if ((wsheader->fin == 0) || (wsheader->rsv1 != 0) || (wsheader->rsv2 != 0) ||
+					(wsheader->rsv3 != 0) || (wsheader->opcode == WS_OPCODE_CLOSE))
+				{
+					//if (pWssClient->connectCallback)	pWssClient->connectCallback(pWssClient->userptr, EASYRTC_WS_DISCONNECT);
+
+					closesocket(pWssClient->sockfd);
+					pWssClient->sockfd = INVALID_SOCKET;
+
+					continue;
+				}
+				else if (wsheader->opcode == WS_OPCODE_PING) {
+					int payloadlen = ws0header->payloadlen;
+					int framesize = (ws0header->mask == 0) ? (sizeof(ws_0_header) + payloadlen)
+						: (sizeof(ws_0m_header) + payloadlen);
+					if (framesize > pos) continue;
+
+					// 发送 PONG
+					unsigned char pong[2] = { 0x8A, 0x00 }; // FIN=1, opcode=10 (PONG), no payload
+					net_send(pWssClient, WS_OPCODE_PONG, 0, pong, 2);
+
+					if (pos > framesize) memmove(recvbuf, recvbuf + framesize, pos - framesize);
+					pos -= framesize;
+					if (pos >= (int)sizeof(ws_comm_header)) goto NEXTLOOP1;
+				}
+				else {
+					int payloadlen, framesize;
+					if (wsheader->payloadlen < 126) {
+						payloadlen = ws0header->payloadlen;
+						framesize = (ws0header->mask == 0) ? (sizeof(ws_0_header) + payloadlen)
+							: (sizeof(ws_0m_header) + payloadlen);
+						if (framesize > pos) continue;
+						if (ws0header->mask == 0) {
+							ws0header->payloaddata[payloadlen] = '\0';
+							errCode = pWssClient->dataCallback(pWssClient->userptr, ws0header->payloaddata, payloadlen);
+						}
+						else {
+							for (int i = 0; i < payloadlen; i++) {
+								ws0mheader->payloaddata[i] ^= ws0mheader->maskey[i % 4];
+							}
+							errCode = pWssClient->dataCallback(pWssClient->userptr, ws0mheader->payloaddata, payloadlen);
+						}
+					}
+					else if (wsheader->payloadlen == 126) {
+						payloadlen = be16toh(ws1header->expayloadlen);
+						framesize = (ws1header->mask == 0) ? (sizeof(ws_1_header) + payloadlen)
+							: (sizeof(ws_1m_header) + payloadlen);
+						if (framesize > maxrecvlen) {
+							int maxrecvlen2 = (framesize + 2048);// / 1024 * 1024;
+							char* recvbuf2 = (char*)malloc(maxrecvlen2);
+							memcpy(recvbuf2, recvbuf, maxrecvlen);
+							free(recvbuf);
+
+							maxrecvlen = maxrecvlen2;
+							recvbuf = recvbuf2;
+
+							wsheader = (ws_comm_header*)recvbuf;
+							ws0header = (ws_0_header*)recvbuf;
+							ws1header = (ws_1_header*)recvbuf;
+							ws0mheader = (ws_0m_header*)recvbuf;
+							ws1mheader = (ws_1m_header*)recvbuf;
+						}
+						if (framesize > pos) continue;
+						if (ws1header->mask == 0) {
+							ws1header->payloaddata[payloadlen] = '\0';
+							errCode = pWssClient->dataCallback(pWssClient->userptr, ws1header->payloaddata, payloadlen);
+						}
+						else {
+							for (int i = 0; i < payloadlen; i++) {
+								ws1mheader->payloaddata[i] ^= ws1mheader->maskey[i % 4];
+							}
+							errCode = pWssClient->dataCallback(pWssClient->userptr, ws1mheader->payloaddata, payloadlen);
+						}
+					}
+					else {
+						break; // payloadlen == 127 not supported
+					}
+
+					if (errCode != 0) break;
+					if (pos > framesize) memmove(recvbuf, recvbuf + framesize, pos - framesize);
+					pos -= framesize;
+					if (pos >= (int)sizeof(ws_comm_header)) goto NEXTLOOP1;
+				}
+
+
+
+
+			}
+
+		}
+
+		closesocket(sockfd);
+		sockfd = INVALID_SOCKET;
+
+		net_close(pWssClient);
+		memset(recvbuf, 0, maxrecvlen);
+		pos = 0;
+
+		if (pThread->flag == THREAD_STATUS_EXIT) break;
+	}
+
+
+exit_thread:
+	free(recvbuf);
+	pThread->flag = THREAD_STATUS_INIT;
+	return 0;
+}
+
+int websocketBindLocalService(const int localListenPort, void* userptr, ws_data_callback dataCallback, ws_idle_callback idleCallback, void** ppWssClient)
+{
+	WSS_CLIENT_T* pWssClient = (WSS_CLIENT_T*)malloc(sizeof(WSS_CLIENT_T));
+	if (NULL == pWssClient)	return -2;
+
+	memset(pWssClient, 0x00, sizeof(WSS_CLIENT_T));
+	pWssClient->serverPort = localListenPort;
+	pWssClient->dataCallback = dataCallback;
+	pWssClient->idleCallback = idleCallback;
+	pWssClient->userptr = userptr;
+
+	CreateOSThread(&pWssClient->localServiceWorkerThread, __EasyRTC_LocalService_Worker_Thread, (void*)pWssClient, 0);
+
+	if (NULL != pWssClient->localServiceWorkerThread)
+	{
+		if (NULL != ppWssClient)	*ppWssClient = pWssClient;
+	}
+	else
+	{
+		if (NULL != ppWssClient)	*ppWssClient = NULL;
+		free(pWssClient);
+	}
+
+	return 0;
+
+}
+
+
 int websocketCreate(const char* serverAddr, const int serverPort, const int isSecure, void* userptr,
 	ws_connect_callback connectCallback, ws_register_callback registerCallback, ws_data_callback dataCallback,
 	ws_idle_callback idleCallback,
@@ -523,6 +925,7 @@ int websocketCreate(const char* serverAddr, const int serverPort, const int isSe
 	pWssClient->dataCallback = dataCallback;
 	pWssClient->idleCallback = idleCallback;
 	pWssClient->userptr = userptr;
+
 	CreateOSThread(&pWssClient->workerThread, __EasyRTC_Worker_Thread, (void*)pWssClient, 0);
 
 	if (NULL != pWssClient->workerThread)
@@ -548,12 +951,15 @@ int websocketSetRegisterStatus(void* _pWssClient, int registerStatus)
 	return 0;
 }
 
-int websocketSendData(void* _pWssClient, int opcode, char* data, int size)
+int websocketSendData(void* _pWssClient, int opcode, int mask, char* data, int size)
 {
 	WSS_CLIENT_T* pWssClient = (WSS_CLIENT_T*)_pWssClient;
 	if (NULL == pWssClient)	return -1;
 
-	return net_send(pWssClient, opcode, data, size);
+	return net_send(pWssClient, opcode, mask, data, size);
+
+	//return net_send(pWssClient, data, size);
+	//return easyrtc_websocket_write(pWssClient->sockfd, opcode, data, size);
 }
 
 void websocketRelease(void** ppWssClient)
@@ -567,6 +973,11 @@ void websocketRelease(void** ppWssClient)
 	{
 		DeleteOSThread(&pWssClient->workerThread);
 	}
+	if (NULL != pWssClient->localServiceWorkerThread)
+	{
+		DeleteOSThread(&pWssClient->localServiceWorkerThread);
+	}
+	
 
 	free(pWssClient);
 

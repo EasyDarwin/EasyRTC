@@ -11,6 +11,9 @@
 #include "CreateDump.h"
 #include "CharacterTranscoding.h"
 
+#include "curlWebClient/curlWebClientAPI.h"
+#include "cJSON.h"
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -24,8 +27,11 @@
 #define WM_EASY_RTC_REFRESH_DEVICE_LIST	WM_USER+2006
 #define WM_EASY_RTC_SDP		WM_USER+2007
 #define WM_EASY_RTC_CALL_END	WM_USER+2008
+#define WM_EASY_RTC_UPDATE_PEER_STATUS	WM_USER+2009
 
 #define REFRESH_DEVICE_TIMER_ID	10000
+
+#define WM_NEW_VERSION	WM_USER+3001
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -117,6 +123,7 @@ CEasyRTCDeviceWinDlg::CEasyRTCDeviceWinDlg(CWnd* pParent /*=nullptr*/)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
+	libWebClient_curl_init();
 	InitComponents();
 }
 
@@ -139,13 +146,21 @@ BEGIN_MESSAGE_MAP(CEasyRTCDeviceWinDlg, CDialogEx)
 	ON_MESSAGE(WM_CLICK_BUTTON, OnClickCallButton)
 	ON_MESSAGE(WM_EASY_RTC_UPDATE_WINDOW, OnUpdateVideoWindow)
 	ON_MESSAGE(WM_EASY_RTC_REFRESH_DEVICE_LIST, OnRefreshDeviceList)
+	ON_MESSAGE(WM_EASY_RTC_SDP, OnSDP)
 	ON_MESSAGE(WM_EASY_RTC_CALL_END, OnCallEnd)
+	ON_MESSAGE(WM_EASY_RTC_UPDATE_PEER_STATUS, OnUpdatePeerStatus)
+
+	ON_MESSAGE(WM_NEW_VERSION, OnNewVersion)
 	
 	ON_BN_CLICKED(IDC_BUTTON_PREVIEW, &CEasyRTCDeviceWinDlg::OnBnClickedButtonPreview)
 	ON_BN_CLICKED(IDC_BUTTON_REFRESH_DEVICELIST, &CEasyRTCDeviceWinDlg::OnBnClickedButtonRefreshDevicelist)
 	ON_BN_CLICKED(IDC_BUTTON_SEND_MESSAGE, &CEasyRTCDeviceWinDlg::OnBnClickedButtonSendMessage)
 	ON_BN_CLICKED(IDC_BUTTON_CALL_END, &CEasyRTCDeviceWinDlg::OnBnClickedButtonCallEnd)
 	ON_WM_TIMER()
+	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MODE, &CEasyRTCDeviceWinDlg::OnTcnSelchangeTabMode)
+	ON_BN_CLICKED(IDC_BUTTON_P2P_CALL, &CEasyRTCDeviceWinDlg::OnBnClickedButtonP2pCall)
+	ON_BN_CLICKED(IDC_BUTTON_START_LISTEN, &CEasyRTCDeviceWinDlg::OnBnClickedButtonStartListen)
+	ON_BN_CLICKED(IDC_BUTTON_WHIP_PUSH, &CEasyRTCDeviceWinDlg::OnBnClickedButtonWhipPush)
 END_MESSAGE_MAP()
 
 
@@ -202,12 +217,7 @@ BOOL CEasyRTCDeviceWinDlg::OnInitDialog()
 	CreateComponents();
 
 	char version[128] = { 0 };
-	//EasyRTC_Device_GetVersion(version);
-
-	int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
-	EasyRTCDevice_getBuildTime(&year, &month, &day, &hour, &minute, &second);
-
-	sprintf(version, "EasyRTC-P2P v1.0.%d.%02d%02d", year - 2000, month, day);
+	GetCurrentVersion(version);
 
 	wchar_t wszTitle[128] = { 0 };
 	MByteToWChar(version, wszTitle, sizeof(wszTitle) / sizeof(wszTitle[0]));
@@ -220,6 +230,18 @@ BOOL CEasyRTCDeviceWinDlg::OnInitDialog()
 #endif
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
+}
+
+int		CEasyRTCDeviceWinDlg::GetCurrentVersion(char* outVersion)
+{
+	//EasyRTC_Device_GetVersion(version);
+
+	int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
+	EasyRTCDevice_getBuildTime(&year, &month, &day, &hour, &minute, &second);
+
+	sprintf(outVersion, "EasyRTC-P2P v1.0.%d.%02d%02d", year - 2000, month, day);
+
+	return 0;
 }
 
 void CEasyRTCDeviceWinDlg::OnSysCommand(UINT nID, LPARAM lParam)
@@ -276,6 +298,7 @@ HCURSOR CEasyRTCDeviceWinDlg::OnQueryDragIcon()
 void CEasyRTCDeviceWinDlg::OnDestroy()
 {
 	DeleteComponents();
+	libWebClient_curl_Deinit();
 
 	CDialogEx::OnDestroy();
 }
@@ -304,7 +327,7 @@ LRESULT CEasyRTCDeviceWinDlg::OnLog(WPARAM wParam, LPARAM lParam)
 		_timetmp = localtime(&tt);
 		if (NULL != _timetmp)   strftime(szMsg, 32, "[%Y-%m-%d %H:%M:%S] ", _timetmp);
 
-		wchar_t wszMsg[1024] = { 0 };
+		wchar_t wszMsg[1024*32] = { 0 };
 		MByteToWChar(szMsg, wszMsg, sizeof(wszMsg) / sizeof(wszMsg[0]));
 		pRedtLog->SetSel(-1, -1);
 		pRedtLog->ReplaceSel(wszMsg);
@@ -369,6 +392,7 @@ void	CEasyRTCDeviceWinDlg::InitComponents()
 
 	__SetNull(pDlgVideoRemote);
 	__SetNull(pDlgVideoLocal);
+	__SetNull(pTabModel);
 	__SetNull(pStaticStatus);
 	__SetNull(pStaticServerIP);
 	__SetNull(pStaticServerPort);
@@ -380,9 +404,17 @@ void	CEasyRTCDeviceWinDlg::InitComponents()
 	__SetNull(pEdtServerPort);
 	__SetNull(pEdtDeviceID);
 	__SetNull(pBtnStartStop);
+	__SetNull(pBtnP2PCall);
 	__SetNull(pListCtrlDevice);
 	__SetNull(pBtnRefresh);
+	__SetNull(pEdtWhipURL);
+	__SetNull(pBtnWhipPush);
 
+	__SetNull(pEdtPeerIP);
+	__SetNull(pEdtPeerPort);
+	__SetNull(pStaticLocalListenPort);
+	__SetNull(pEdtLocalListenPort);
+	__SetNull(pBtnStartLocalListen);
 
 	__SetNull(pEdtSendText);
 	__SetNull(pBtnSendMessage);
@@ -394,10 +426,12 @@ void	CEasyRTCDeviceWinDlg::InitComponents()
 	__SetNull(pEdtStreamURL);
 	__SetNull(pRedtLog);
 
+	__SetNull(pDlgNewVersion);
 
 	localFrameInfoVector.clear();
 	remoteFrameInfoVector.clear();
 
+	
 
 	InitMutex(&mutexLog);
 	InitMutex(&mutexLocalFrame);
@@ -440,22 +474,35 @@ void	CEasyRTCDeviceWinDlg::CreateComponents()
 	}
 
 
-
 	__CREATE_WINDOW(pStaticStatus, CStatic, IDC_STATIC_STATUS);
 	__CREATE_WINDOW(pStaticServerIP, CStatic, IDC_STATIC_SERVER_IP);
 	__CREATE_WINDOW(pStaticServerPort, CStatic, IDC_STATIC_SERVER_PORT);
 	__CREATE_WINDOW(pStaticDeviceID, CStatic, IDC_STATIC_DEVICE_ID);
 	__CREATE_WINDOW(pGrpDeviceList, CStatic, IDC_STATIC_DEVICE_LIST);
+	__CREATE_WINDOW(pStaticLocalListenPort, CStatic, IDC_STATIC_LOCAL_LISTEN_PORT);
 
 	__CREATE_WINDOW(pEdtServerIP, CEdit, IDC_EDIT_SERVER_IP);
 	__CREATE_WINDOW(pEdtServerPort, CEdit, IDC_EDIT_SERVER_PORT);
 	__CREATE_WINDOW(pChkSSL, CButton, IDC_CHECK_IS_SECURT);
+	__CREATE_WINDOW(pEdtLocalListenPort, CEdit, IDC_EDIT_LOCAL_LISTEN_PORT);
+	__CREATE_WINDOW(pEdtPeerIP, CEdit, IDC_EDIT_PEER_IP);
+	__CREATE_WINDOW(pEdtPeerPort, CEdit, IDC_EDIT_PEER_PORT);
+	
+	__CREATE_WINDOW(pBtnStartLocalListen, CButton, IDC_BUTTON_START_LISTEN);
+
+
+
 	
 	__CREATE_WINDOW(pEdtDeviceID, CEdit, IDC_EDIT_DEVICE_ID);
 	__CREATE_WINDOW(pBtnStartStop, CButton, IDC_BUTTON_START_STOP);
+	__CREATE_WINDOW(pBtnP2PCall, CButton, IDC_BUTTON_P2P_CALL);
 	__CREATE_WINDOW(pListCtrlDevice, CButtonListCtrl, IDC_LIST_DEVICE_LIST);
 	__CREATE_WINDOW(pBtnRefresh, CButton, IDC_BUTTON_REFRESH_DEVICELIST);
+	if (pBtnRefresh)	pBtnRefresh->ShowWindow(SW_HIDE);
 
+	__CREATE_WINDOW(pEdtWhipURL, CEdit, IDC_EDIT_WHIP_URL);
+	__CREATE_WINDOW(pBtnWhipPush, CButton, IDC_BUTTON_WHIP_PUSH);
+	
 
 	__CREATE_WINDOW(pEdtSendText, CEdit, IDC_EDIT_SEND_TEXT);
 	__CREATE_WINDOW(pBtnSendMessage, CButton, IDC_BUTTON_SEND_MESSAGE);
@@ -478,13 +525,29 @@ void	CEasyRTCDeviceWinDlg::CreateComponents()
 		pChkSSL->ShowWindow(SW_HIDE);			// 暂未实现wss, 所以此处隐藏
 	}
 
+	SetEditText(pEdtLocalListenPort, "19005");
 
+	// WHIP
+	//char hostname[64] = { 0 };
+	char whipURL[1024] = { 0 };
+	//gethostname(hostname, sizeof(hostname));
+	sprintf(whipURL, "https://demo.easygbs.com:10010/live/%08u_01.whip", (unsigned int)time(NULL));
 
+	SetEditText(pEdtWhipURL, whipURL);
+	if (pBtnWhipPush)	pBtnWhipPush->SetWindowTextW(TEXT("推送"));
+
+	SetEditText(pEdtPeerPort, "19005");
 #ifdef _DEBUG
 	SetEditText(pEdtServerIP, "rts.easyrtc.cn");
 	SetEditText(pEdtServerPort, "19000");
 	SetEditText(pEdtDeviceID, "92092eea-be8d-4ec4-8ac5-987654321001");
-	if (pEdtStreamURL)	pEdtStreamURL->SetWindowTextW(TEXT("rtsp://admin:admin12345@192.168.6.19"));
+	if (pEdtStreamURL)	pEdtStreamURL->SetWindowTextW(TEXT("G:/test/20260522_out.mp4"));
+	//if (pEdtStreamURL)	pEdtStreamURL->SetWindowTextW(TEXT("rtsp://admin:admin123@192.168.1.16"));
+	//if (pEdtStreamURL)	pEdtStreamURL->SetWindowTextW(TEXT("rtsp://admin:admin12345@192.168.6.19"));
+	//if (pEdtStreamURL)	pEdtStreamURL->SetWindowTextW(TEXT("rtsp://admin:admin12345@192.168.0.239"));
+
+	SetEditText(pEdtPeerIP, "172.16.0.167");
+	
 #else
 	XmlConfig	xmlConfig;
 	XML_CONFIG_T	config;
@@ -505,6 +568,7 @@ void	CEasyRTCDeviceWinDlg::CreateComponents()
 
 
 	if (pBtnStartStop)	pBtnStartStop->SetWindowTextW(TEXT("接入"));
+	if (pBtnP2PCall)	pBtnP2PCall->SetWindowTextW(TEXT("呼叫"));
 	if (pBtnPreview)	pBtnPreview->SetWindowTextW(TEXT("开启本地预览"));
 
 	if (pGrpDeviceList)	pGrpDeviceList->SetWindowTextW(_T("设备列表"));
@@ -542,6 +606,25 @@ void	CEasyRTCDeviceWinDlg::CreateComponents()
 	mLocalRTCDevice.pThis = this;
 
 
+	mMode = 0;
+	__CREATE_WINDOW(pTabModel, CTabCtrl, IDC_TAB_MODE);
+	if (NULL != pTabModel)
+	{
+		pTabModel->InsertItem(0, L"P2P模式");
+		pTabModel->InsertItem(1, L"直连模式");
+		pTabModel->InsertItem(2, L"WHIP推流");
+		pTabModel->SetCurSel(0);
+
+		mMode = pTabModel->GetCurSel();
+	}
+	ChangeMode(mMode);
+
+#ifdef _DEBUG
+	pEdtPeerIP->SetWindowTextW(L"127.0.0.1");
+	pEdtPeerPort->SetWindowTextW(L"19005");
+#endif
+
+
 	EnableTextMessage(FALSE);
 	EnableCallEnd(FALSE);
 
@@ -561,6 +644,110 @@ void	CEasyRTCDeviceWinDlg::CreateComponents()
 	if (pComboxLocalAudioList->GetCount() == 1)	pComboxLocalAudioList->SetCurSel(0);
 	//if (pComboxLocalAudioList->GetCount() > 0)	pComboxLocalAudioList->SetCurSel(0);
 #endif
+
+	CheckLatestVersion();
+}
+
+
+LRESULT CEasyRTCDeviceWinDlg::OnNewVersion(WPARAM, LPARAM lParam)
+{
+	char* latestVersionInfo = (char*)lParam;
+
+	cJSON* jsonData = cJSON_Parse(latestVersionInfo);
+	if (NULL != jsonData)
+	{
+		char szLog[2048] = { 0 };
+		char* pLog = (char*)szLog;
+
+		bool hasNewVersion = false;
+		char currentVersion[128] = { 0 };
+		GetCurrentVersion(currentVersion);
+
+		jsonData = jsonData->child;
+		while (jsonData)
+		{
+			if (0 == strcmp(jsonData->string, "version"))
+			{
+//#ifndef _DEBUG
+				int ret = strcmp(jsonData->valuestring, currentVersion);
+				if (ret > 0)
+//#endif
+				{
+					hasNewVersion = true;
+
+					pLog += sprintf(pLog, "请下载使用最新版本.\n\n");
+
+					pLog += sprintf(pLog, "最新版本: %s\n", jsonData->valuestring);
+				}
+//#ifndef _DEBUG
+				else
+				{
+
+					break;
+				}
+//#endif
+			}
+			else if (0 == strcmp(jsonData->string, "url"))
+			{
+				pLog += sprintf(pLog, "下载地址: %s\n", jsonData->valuestring);
+			}
+			else if (0 == strcmp(jsonData->string, "items"))
+			{
+				pLog += sprintf(pLog, "\n更新日志: %s\n", "");
+				cJSON* jsonChild = jsonData->child;
+				while (jsonChild)
+				{
+					char utf8Str[1024] = { 0 };
+					libCharacterTranscoding_UTF8ToGB2312(utf8Str, sizeof(utf8Str), jsonChild->valuestring, (int)strlen(jsonChild->valuestring));
+
+					pLog += sprintf(pLog, "%s\n", utf8Str);
+					jsonChild = jsonChild->next;
+				}
+			}
+
+			jsonData = jsonData->next;
+		}
+
+		cJSON_Delete(jsonData);
+
+		if (hasNewVersion)
+		{
+			CDlgNewVersion	newVersion(szLog);
+			newVersion.DoModal();
+		}
+	}
+
+	delete[]latestVersionInfo;
+
+	return 0;
+}
+
+int __CURL_RESPONSE_VERSION_CALLBACK(void* userptr, size_t responseSize, char* responseData)
+{
+	if (NULL == responseData)		return 0;
+
+	CEasyRTCDeviceWinDlg* pThis = (CEasyRTCDeviceWinDlg*)userptr;
+	if (pThis && responseSize > 1)
+	{
+		char* resp = new char[responseSize+1];
+		if (resp)
+		{
+			memcpy(resp, responseData, responseSize);
+			resp[responseSize] = '\0';
+			pThis->PostMessageW(WM_NEW_VERSION, 0, (LPARAM)resp);
+		}
+	}
+
+	return 0;
+}
+
+int		CEasyRTCDeviceWinDlg::CheckLatestVersion()
+{
+	// 检查新版本
+	const char* check_version = "https://www.easyrtc.cn/public/win_version.json";
+	libWebClient_Get(check_version, "application/json", __CURL_RESPONSE_VERSION_CALLBACK, this, 10);
+
+	return 0;
 }
 
 
@@ -575,48 +762,20 @@ void	CEasyRTCDeviceWinDlg::UpdateComponents()
 	int button_height = 50;
 	int padding = 2;
 
+	int BUTTON_WIDTH = 130;
 
 	int label_width = 80;
 	int label_height = 30;
-	CRect	rcLabel;
-	rcLabel.SetRect(rcClient.left + padding, rcClient.top + padding * 5, rcClient.left + padding + label_width, rcClient.top + padding * 5 + label_height);
-	__MOVE_WINDOW(pStaticServerIP, rcLabel);
-
-	CRect rcEdt;
-	rcEdt.SetRect(rcLabel.right + padding, rcLabel.top, rcLabel.right + padding + 300, rcLabel.bottom);
-	__MOVE_WINDOW(pEdtServerIP, rcEdt);
-
-	CRect rcServerPort;
-	rcServerPort.SetRect(rcEdt.right + padding, rcLabel.top, rcEdt.right + padding + label_width, rcLabel.bottom);
-	__MOVE_WINDOW(pStaticServerPort, rcServerPort);
-	rcEdt.SetRect(rcServerPort.right + padding, rcEdt.top, rcServerPort.right + padding + 80, rcEdt.bottom);
-	__MOVE_WINDOW(pEdtServerPort, rcEdt);
-
-	CRect rcSSL;
-	rcSSL.SetRect(rcEdt.right + padding * 2, rcEdt.top, rcEdt.right + padding * 2 + 100, rcEdt.bottom);
-	__MOVE_WINDOW(pChkSSL, rcSSL);
-
-	CRect rcBtnStart;
-	int BUTTON_WIDTH = 130;
-	rcBtnStart.SetRect(rcClient.right- BUTTON_WIDTH*2 - padding, rcLabel.top, rcClient.right-padding, rcLabel.bottom+50);
 	
+
 	int device_list_width = (int)((float)rcClient.Width() * 0.3f);
-
-	//rcLabel.SetRect(rcEdt.right + padding, rcLabel.top, rcEdt.right + padding+rcLabel.Width(), rcLabel.bottom);
-	rcLabel.SetRect(rcLabel.left, rcLabel.bottom+padding*2, rcLabel.right, rcLabel.bottom+2+padding*2+ rcLabel.Height());
-	__MOVE_WINDOW(pStaticDeviceID, rcLabel);
-	rcEdt.SetRect(rcLabel.right + padding, rcLabel.top, rcBtnStart.right - padding * 5 - device_list_width, rcLabel.bottom);
-	__MOVE_WINDOW(pEdtDeviceID, rcEdt);
-
-	rcBtnStart.SetRect(rcEdt.right + padding * 5, rcBtnStart.top, rcClient.right - padding * 2, rcEdt.bottom);
-	__MOVE_WINDOW(pBtnStartStop, rcBtnStart);
 
 	
 
 	int videoWindowWidth = (rcClient.Width() - padding * 2 - device_list_width) / 2 - padding;
 	int videoWindowHeight = (int)((float)rcClient.Height() * 0.6f);
 
-	int nTop = rcLabel.bottom + padding * 4+10;
+	int nTop = padding * 4;
 
 	// 对端视频窗口
 	CRect rcGrpRemote;
@@ -628,7 +787,7 @@ void	CEasyRTCDeviceWinDlg::UpdateComponents()
 	//CStatic* pGrpLogMessage;		// IDC_STATIC_LOG_MESSAGE
 
 	CRect	rcRemoteVideo;
-	rcRemoteVideo.SetRect(rcClient.left + padding, rcLabel.bottom + padding * 4, rcClient.left + videoWindowWidth, rcLabel.bottom + padding * 4 + videoWindowHeight);
+	rcRemoteVideo.SetRect(rcClient.left + padding, nTop + padding * 4, rcClient.left + videoWindowWidth, nTop + padding * 4 + videoWindowHeight);
 	rcRemoteVideo.SetRect(rcGrpRemote.left + padding * 2, rcGrpRemote.top + padding * 10, rcGrpRemote.right - padding * 2, rcGrpRemote.bottom - padding * 5 - 30);
 	__MOVE_WINDOW(pDlgVideoRemote, rcRemoteVideo);
 
@@ -658,13 +817,73 @@ void	CEasyRTCDeviceWinDlg::UpdateComponents()
 	__MOVE_WINDOW(pDlgVideoLocal, rcLocalVideo);
 
 
+	// 模式
+	CRect rcTabMode;
+	rcTabMode.SetRect(rcGrpLocal.right + padding, rcGrpLocal.top, rcClient.right - padding * 2, rcClient.bottom - padding * 2);
+	__MOVE_WINDOW(pTabModel, rcTabMode);
+
+	// 平台信息 && ID
+	CRect	rcLabel;
+	//rcLabel.SetRect(rcGrpLocal.right + padding, rcGrpLocal.top + padding * 5, rcGrpLocal.right + padding * 2 + label_width, rcGrpLocal.top + padding * 5 + label_height);
+	rcLabel.SetRect(rcTabMode.left + padding*2, rcTabMode.top + 36, rcGrpLocal.right + padding * 2 + label_width, rcTabMode.top + 36 + label_height);
+	__MOVE_WINDOW(pStaticServerIP, rcLabel);
+	CRect rcEdt;
+	rcEdt.SetRect(rcLabel.right + padding, rcLabel.top, rcClient.right - padding * 2, rcLabel.bottom);
+	__MOVE_WINDOW(pEdtServerIP, rcEdt);
+	__MOVE_WINDOW(pEdtPeerIP, rcEdt);
+	__MOVE_WINDOW(pEdtWhipURL, rcEdt);
+
+	rcLabel.SetRect(rcLabel.left, rcLabel.bottom + padding * 2, rcLabel.right, rcLabel.bottom + padding * 2 + rcLabel.Height());
+	__MOVE_WINDOW(pStaticServerPort, rcLabel);
+	rcEdt.SetRect(rcEdt.left, rcLabel.top, rcEdt.right, rcLabel.bottom);
+	__MOVE_WINDOW(pEdtServerPort, rcEdt);
+	__MOVE_WINDOW(pEdtPeerPort, rcEdt);
+
+	//CRect rcSSL;
+	//rcSSL.SetRect(rcEdt.right + padding * 2, rcEdt.top, rcEdt.right + padding * 2 + 100, rcEdt.bottom);
+	//__MOVE_WINDOW(pChkSSL, rcSSL);
+
+	
+
+	//rcBtnStart.SetRect(rcClient.right - BUTTON_WIDTH * 2 - padding, rcLabel.top, rcClient.right - padding, rcLabel.bottom + 50);
+
+
+	////rcLabel.SetRect(rcEdt.right + padding, rcLabel.top, rcEdt.right + padding+rcLabel.Width(), rcLabel.bottom);
+	rcLabel.SetRect(rcLabel.left, rcLabel.bottom + padding * 2, rcLabel.right, rcLabel.bottom + 2 + padding * 2 + rcLabel.Height());
+	__MOVE_WINDOW(pStaticDeviceID, rcLabel);
+	rcEdt.SetRect(rcEdt.left, rcLabel.top, rcEdt.right, rcLabel.bottom);
+	__MOVE_WINDOW(pEdtDeviceID, rcEdt);
+
+	CRect rcBtnStart;
+	rcBtnStart.SetRect(rcLabel.left + 80, rcLabel.bottom + padding * 6, rcEdt.right - 80, rcLabel.bottom + padding * 6 + button_height);
+	//rcBtnStart.SetRect(rcEdt.right + padding * 5, rcBtnStart.top, rcClient.right - padding * 2, rcEdt.bottom);
+	__MOVE_WINDOW(pBtnStartStop, rcBtnStart);
+	__MOVE_WINDOW(pBtnP2PCall, rcBtnStart);
+	__MOVE_WINDOW(pBtnWhipPush, rcBtnStart);
+
+
+	// 本地监听
+	CRect rcLabelLocalListen;
+	rcLabel.SetRect(rcLabel.left, rcBtnStart.bottom + rcBtnStart.Height() + padding * 2, rcLabel.right, rcBtnStart.bottom + rcBtnStart.Height() + padding * 2 + rcLabel.Height());
+	__MOVE_WINDOW(pStaticLocalListenPort, rcLabel);
+	rcEdt.SetRect(rcEdt.left, rcLabel.top, rcEdt.right, rcLabel.bottom);
+	__MOVE_WINDOW(pEdtLocalListenPort, rcEdt);
+
+	CRect rcBtnListen;
+	rcBtnListen.SetRect(rcBtnStart.left, rcLabel.bottom + padding * 2, rcBtnStart.right, rcLabel.bottom + padding * 2 + rcBtnStart.Height());
+	__MOVE_WINDOW(pBtnStartLocalListen, rcBtnListen);
+
+
+
 	// 设备列表
 	// ==================
+
+
 	CRect rcDeviceList;
-	rcDeviceList.SetRect(rcGrpLocal.right + padding * 3, rcGrpRemote.top, rcClient.right - padding, rcClient.bottom - padding);
+	rcDeviceList.SetRect(rcGrpLocal.right + padding * 3, rcBtnStart.bottom + padding * 8, rcClient.right - padding, rcClient.bottom - padding);
 	__MOVE_WINDOW(pGrpDeviceList, rcDeviceList);
 	
-	rcDeviceList.SetRect(rcDeviceList.left + padding, rcDeviceList.top + 20 + padding * 2, rcDeviceList.right - padding, rcDeviceList.bottom - 60 - padding);
+	rcDeviceList.SetRect(rcDeviceList.left + padding, rcDeviceList.top + 20 + padding * 2, rcDeviceList.right - padding, rcDeviceList.bottom);
 	__MOVE_WINDOW(pListCtrlDevice, rcDeviceList);
 
 	if (pListCtrlDevice)
@@ -674,9 +893,9 @@ void	CEasyRTCDeviceWinDlg::UpdateComponents()
 		pListCtrlDevice->UpdateButtonPosition();
 	}
 
-	CRect rcRefresh;
-	rcRefresh.SetRect(rcDeviceList.left + padding, rcDeviceList.bottom + padding, rcDeviceList.right - padding, rcClient.bottom - padding);
-	__MOVE_WINDOW(pBtnRefresh, rcRefresh);
+	//CRect rcRefresh;
+	//rcRefresh.SetRect(rcDeviceList.left + padding, rcDeviceList.bottom + padding, rcDeviceList.right - padding, rcClient.bottom - padding);
+	//__MOVE_WINDOW(pBtnRefresh, rcRefresh);
 
 	// =================
 	
@@ -776,6 +995,45 @@ void	CEasyRTCDeviceWinDlg::DeleteComponents()
 	DeinitMutex(&mutexAudioFrameQueue);
 }
 
+
+void	CEasyRTCDeviceWinDlg::ChangeMode(int mode)
+{
+	mMode = mode;
+
+	if (mMode == 0 || mMode == 1)
+	{
+		if (pStaticServerPort)	pStaticServerPort->ShowWindow(SW_SHOW);
+		if (pStaticServerPort)	pStaticServerPort->SetWindowTextW(mMode == 0 ? L"平台Port" : L"对端Port");
+	}
+	else
+	{
+		if (pStaticServerPort)	pStaticServerPort->ShowWindow(SW_HIDE);
+	}
+
+	if (pStaticServerIP)	pStaticServerIP->SetWindowTextW(mMode == 0 ? L"平台IP" : mMode == 1 ? L"对端IP" : L"推流地址");
+	if (pEdtServerIP)		pEdtServerIP->ShowWindow(mMode == 0 ? SW_SHOW : SW_HIDE);
+	if (pEdtServerPort)		pEdtServerPort->ShowWindow(mMode == 0 ? SW_SHOW : SW_HIDE);
+
+	if (pEdtPeerIP)		pEdtPeerIP->ShowWindow(mMode == 1 ? SW_SHOW : SW_HIDE);
+	if (pEdtPeerPort)		pEdtPeerPort->ShowWindow(mMode == 1 ? SW_SHOW : SW_HIDE);
+
+	if (pBtnStartStop)	pBtnStartStop->ShowWindow(mMode == 0 ? SW_SHOW : SW_HIDE);
+	if (pBtnP2PCall)	pBtnP2PCall->ShowWindow(mMode == 1 ? SW_SHOW : SW_HIDE);
+
+	if (pStaticLocalListenPort)	pStaticLocalListenPort->ShowWindow(mMode == 1 ? SW_SHOW : SW_HIDE);
+	if (pEdtLocalListenPort)	pEdtLocalListenPort->ShowWindow(mMode == 1 ? SW_SHOW : SW_HIDE);
+	if (pBtnStartLocalListen)	pBtnStartLocalListen->ShowWindow(mMode == 1 ? SW_SHOW : SW_HIDE);
+
+	if (pStaticDeviceID)	pStaticDeviceID->ShowWindow(mMode == 0 ? SW_SHOW : SW_HIDE);
+	if (pEdtDeviceID)	pEdtDeviceID->ShowWindow(mMode == 0 ? SW_SHOW : SW_HIDE);
+	if (pGrpDeviceList)	pGrpDeviceList->ShowWindow(mMode == 0 ? SW_SHOW : SW_HIDE);
+	if (pListCtrlDevice)	pListCtrlDevice->ShowWindow(mMode == 0 ? SW_SHOW : SW_HIDE);
+
+	// https://demo.easygbs.com:10010/live/456_01.whip
+
+	if (pEdtWhipURL)	pEdtWhipURL->ShowWindow(mMode == 2 ? SW_SHOW : SW_HIDE);
+	if (pBtnWhipPush)	pBtnWhipPush->ShowWindow(mMode == 2 ? SW_SHOW : SW_HIDE);
+}
 
 void	CEasyRTCDeviceWinDlg::ChangeSourceType()
 {
@@ -1317,6 +1575,44 @@ void	CEasyRTCDeviceWinDlg::RenderVideo(VIDEO_RENDER_T* pRender, void* pBuf, EASY
 	}
 }
 
+void WriteTimestamp2File(int mediaType, unsigned long long pts)
+{
+#ifdef _DEBUG
+	char log[128] = { 0 };
+	sprintf(log, "%s pts:%llu\n", mediaType == 0x01 ? "VIDEO" : "\tAUDIO", pts);
+
+	static FILE* fLog = fopen("1PTS.txt", "wb");
+	if (fLog)
+	{
+		fwrite(log, 1, (int)strlen(log), fLog);
+		fflush(fLog);
+	}
+#endif
+}
+
+
+#include <windows.h>
+#include <stdint.h>
+
+int gettimeofday_c(struct timeval* tv, void* tz)
+{
+	FILETIME ft;
+	uint64_t tmp;
+
+	GetSystemTimeAsFileTime(&ft);
+
+	tmp = ((uint64_t)ft.dwHighDateTime << 32) |
+		(uint64_t)ft.dwLowDateTime;
+
+	/* FILETIME 是 100ns 为单位，从 1601-01-01 */
+	tmp -= 116444736000000000ULL; /* 转成 Unix Epoch */
+
+	tv->tv_sec = (long)(tmp / 10000000ULL);
+	tv->tv_usec = (long)((tmp % 10000000ULL) / 10);
+
+	return 0;
+}
+
 int Easy_APICALL __EasyStreamClientCallBack(void* _channelPtr, int _frameType, void* pBuf, EASY_FRAME_INFO* _frameInfo)
 {
 	LOCAL_RTC_DEVICE_T* pLocalDevice = (LOCAL_RTC_DEVICE_T*)_channelPtr;
@@ -1346,8 +1642,18 @@ int Easy_APICALL __EasyStreamClientCallBack(void* _channelPtr, int _frameType, v
 			else
 			{
 				pLocalDevice->videoPTS = 33;
+
+
+				// 2026.05.06  调试: 基准值改为当前时间
+#if 1
+				struct timeval	tv1 = { 0,0 };
+				gettimeofday_c(&tv1, NULL);
+				pLocalDevice->videoPTS = tv1.tv_sec * 1000 + tv1.tv_usec / 1000;
+				pLocalDevice->audioDTS = pLocalDevice->videoPTS;
+#endif
 			}
 			pLocalDevice->videoLastPts = pts;
+
 
 			if (pLocalDevice->videoCodecID < 1)
 			{
@@ -1361,6 +1667,10 @@ int Easy_APICALL __EasyStreamClientCallBack(void* _channelPtr, int _frameType, v
 
 			EasyRTC_Device_SendVideoFrame(pLocalDevice->easyRTCDeviceHandle, (char*)pBuf, _frameInfo->length, _frameInfo->type, pLocalDevice->videoPTS);
 			EasyRTC_Device_SendVideoFrame(pLocalDevice->easyRTCCallerHandle, (char*)pBuf, _frameInfo->length, _frameInfo->type, pLocalDevice->videoPTS);
+			EasyRTC_Device_SendVideoFrame(pLocalDevice->easyRTCDeviceLanHandle, (char*)pBuf, _frameInfo->length, _frameInfo->type, pLocalDevice->videoPTS);
+			EasyRTC_Device_SendVideoFrame(pLocalDevice->easyRTCWhipHandle, (char*)pBuf, _frameInfo->length, _frameInfo->type, pLocalDevice->videoPTS);
+			
+			WriteTimestamp2File(1, pLocalDevice->videoPTS);
 			
 			pLocalDevice->Unlock();
 
@@ -1400,6 +1710,8 @@ int Easy_APICALL __EasyStreamClientCallBack(void* _channelPtr, int _frameType, v
 
 		EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCDeviceHandle, (char*)pBuf, _frameInfo->length, pLocalDevice->audioDTS);
 		EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCCallerHandle, (char*)pBuf, _frameInfo->length, pLocalDevice->audioDTS);
+		EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCDeviceLanHandle, (char*)pBuf, _frameInfo->length, pLocalDevice->audioDTS);
+		EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCWhipHandle, (char*)pBuf, _frameInfo->length, pLocalDevice->audioDTS);
 
 		pLocalDevice->Unlock();
 	}
@@ -1444,10 +1756,81 @@ int CALLBACK __AudioDataCallBack(void* userptr, char* pbuf, const int bufsize)
 
 	EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCDeviceHandle, pbuf, bufsize, pLocalDevice->audioDTS);
 	EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCCallerHandle, pbuf, bufsize, pLocalDevice->audioDTS);
+	EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCDeviceLanHandle, pbuf, bufsize, pLocalDevice->audioDTS);
+	EasyRTC_Device_SendAudioFrame(pLocalDevice->easyRTCWhipHandle, pbuf, bufsize, pLocalDevice->audioDTS);
+
+	WriteTimestamp2File(2, pLocalDevice->audioDTS);
 
 	pLocalDevice->Unlock();
 
 	//EasyRTCDevice::__Print__(__FUNCTION__, __LINE__, "\tAudioDTS:%llu\n", pLocalDevice->audioDTS);
+
+	return 0;
+}
+
+void	CEasyRTCDeviceWinDlg::UpdatePeerStatus(int status)
+{
+	if (NULL == pGrpRemote)		return;
+	
+	if (status == 0)	pGrpRemote->SetWindowTextW(_T("对端"));
+	else if (status == 1)	pGrpRemote->SetWindowTextW(_T("对端[P2P直连]"));
+	else if (status == 2)	pGrpRemote->SetWindowTextW(_T("对端[Relay中转]"));
+}
+
+void	CEasyRTCDeviceWinDlg::WritePeerVideo2File(char* pbuf, int bufsize, int keyframe, int flag)
+{
+#ifdef _DEBUG
+	static char filename[MAX_PATH] = { 0 };
+	static FILE* fES = NULL;
+	if (flag == 1)
+	{
+		memset(filename, 0x00, sizeof(filename));
+		time_t tt = time(NULL);
+		struct tm _timetmp;
+		localtime_s(&_timetmp, &tt);
+		strftime(filename, 32, "%Y%m%d %H%M%S", &_timetmp);
+
+		strcat(filename, ".h264");
+
+		if (NULL != fES)
+		{
+			fclose(fES);
+			fES = NULL;
+		}
+	}
+
+	if (NULL == fES && keyframe == 0x01)
+	{
+		fES = fopen(filename, "wb");
+	}
+	else if (NULL != fES)
+	{
+		fwrite(pbuf, 1, bufsize, fES);
+	}
+#endif
+}
+
+
+int __CURL_RESPONSE_CALLBACK(void* userptr, size_t responseSize, char* responseData)
+{
+	CEasyRTCDeviceWinDlg* pThis = (CEasyRTCDeviceWinDlg*)userptr;
+
+	if (responseSize > 0)
+	{
+		char* sdp = new char[responseSize + 1];
+		if (sdp)
+		{
+			memset(sdp, 0x00, responseSize + 1);
+			memcpy(sdp, responseData, responseSize);
+
+			if (responseSize > 32)
+			{
+				EasyRTC_Device_Whip_SetRemoteDescription(pThis->GetRTCDevicePtr()->easyRTCWhipHandle, sdp);
+			}
+
+			pThis->PostMessageW(WM_EASY_RTC_SDP, 0, (LPARAM)sdp);
+		}
+	}
 
 	return 0;
 }
@@ -1552,6 +1935,8 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 		//frameinfo.codec = codecID;
 		frameinfo.pts = pts;
 
+		pThis->WritePeerVideo2File(data, size, keyframe, 0);
+
 		//int codecID, int isBinary, char* data, int size, int keyframe, unsigned long long pts
 
 		pThis->ProcessRemoteVideoToQueue(data, &frameinfo, 0);		// 将视频帧送入待解码显示队列
@@ -1580,41 +1965,46 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 
 		sprintf(msg, "对端[%s]连接成功 (%s)...\n", peerUUID, codecID == 1 ? "P2P直连" : "Relay中转");
 
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS, 0, codecID == 1 ? 1 : 2);		// 更新对端连接显示状态
+
 		// 此时有用户请求发送视频
 		pThis->SetPeerUUID(peerUUID);
 
+		pThis->WritePeerVideo2File(NULL, 0, 0, 1);
+
 		pThis->SendMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)msg);
 
-		pThis->EnableCallEnd(TRUE);
+//		pThis->PostMessage(IDC_BUTTON_CALL_END);
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)TRUE, (LPARAM)FALSE);
 	}
 	else if (EASYRTC_CALLBACK_TYPE_PEER_CONNECT_FAIL == dataType)
 	{
 		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端连接失败...\n");
-		pThis->EnableCallEnd(FALSE);
-		pThis->EnableTextMessage(FALSE);
+
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)FALSE, (LPARAM)TRUE);
+
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS);		// 更新对端连接显示状态
 	}
 	else if (EASYRTC_CALLBACK_TYPE_PEER_DISCONNECT == dataType)
 	{
 		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端连接已断开...\n");
-		pThis->EnableCallEnd(FALSE);
-		pThis->EnableTextMessage(FALSE);
+
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)FALSE, (LPARAM)TRUE);
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS);		// 更新对端连接显示状态
 	}
 	else if (EASYRTC_CALLBACK_TYPE_PEER_CLOSED == dataType)
 	{
-		pThis->EnableCallEnd(FALSE);
-		pThis->EnableTextMessage(FALSE);
-		pThis->SetPeerUUID(NULL);
-		pThis->UpdateCallState(true);
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)FALSE, (LPARAM)TRUE);
 
 		//pThis->PostMessage(WM_CLICK_BUTTON, 9999, 0);
-		pThis->PostMessage(WM_EASY_RTC_CALL_END);
 
 		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端已关闭.\n");
 		pThis->PostMessageW(WM_EASY_RTC_UPDATE_WINDOW, 0, 0);
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS);		// 更新对端连接显示状态
 	}
 	else if (EASYRTC_CALLBACK_TYPE_PEER_ENABLED_CUSTOM_DATA == dataType)
 	{
-		pThis->EnableTextMessage(TRUE);
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)TRUE, (LPARAM)FALSE);
 	}
 	else if (EASYRTC_CALLBACK_TYPE_PEER_CUSTOM_DATA == dataType)
 	{
@@ -1633,6 +2023,30 @@ int __EasyRTC_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TY
 		}
 	}
 
+	else if (EASYRTC_CALLBACK_TYPE_OFFER == dataType)
+	{
+		char* sdp = new char[size + 1];
+		if (sdp)
+		{
+			memset(sdp, 0x00, size + 1);
+			strcpy(sdp, data);
+
+			pThis->PostMessageW(WM_EASY_RTC_SDP, 1, (LPARAM)sdp);
+
+			int timeoutSecs = 10;
+			libWebClient_Post(pThis->GetRTCDevicePtr()->whipURL, "application/sdp", data, __CURL_RESPONSE_CALLBACK, pThis, timeoutSecs);
+		}
+	}
+	else if (EASYRTC_CALLBACK_TYPE_ANSWER == dataType)
+	{
+		char* sdp = new char[size + 1];
+		if (sdp)
+		{
+			memset(sdp, 0x00, size + 1);
+			strcpy(sdp, data);
+			pThis->PostMessageW(WM_EASY_RTC_SDP, 0, (LPARAM)sdp);
+		}
+	}
 	return 0;
 }
 
@@ -1676,7 +2090,9 @@ void	CEasyRTCDeviceWinDlg::CloseAll()
 
 	EasyRTC_Device_Release(&mLocalRTCDevice.easyRTCDeviceHandle);
 	EasyRTC_Device_Release(&mLocalRTCDevice.easyRTCCallerHandle);
-	
+	EasyRTC_Device_Release(&mLocalRTCDevice.easyRTCDeviceLanHandle);
+	EasyRTC_Device_Release(&mLocalRTCDevice.easyRTCWhipHandle);
+
 
 	if (mLocalRTCDevice.pLocalRenderThread)
 	{
@@ -1702,11 +2118,17 @@ void	CEasyRTCDeviceWinDlg::CloseAll()
 	TransCode_Release(&mLocalRTCDevice.remoteVideoRender.transcodeHandle);
 	D3D_Release(&mLocalRTCDevice.remoteVideoRender.d3dHandle);
 
+	if (mMode == 0)
+	{
+		PostMessageW(WM_EASY_RTC_CALLBACK_STATUS, 0, (LPARAM)"未连接");
+		PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已断开与平台的链接.\n");
 
-	PostMessageW(WM_EASY_RTC_CALLBACK_STATUS, 0, (LPARAM)"未连接");
-	PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已断开与平台的链接.\n");
-
-	if (pBtnStartStop)	pBtnStartStop->SetWindowTextW(TEXT("接入"));
+		if (pBtnStartStop)	pBtnStartStop->SetWindowTextW(TEXT("接入"));
+	}
+	else if (mMode == 2)
+	{
+		if (pBtnWhipPush)	pBtnWhipPush->SetWindowTextW(TEXT("推送"));
+	}
 	pBtnPreview->SetWindowTextW(TEXT("开启本地预览"));
 
 	SetPeerUUID(NULL);
@@ -1793,13 +2215,19 @@ void CEasyRTCDeviceWinDlg::OnBnClickedButtonStartStop()
 			pBtnPreview->SetWindowTextW(mLocalRTCDevice.localPreview ? TEXT("关闭本地预览") : TEXT("开启本地预览"));
 
 			SetTimer(REFRESH_DEVICE_TIMER_ID, 5000, NULL);
+
+			pTabModel->EnableWindow(FALSE);		// 禁止切换模式
 		}
 	}
 	else
 	{
 		CloseAll();
 
+		mDeviceListCtrl.DeleteAllItems();
+		mDeviceListCtrl.RemoveAllButtons();
 
+
+		pTabModel->EnableWindow(TRUE);		// 启用切换模式
 
 		//OnPeerVideoFrame(0, 1);
 
@@ -1947,7 +2375,8 @@ bool	CEasyRTCDeviceWinDlg::CloseLocalSource()
 	//mLocalRTCDevice.localPreview = false;
 
 
-	if (NULL == mLocalRTCDevice.easyRTCDeviceHandle)		// 如果没有开启EasyRTC, 则关闭本地源
+	if (NULL == mLocalRTCDevice.easyRTCDeviceHandle && NULL == mLocalRTCDevice.easyRTCDeviceLanHandle &&
+		NULL == mLocalRTCDevice.easyRTCWhipHandle)		// 如果没有开启EasyRTC, 则关闭本地源
 	{
 		EasyStreamClient_Deinit(mLocalRTCDevice.easyStreamHandle);
 		mLocalRTCDevice.easyStreamHandle = NULL;
@@ -2056,6 +2485,7 @@ LRESULT CEasyRTCDeviceWinDlg::OnClickCallButton(WPARAM wParam, LPARAM lParam)
 		resetLastDeviceId = true;
 
 		PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已关闭对端音视频.\n");
+		PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS);		// 更新对端连接显示状态
 	}
 
 	if (0 != strcmp(mPeerUUID, "\0"))
@@ -2188,6 +2618,14 @@ void CEasyRTCDeviceWinDlg::OnBnClickedButtonSendMessage()
 	{
 		EasyRTC_Device_SendCustomData(mLocalRTCDevice.easyRTCCallerHandle, NULL, 0, message, msgLen);
 	}
+	else if (NULL != mLocalRTCDevice.easyRTCDeviceLanHandle)
+	{
+		EasyRTC_Device_SendCustomData(mLocalRTCDevice.easyRTCDeviceLanHandle, NULL, 0, message, msgLen);
+	}
+	else if (NULL != mLocalRTCDevice.easyRTCWhipHandle)
+	{
+		EasyRTC_Device_SendCustomData(mLocalRTCDevice.easyRTCWhipHandle, NULL, 0, message, msgLen);
+	}
 	else
 	{
 		EasyRTC_Device_SendCustomData(mLocalRTCDevice.easyRTCDeviceHandle, NULL, 0, message, msgLen);
@@ -2196,35 +2634,85 @@ void CEasyRTCDeviceWinDlg::OnBnClickedButtonSendMessage()
 	pEdtSendText->SetWindowTextW(_T(""));
 }
 
-
-LRESULT CEasyRTCDeviceWinDlg::OnCallEnd(WPARAM, LPARAM)
+LRESULT CEasyRTCDeviceWinDlg::OnUpdatePeerStatus(WPARAM, LPARAM lParam)
 {
-	OnBnClickedButtonCallEnd();
+	UpdatePeerStatus((int)lParam);
+
+	return 0;
+}
+
+LRESULT CEasyRTCDeviceWinDlg::OnCallEnd(WPARAM wParam, LPARAM lParam)
+{
+	BOOL bCallEnd = (BOOL)wParam;
+
+	EnableCallEnd(bCallEnd);
+	EnableTextMessage(bCallEnd);
+
+	if (!bCallEnd)
+	{
+		if (NULL != mLocalRTCDevice.easyRTCWhipHandle)
+		{
+			OnBnClickedButtonWhipPush();
+		}
+
+		if (NULL != mLocalRTCDevice.easyRTCCallerHandle)
+		{
+			OnBnClickedButtonCallEnd();
+		}
+
+	}
+	
+	UpdateCallState((LPARAM)lParam);
+
 	return 0;
 }
 
 void CEasyRTCDeviceWinDlg::OnBnClickedButtonCallEnd()
 {
-	if (0 == strcmp(mPeerUUID, "\0"))
+	if (mMode == 0)		// 联网模式
 	{
-		OnClickCallButton(99999, 0);
-		return;
-	}
+		if (0 == strcmp(mPeerUUID, "\0"))
+		{
+			OnClickCallButton(99999, 0);
+			return;
+		}
 
-	int ret = EasyRTC_Device_Hangup(mLocalRTCDevice.easyRTCDeviceHandle, mPeerUUID);
-	if (ret != 0)
-	{
-		ret = EasyRTC_Device_Hangup(mLocalRTCDevice.easyRTCCallerHandle, mPeerUUID);
-	}
+		int ret = EasyRTC_Device_Hangup(mLocalRTCDevice.easyRTCDeviceHandle, mPeerUUID);
+		if (ret != 0)
+		{
+			ret = EasyRTC_Device_Hangup(mLocalRTCDevice.easyRTCCallerHandle, mPeerUUID);
+		}
 
-	if (ret == 0)
+		if (ret == 0)
+		{
+			EnableCallEnd(FALSE);
+			EnableTextMessage(FALSE);
+			OnUpdateVideoWindow(0, 0);
+			OnClickCallButton(0, 0);
+
+			PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已挂断.\n");
+		}
+	}
+	else		// 直连模式
 	{
-		EnableCallEnd(FALSE);
-		EnableTextMessage(FALSE);
-		OnUpdateVideoWindow(0, 0);
-		OnClickCallButton(0, 0);
-		
-		PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已挂断.\n");
+		int ret = EasyRTC_Device_Hangup(mLocalRTCDevice.easyRTCDeviceLanHandle, mPeerUUID);
+		if (ret != 0)
+		{
+			ret = EasyRTC_Device_Hangup(mLocalRTCDevice.easyRTCCallerHandle, mPeerUUID);
+		}
+
+		if (0 == strcmp(mPeerUUID, "\0"))	ret = 0;
+
+		if (ret == 0)
+		{
+			EnableCallEnd(FALSE);
+			EnableTextMessage(FALSE);
+			OnUpdateVideoWindow(0, 0);
+			OnClickCallButton(0, 0);
+
+			PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已挂断.\n");
+		}
+
 	}
 }
 
@@ -2238,6 +2726,42 @@ void	CEasyRTCDeviceWinDlg::EnableCallEnd(BOOL bEnable)
 	if (pBtnCallEnd)	pBtnCallEnd->EnableWindow(bEnable);
 }
 
+LRESULT CEasyRTCDeviceWinDlg::OnSDP(WPARAM wParam, LPARAM lParam)
+{
+	int isOffer = (int)wParam;
+	char* sdp = (char*)lParam;
+
+	int size = (int)strlen(sdp);
+	if (isOffer)
+	{
+		char* p = new char[size + 64];
+		if (p)
+		{
+			memset(p, 0x00, size + 64);
+			sprintf(p, "Offer=============\n%s", sdp);
+			OnLog(0, (LPARAM)p);		// 加入到本地消息框中
+
+			delete[]p;
+		}
+	}
+	else
+	{
+		char* p = new char[size + 64];
+		if (p)
+		{
+			memset(p, 0x00, size + 64);
+			sprintf(p, "Answer=============\n%s", sdp);
+			OnLog(0, (LPARAM)p);		// 加入到本地消息框中
+
+			delete[]p;
+		}
+	}
+
+	delete[]sdp;
+
+	return 0;
+}
+
 
 void CEasyRTCDeviceWinDlg::OnTimer(UINT_PTR nIDEvent)
 {
@@ -2249,4 +2773,427 @@ void CEasyRTCDeviceWinDlg::OnTimer(UINT_PTR nIDEvent)
 	}
 
 	CDialogEx::OnTimer(nIDEvent);
+}
+
+
+void CEasyRTCDeviceWinDlg::OnTcnSelchangeTabMode(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	// TODO: 在此添加控件通知处理程序代码
+	*pResult = 0;
+
+	int mode = 0;
+	if (pTabModel)	mode = pTabModel->GetCurSel();
+	if (mode >= 0 && mode <= 2)
+	{
+		ChangeMode(mode);
+	}
+}
+
+
+
+int __EasyRTC_Lan_Data_Callback(void* userptr, const char* peerUUID, EASYRTC_DATA_TYPE_ENUM_E dataType, int codecID, int isBinary, char* data, int size, int keyframe, unsigned long long pts)
+{
+	CEasyRTCDeviceWinDlg* pThis = (CEasyRTCDeviceWinDlg*)userptr;
+
+	if (EASYRTC_CALLBACK_TYPE_DNS_FAIL == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"DNS解析失败...\n");
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_STATUS, 0, (LPARAM)"DNS解析失败");
+	}
+	else if (EASYRTC_CALLBACK_TYPE_CONNECTING == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"正在连接平台...\n");
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_STATUS, 0, (LPARAM)"正在连接平台...");
+	}
+	else if (EASYRTC_CALLBACK_TYPE_CONNECTED == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"连接平台成功.\n");
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_STATUS, 0, (LPARAM)"接入平台成功.");
+
+		pThis->PostMessage(WM_EASY_RTC_REFRESH_DEVICE_LIST);	// 刷新列表
+	}
+	else if (EASYRTC_CALLBACK_TYPE_CONNECT_FAIL == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"连接平台失败...\n");
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_STATUS, 0, (LPARAM)"连接平台失败...");
+	}
+	else if (EASYRTC_CALLBACK_TYPE_DISCONNECT == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"平台链接已断开...\n");
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_STATUS, 0, (LPARAM)"平台链接已断开...");
+	}
+
+	else if (EASYRTC_CALLBACK_TYPE_PASSIVE_CALL == dataType)
+	{
+		//printf("Passive call..  peerUUID[%s]\n", peerUUID);
+
+		//pThis->PostMessageW(WM_EASY_RTC_CALLBACK, 0, (LPARAM)"对端呼叫, 已响应...\n");
+
+		char szLog[128] = { 0 };
+
+		LOCAL_RTC_DEVICE_T* pRTCDevice = pThis->GetRTCDevicePtr();
+		if (NULL != pRTCDevice->easyRTCCallerHandle && pRTCDevice->pRemoteRenderThread)		// 如果当前已经呼叫其他设备, 则不能被别人呼叫
+		{
+			sprintf(szLog, "对端[%s]呼叫, 当前已呼叫其他设备, 此处不允许被呼叫.\n", peerUUID);
+			pThis->SendMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)szLog);
+			return 0;
+		}
+		else
+		{
+			// 没有呼叫其他设备, 则可以被别人呼叫
+			sprintf(szLog, "对端[%s]呼叫, 已成功响应.\n", peerUUID);
+			pThis->SendMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)szLog);
+			return 1;		// 返回1表示自动接受	如果返回0,则需要调用EasyRTC_Device_PassiveCallResponse来处理该请求: 接受或拒绝
+		}
+	}
+
+	else if (EASYRTC_CALLBACK_TYPE_START_VIDEO == dataType)
+	{
+		printf("Start Video..  peerUUID[%s]\n", peerUUID);
+
+		// 此时有用户请求发送视频
+		pThis->SetPeerUUID(peerUUID);
+
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端请求播放视频...\n");
+
+		LOCAL_RTC_DEVICE_T* pRTCDevice = pThis->GetRTCDevicePtr();
+		pRTCDevice->sendVideoFlag = true;
+	}
+	else if (EASYRTC_CALLBACK_TYPE_START_AUDIO == dataType)
+	{
+		printf("Start Audio.. peerUUID[%s]\n", peerUUID);
+
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端请求播放音频...\n");
+	}
+	else if (EASYRTC_CALLBACK_TYPE_STOP_VIDEO == dataType)
+	{
+		// 此时用户已关闭视频，停止发送
+
+		LOCAL_RTC_DEVICE_T* pRTCDevice = pThis->GetRTCDevicePtr();
+		pRTCDevice->sendVideoFlag = false;
+
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端已停止播放视频...\n");
+	}
+	else if (EASYRTC_CALLBACK_TYPE_STOP_AUDIO == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端已停止播放音频...\n");
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_VIDEO == dataType)
+	{
+#ifndef _DEBUG
+		printf("OnPeerVideo..\n");
+#endif
+
+		EASY_FRAME_INFO	frameinfo;
+		memset(&frameinfo, 0x00, sizeof(EASY_FRAME_INFO));
+		frameinfo.length = size;
+		frameinfo.type = keyframe;
+		//frameinfo.codec = codecID;
+		frameinfo.pts = pts;
+
+		pThis->WritePeerVideo2File(data, size, keyframe, 0);
+
+		//int codecID, int isBinary, char* data, int size, int keyframe, unsigned long long pts
+
+		pThis->ProcessRemoteVideoToQueue(data, &frameinfo, 0);		// 将视频帧送入待解码显示队列
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_AUDIO == dataType)
+	{
+#ifndef _DEBUG
+		printf("OnPeerAudio..\n");
+#endif
+		EASY_FRAME_INFO	frameinfo;
+		memset(&frameinfo, 0x00, sizeof(EASY_FRAME_INFO));
+		frameinfo.length = size;
+
+		pThis->ProcessRemoteAudioToQueue(data, &frameinfo);		// 将音频帧送入待播放队列
+	}
+	else if (EASYRTC_CALLBACK_TYPE_LOCAL_AUDIO == dataType)
+	{
+		printf("Local audio..\n");
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_CONNECTED == dataType)
+	{
+		pThis->InitPlayResource();			// 连接已成功建立, 初始化播放资源
+
+		char msg[128] = { 0 };
+		char iceCandidateType[64] = { 0 };
+
+		sprintf(msg, "对端[%s]连接成功 (%s)...\n", peerUUID, codecID == 1 ? "P2P直连" : "Relay中转");
+
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS, 0, codecID == 1 ? 1 : 2);		// 更新对端连接显示状态
+
+		// 此时有用户请求发送视频
+		pThis->SetPeerUUID(peerUUID);
+
+		pThis->WritePeerVideo2File(NULL, 0, 0, 1);
+
+		pThis->SendMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)msg);
+
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)TRUE, (LPARAM)FALSE);
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_CONNECT_FAIL == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端连接失败...\n");
+
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)FALSE, (LPARAM)TRUE);
+
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS);		// 更新对端连接显示状态
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_DISCONNECT == dataType)
+	{
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端连接已断开...\n");
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)FALSE, (LPARAM)TRUE);
+
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS);		// 更新对端连接显示状态
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_CLOSED == dataType)
+	{
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)FALSE, (LPARAM)TRUE);
+		//pThis->PostMessage(WM_CLICK_BUTTON, 9999, 0);
+
+		pThis->PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"对端已关闭.\n");
+		pThis->PostMessageW(WM_EASY_RTC_UPDATE_WINDOW, 0, 0);
+		pThis->PostMessage(WM_EASY_RTC_UPDATE_PEER_STATUS);		// 更新对端连接显示状态
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_ENABLED_CUSTOM_DATA == dataType)
+	{
+		pThis->PostMessage(WM_EASY_RTC_CALL_END, (WPARAM)TRUE, (LPARAM)FALSE);
+	}
+	else if (EASYRTC_CALLBACK_TYPE_PEER_CUSTOM_DATA == dataType)
+	{
+		pThis->OnPeerMessage(data, size);
+	}
+
+	else if (EASYRTC_CALLBACK_TYPE_ONLINE_DEVICE == dataType)		// 在线设备列表
+	{
+		char* peerID = new char[128];
+		if (peerID)
+		{
+			memset(peerID, 0x00, 128);
+			strcpy(peerID, peerUUID);
+
+			pThis->PostMessageW(WM_EASY_RTC_CALLBACK_ONLINE_DEVICE, 0, (LPARAM)peerID);
+		}
+	}
+
+	else if (EASYRTC_CALLBACK_TYPE_OFFER == dataType)
+	{
+		char* sdp = new char[size + 1];
+		if (sdp)
+		{
+			memset(sdp, 0x00, size + 1);
+			strcpy(sdp, data);
+			pThis->PostMessageW(WM_EASY_RTC_SDP, 1, (LPARAM)sdp);
+		}
+	}
+	else if (EASYRTC_CALLBACK_TYPE_ANSWER == dataType)
+	{
+		char* sdp = new char[size + 1];
+		if (sdp)
+		{
+			memset(sdp, 0x00, size + 1);
+			strcpy(sdp, data);
+			pThis->PostMessageW(WM_EASY_RTC_SDP, 0, (LPARAM)sdp);
+		}
+	}
+	return 0;
+}
+
+void CEasyRTCDeviceWinDlg::OnBnClickedButtonP2pCall()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	if (NULL == mLocalRTCDevice.easyRTCDeviceLanHandle)
+	{
+		MessageBox(TEXT("请先开启本地监听."));
+		return;
+	}
+
+	if (!pBtnCallEnd->IsWindowEnabled())		// 挂断按钮为禁用状态时
+	{
+		char peerIP[64] = { 0 };
+		char peerPort[16] = { 0 };
+		GetEditText(peerIP, sizeof(peerIP) / sizeof(peerIP[0]), pEdtPeerIP);
+		GetEditText(peerPort, sizeof(peerPort) / sizeof(peerPort[0]), pEdtPeerPort);
+
+		int nPeerPort = atoi(peerPort);
+		if (nPeerPort < 1 || nPeerPort > 65535)
+		{
+			MessageBox(TEXT("请输入有效的端口"));
+			return;
+		}
+
+
+
+		char peerUUID[128] = { 0 };
+		strcpy(peerUUID, "00000000-0000-0000-0000-000000000000");
+		EasyRTC_Device_Lan_CreateConnect(&mLocalRTCDevice.easyRTCCallerHandle, peerIP, nPeerPort, peerUUID, __EasyRTC_Lan_Data_Callback, this);
+
+		EasyRTC_Device_SetChannelInfo(mLocalRTCDevice.easyRTCCallerHandle,
+			(EASYRTC_CODEC)mLocalRTCDevice.videoCodecID, EASYRTC_CODEC_MULAW);// (EASYRTC_CODEC)mLocalRTCDevice.audioCodecID);
+	}
+	//EasyRTC_Lan_Connect(mLocalRTCDevice.easyRTCCallerHandle, peerIP, nPeerPort);
+
+	////mDeviceListCtrl.SetButtonText(nSel, _T("挂断"));
+	////mDeviceListCtrl.SetItemData(nSel, 1);
+	//memset(mLastDeviceID, 0x0, sizeof(mLastDeviceID));
+
+	//strcpy(mLastDeviceID, peerUUID);
+
+	//char szLog[128] = { 0 };
+	//sprintf(szLog, "呼叫设备[%s]...\n", peerUUID);
+	//OnLog(0, (LPARAM)szLog);
+
+}
+
+
+void CEasyRTCDeviceWinDlg::OnBnClickedButtonStartListen()
+{
+
+	if (NULL == mLocalRTCDevice.easyRTCDeviceLanHandle)
+	{
+		char listenPort[32] = { 0 };
+		GetEditText(listenPort, sizeof(listenPort) / sizeof(listenPort[0]), pEdtLocalListenPort);
+
+		int nPort = atoi(listenPort);
+		if (nPort < 1 || nPort>65535)
+		{
+			MessageBox(TEXT("请输入有效的端口"));
+			return;
+		}
+
+		mLocalRTCDevice.videoPTS = 0;
+		mLocalRTCDevice.audioDTS = 0;
+		mLocalRTCDevice.videoLastPts = 0;
+		mLocalRTCDevice.sendVideoFlag = false;
+
+		mLocalRTCDevice.remoteVideoRender.renderHwnd = pDlgVideoRemote->GetSafeHwnd();
+
+		if (NULL == mLocalRTCDevice.easyStreamHandle)		// 如果没打开本地源
+		{
+			if (!OpenLocalSource())			// 打开本地源
+			{
+				//MessageBox(TEXT("打开本地源失败"));
+				return;
+			}
+		}
+
+
+		{
+			// 等待获取音视频编码格式
+			for (int i = 0; i < 10; i++)
+			{
+				if (pComboxLocalAudioList->GetCount() > 0)
+				{
+					if (mLocalRTCDevice.videoCodecID > 0 && mLocalRTCDevice.audioCodecID > 0)		break;
+				}
+				else
+				{
+					if (mLocalRTCDevice.videoCodecID > 0)		break;
+				}
+
+				Sleep(1000);
+			}
+		}
+
+		EasyRTC_Device_Lan_CreateService(&mLocalRTCDevice.easyRTCDeviceLanHandle, nPort, __EasyRTC_Lan_Data_Callback, this);
+		EasyRTC_Device_SetChannelInfo(mLocalRTCDevice.easyRTCDeviceLanHandle,
+			(EASYRTC_CODEC)mLocalRTCDevice.videoCodecID, EASYRTC_CODEC_MULAW);// (EASYRTC_CODEC)mLocalRTCDevice.audioCodecID);
+
+		pBtnStartLocalListen->SetWindowTextW(L"关闭本地监听");
+		pTabModel->EnableWindow(FALSE);		// 禁止切换模式
+	}
+	else
+	{
+		EnableCallEnd(FALSE);
+		EnableTextMessage(FALSE);
+		OnUpdateVideoWindow(0, 0);
+
+		CloseAll();
+		pBtnStartLocalListen->SetWindowTextW(L"开启本地监听");
+		pTabModel->EnableWindow(TRUE);		// 启用切换模式
+	}
+
+
+
+}
+
+
+void CEasyRTCDeviceWinDlg::OnBnClickedButtonWhipPush()
+{
+	if (NULL == mLocalRTCDevice.easyRTCWhipHandle)
+	{
+		char whipURL[1024] = { 0 };
+		GetEditText(whipURL, sizeof(whipURL) / sizeof(whipURL[0]), pEdtWhipURL);
+
+		if (0 == strcmp(whipURL, "\0"))
+		{
+			MessageBox(TEXT("请输入有效的推流地址"));
+			return;
+		}
+
+		int streamNum = 0;
+
+		mLocalRTCDevice.videoPTS = 0;
+		mLocalRTCDevice.audioDTS = 0;
+		mLocalRTCDevice.videoLastPts = 0;
+		mLocalRTCDevice.sendVideoFlag = false;
+
+		mLocalRTCDevice.remoteVideoRender.renderHwnd = pDlgVideoRemote->GetSafeHwnd();
+
+		if (NULL == mLocalRTCDevice.easyStreamHandle)		// 如果没打开本地源
+		{
+			if (!OpenLocalSource())			// 打开本地源
+			{
+				//MessageBox(TEXT("打开本地源失败"));
+				return;
+			}
+		}
+
+
+		{
+			// 等待获取音视频编码格式
+			for (int i = 0; i < 10; i++)
+			{
+				if (pComboxLocalAudioList->GetCount() > 0)
+				{
+					if (mLocalRTCDevice.videoCodecID > 0 && mLocalRTCDevice.audioCodecID > 0)		break;
+				}
+				else
+				{
+					if (mLocalRTCDevice.videoCodecID > 0)		break;
+				}
+
+				Sleep(1000);
+			}
+
+
+			memset(mLocalRTCDevice.whipURL, 0x00, sizeof(mLocalRTCDevice.whipURL));
+			strcpy(mLocalRTCDevice.whipURL, whipURL);
+
+			if (NULL == mLocalRTCDevice.easyRTCWhipHandle)
+			{
+				EasyRTC_Device_Whip_Create(&mLocalRTCDevice.easyRTCWhipHandle, __EasyRTC_Data_Callback, this, (EASYRTC_CODEC)mLocalRTCDevice.videoCodecID, EASYRTC_CODEC_MULAW);
+			}
+
+			if (pBtnWhipPush)	pBtnWhipPush->SetWindowTextW(TEXT("断开"));
+
+			pBtnPreview->SetWindowTextW(mLocalRTCDevice.localPreview ? TEXT("关闭本地预览") : TEXT("开启本地预览"));
+
+			pTabModel->EnableWindow(FALSE);		// 禁止切换模式
+		}
+	}
+	else
+	{
+		EnableCallEnd(FALSE);
+		EnableTextMessage(FALSE);
+		OnUpdateVideoWindow(0, 0);
+
+		CloseAll();
+
+		PostMessageW(WM_EASY_RTC_CALLBACK_LOG, 0, (LPARAM)"已关闭.\n");
+
+		pTabModel->EnableWindow(TRUE);		// 启用切换模式
+	}
 }

@@ -16,6 +16,9 @@
     <Filter Include="tinyxml">
       <UniqueIdentifier>{0c5485bc-e1ba-4d36-996a-ebe95259162e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="curlWebClient">
+      <UniqueIdentifier>{0b71ae64-3f9f-4fb5-ba6f-fc757d5c5b44}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="EasyRTC-P2P.h">
@@ -54,16 +57,25 @@
     <ClInclude Include="tinyxml\tinyxml.h">
       <Filter>tinyxml</Filter>
     </ClInclude>
+    <ClInclude Include="..\common\osmutex.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\osthread.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="ButtonListCtrl.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="ListButton.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\common\osmutex.h">
+    <ClInclude Include="curlWebClient\curlWebClientAPI.h">
+      <Filter>curlWebClient</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\cJSON.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\common\osthread.h">
+    <ClInclude Include="CDlgNewVersion.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -101,16 +113,22 @@
     <ClCompile Include="tinyxml\tinyxmlparser.cpp">
       <Filter>tinyxml</Filter>
     </ClCompile>
+    <ClCompile Include="..\common\osmutex.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\osthread.c">
+      <Filter>源文件</Filter>
+    </ClCompile>
     <ClCompile Include="ButtonListCtrl.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="ListButton.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\common\osmutex.c">
+    <ClCompile Include="..\common\cJSON.c">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\common\osthread.c">
+    <ClCompile Include="CDlgNewVersion.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
@@ -128,5 +146,10 @@
     <Image Include="res\EasyRTC-P2P.ico">
       <Filter>资源文件</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="curlWebClient\curlWebClient.lib">
+      <Filter>curlWebClient</Filter>
+    </Library>
   </ItemGroup>
 </Project>

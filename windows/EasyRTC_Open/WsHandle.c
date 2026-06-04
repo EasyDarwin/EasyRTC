@@ -229,24 +229,49 @@ int SendRegister(EASYRTC_DEVICE_T* pDevice)
         pDevice->local_uuid[2] = myids[2];
         pDevice->local_uuid[2] = myids[3];
 
-        int len = sizeof(REQ_LOGINUSER_INFO);
-        REQ_LOGINUSER_INFO* reqInfo = (REQ_LOGINUSER_INFO*)malloc(len);
-        if (NULL == reqInfo)        return EASYRTC_ERROR_NOT_ENOUGH_MEMORY;
+        if (pDevice->local_uuid[0] == 0x00 &&
+            pDevice->local_uuid[1] == 0x00 &&
+            pDevice->local_uuid[2] == 0x00 &&
+            pDevice->local_uuid[3] == 0x00)         // Lan 环境下呼叫对端
+        {
+            int len = sizeof(REQ_GETWEBRTCOFFER_INFO);
+            REQ_GETWEBRTCOFFER_INFO* reqInfo = (REQ_GETWEBRTCOFFER_INFO*)malloc(len);
+            if (NULL == reqInfo)		return EASYRTC_ERROR_NOT_ENOUGH_MEMORY;
+            memset(reqInfo, 0x00, sizeof(REQ_GETWEBRTCOFFER_INFO));
+            reqInfo->length = len;
+            reqInfo->msgtype = HP_REQGETWEBRTCOFFER_INFO;
+            reqInfo->hisid[0] = myids[0];
+            reqInfo->hisid[1] = myids[1];
+            reqInfo->hisid[2] = myids[2];
+            reqInfo->hisid[3] = myids[3];
 
-        memset(reqInfo, 0x00, len);
-        reqInfo->length = len;
-        reqInfo->msgtype = HP_REQLOGINUSER_INFO;
-        reqInfo->myid[0] = myids[0];
-        reqInfo->myid[1] = myids[1];
-        reqInfo->myid[2] = myids[2];
-        reqInfo->myid[3] = myids[3];
-        reqInfo->mysn[0] = mysns[0];
-        reqInfo->mysn[1] = mysns[1];
-        reqInfo->mysn[2] = mysns[2];
-        reqInfo->mysn[3] = mysns[3];
+            websocketSendData(pDevice->websocket, WS_OPCODE_BIN, 1, (char*)reqInfo, reqInfo->length);
+            free(reqInfo);
 
-        ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, (char*)reqInfo, reqInfo->length);
-        free(reqInfo);
+            pDevice->registerStatus = 0x01;             // 直接置为成功
+            websocketSetRegisterStatus(pDevice->websocket, pDevice->registerStatus);
+        }
+        else
+        {
+            int len = sizeof(REQ_LOGINUSER_INFO);
+            REQ_LOGINUSER_INFO* reqInfo = (REQ_LOGINUSER_INFO*)malloc(len);
+            if (NULL == reqInfo)        return EASYRTC_ERROR_NOT_ENOUGH_MEMORY;
+
+            memset(reqInfo, 0x00, len);
+            reqInfo->length = len;
+            reqInfo->msgtype = HP_REQLOGINUSER_INFO;
+            reqInfo->myid[0] = myids[0];
+            reqInfo->myid[1] = myids[1];
+            reqInfo->myid[2] = myids[2];
+            reqInfo->myid[3] = myids[3];
+            reqInfo->mysn[0] = mysns[0];
+            reqInfo->mysn[1] = mysns[1];
+            reqInfo->mysn[2] = mysns[2];
+            reqInfo->mysn[3] = mysns[3];
+            ret = websocketSendData(pDevice->websocket, WS_OPCODE_BIN, 1, (char*)reqInfo, reqInfo->length);
+            free(reqInfo);
+        }
+
     }
 
     return ret;
@@ -256,7 +281,10 @@ int SendRegister(EASYRTC_DEVICE_T* pDevice)
 void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, size_t len, int* errCode)
 {
     BASE_MSG_INFO* pBaseInfo = (BASE_MSG_INFO*)data;
-    if ((len < sizeof(BASE_MSG_INFO)) || (len != pBaseInfo->length)) return; //前者确保了后者 pBaseInfo->length 有效
+    if ((len < sizeof(BASE_MSG_INFO)) || (len != pBaseInfo->length))
+    {
+        return; //前者确保了后者 pBaseInfo->length 有效
+    }
 
     //前面两个是客户端的响应包
     switch (pBaseInfo->msgtype)
@@ -396,7 +424,7 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
             // 2026.02.09
             CallbackData(pDevice, peer_id, EASYRTC_CALLBACK_TYPE_OFFER, 0, 0, (char*)offersdp, (int)strlen(offersdp), 0, 0);
 
-            unsigned int mediaType = EASYRTC_MDIA_TYPE_VIDEO | EASYRTC_MDIA_TYPE_AUDIO;
+            unsigned int mediaType = EASYRTC_MEDIA_TYPE_VIDEO | EASYRTC_MEDIA_TYPE_AUDIO;
             EasyRTC_RTP_TRANSCEIVER_DIRECTION direction = EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
 
             pDevice->channelInfo.mediaType = mediaType;
@@ -493,6 +521,67 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
         {
             // 返回1直接接受连接
             RTC_Device_PassiveCallResponse(pDevice, peer_uuid, 0);
+        }
+    }
+    break;
+    case HP_NTIWEBRTCOFFER_INFO:    // Lan: 本地请求对端offer后, 对端发送offer过来
+    {
+        NTI_WEBRTCOFFER_INFO* pRecvInfo = (NTI_WEBRTCOFFER_INFO*)data;
+        //if (len != (sizeof(NTI_WEBRTCOFFER_INFO) + pRecvInfo->sdplen + pRecvInfo->sturndataslen)) return;
+
+        memset(&pDevice->serverConfig, 0, sizeof(EasyRTCServerConfig));
+
+        int offset = 0;
+
+        char* offersdp = pRecvInfo->offersdp;
+
+        char peer_id[128] = { 0 };
+        sprintf(peer_id, "%08X-%04X-%04X-%04X-%04X%08X",
+            pRecvInfo->hisid[0], pRecvInfo->hisid[1] >> 16,
+            pRecvInfo->hisid[1] & 0xFFFF, pRecvInfo->hisid[2] >> 16,
+            pRecvInfo->hisid[2] & 0xFFFF, pRecvInfo->hisid[3]);
+
+        EASYRTC_PEER_T* peer = findPeerByUUID(pDevice->peerList, peer_id);
+        if (NULL != peer)
+        {
+            // 此处释放相应对象
+            EasyRTC_ReleasePeer(peer);
+
+            // 从队列中删除
+            LockPeerList(pDevice, __FUNCTION__, __LINE__);			    // Lock
+            deletePeerByUUID(&pDevice->peerList, peer_id);
+            UnlockPeerList(pDevice, __FUNCTION__, __LINE__);			// Unlock
+        }
+
+        if (1)
+        {
+            insertPeerAtTail(&pDevice->peerList, pDevice, peer_id, OPERATE_TYPE_WAITING);
+
+            peer = findPeerByUUID(pDevice->peerList, peer_id);
+            if (NULL == peer)
+            {
+                return;
+            }
+
+            peer->hisid[0] = pRecvInfo->hisid[0];
+            peer->hisid[1] = pRecvInfo->hisid[1];
+            peer->hisid[2] = pRecvInfo->hisid[2];
+            peer->hisid[3] = pRecvInfo->hisid[3];
+
+            int ret = CallbackData(pDevice, peer_id, EASYRTC_CALLBACK_TYPE_CALL_SUCCESS, 0, 0, NULL, 0, 0, 0);
+
+
+            // 2026.02.09
+            CallbackData(pDevice, peer_id, EASYRTC_CALLBACK_TYPE_OFFER, 0, 0, (char*)offersdp, (int)strlen(offersdp), 0, 0);
+
+            unsigned int mediaType = EASYRTC_MEDIA_TYPE_VIDEO | EASYRTC_MEDIA_TYPE_AUDIO;
+            EasyRTC_RTP_TRANSCEIVER_DIRECTION direction = EasyRTC_RTP_TRANSCEIVER_DIRECTION_SENDRECV;
+
+            pDevice->channelInfo.mediaType = mediaType;
+            pDevice->channelInfo.direction = direction;
+
+            EasyRTC_CreatePeer(pDevice, peer, EASYRTC_PEER_SUBSCRIBER, offersdp);
+            EasyRTC_CreateAnswer(peer->peerConnection[EASYRTC_PEER_SUBSCRIBER].peer_, offersdp, __EasyRTC_IceCandidate_Callback, &peer->peerConnection[EASYRTC_PEER_SUBSCRIBER]);
         }
     }
     break;

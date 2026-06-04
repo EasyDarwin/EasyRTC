@@ -151,6 +151,6 @@ typedef struct
 
 
 int socket_set_keepalive(int sockfd);
-int rtc_websocket_write(int sockfd, int opcode, char* data, int iLength);
+int rtc_websocket_write(int sockfd, int opcode, int mask, char* data, int iLength);
 
 #endif

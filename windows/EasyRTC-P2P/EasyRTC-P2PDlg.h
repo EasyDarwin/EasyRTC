@@ -5,7 +5,7 @@
 #pragma once
 
 
-
+#include "../../include/EasyRTCAPI.h"
 #include "EasyRTCDeviceAPI.h"
 #ifdef _DEBUG
 #pragma comment(lib, "../../windows/x64/Debug/EasyRTC_Open.lib")
@@ -25,6 +25,7 @@
 #pragma comment(lib, "AudioPlayer/AudioPlayer.lib")
 #pragma comment(lib, "winmm.lib")
 #include "CDlgVideo.h"
+#include "CDlgNewVersion.h"
 #include "ButtonListCtrl.h"
 #include <vector>
 extern "C"
@@ -54,8 +55,12 @@ typedef struct __LOCAL_RTC_DEVICE_T
 	Easy_Handle		easyStreamHandle;
 	EASYRTC_HANDLE	easyRTCDeviceHandle;
 	EASYRTC_HANDLE	easyRTCCallerHandle;
+	EASYRTC_HANDLE	easyRTCDeviceLanHandle;		// 用于没有信令服务器的情况, 为了避免资源冲突,所以和用于连接信令服务器的句柄分开
+	EASYRTC_HANDLE	easyRTCWhipHandle;
 	bool			callStatus;
 	char			peerUUID[128];
+
+	char			whipURL[1024];
 
 	bool			sendVideoFlag;		// 是否有播放端请求发送视频
 
@@ -91,8 +96,12 @@ typedef struct __LOCAL_RTC_DEVICE_T
 		easyStreamHandle = NULL;
 		easyRTCDeviceHandle = NULL;
 		easyRTCCallerHandle = NULL;
+		easyRTCDeviceLanHandle = NULL;
+		easyRTCWhipHandle = NULL;
 		callStatus = false;
 		memset(peerUUID, 0x00, sizeof(peerUUID));
+
+		memset(whipURL, 0x00, sizeof(whipURL));
 
 		videoCodecID = 0;
 		audioCodecID = 0;
@@ -157,6 +166,9 @@ public:
 	void	UpdateComponents();
 	void	DeleteComponents();
 
+	int		GetCurrentVersion(char *outVersion);
+	int		CheckLatestVersion();
+
 	void	ProcessLocalVideoToQueue(void* pBuf, EASY_FRAME_INFO* _frameInfo, int rawVideo);
 	int	    ProcessLocalVideoFromQueue(int clear);
 
@@ -171,11 +183,16 @@ public:
 	void	OnPeerMessage(char* msg, int size);
 	void	SetPeerUUID(const char* peerUUID);
 
+	void	UpdatePeerStatus(int status);
+	void	WritePeerVideo2File(char *pbuf, int bufsize, int keyframe, int flag);
+
 	void	EnableTextMessage(BOOL bEnable);
 	void	EnableCallEnd(BOOL bEnable);
 
 	void	RefreshDeviceList();
 	void	UpdateCallState(bool reset);			// 在设备列表中更新呼叫状态
+
+	void	ChangeMode(int mode);
 
 	LOCAL_RTC_DEVICE_T* GetRTCDevicePtr() { return&mLocalRTCDevice; }
 
@@ -189,6 +206,7 @@ private:
 	CDlgVideo* pDlgVideoRemote;		// CDlgVideo
 	CDlgVideo* pDlgVideoLocal;		// CDlgVideo
 
+	CTabCtrl* pTabModel;			// IDC_TAB_MODE
 	CStatic* pStaticStatus;			// IDC_STATIC_STATUS
 	CStatic* pStaticServerIP;		// IDC_STATIC_SERVER_IP
 	CStatic* pStaticServerPort;		// IDC_STATIC_SERVER_PORT
@@ -198,10 +216,18 @@ private:
 	CEdit* pEdtServerPort;			// IDC_EDIT_SERVER_PORT
 	CEdit* pEdtDeviceID;			// IDC_EDIT_DEVICE_ID
 	CButton* pBtnStartStop;			// IDC_BUTTON_START_STOP
+	CButton* pBtnP2PCall;			// IDC_BUTTON_P2P_CALL
 	CStatic* pGrpDeviceList;		// IDC_STATIC_DEVICE_LIST
 	CButtonListCtrl* pListCtrlDevice;		// IDC_LIST_DEVICE_LIST
 	CButton* pBtnRefresh;			// IDC_BUTTON_REFRESH_DEVICELIST
+	CEdit* pEdtWhipURL;				// IDC_EDIT_WHIP_URL
+	CButton* pBtnWhipPush;			// IDC_BUTTON_WHIP_PUSH
 
+	CEdit* pEdtPeerIP;				// IDC_EDIT_PEER_IP
+	CEdit* pEdtPeerPort;			// IDC_EDIT_PEER_PORT
+	CStatic* pStaticLocalListenPort;// IDC_STATIC_LOCAL_LISTEN_PORT
+	CEdit* pEdtLocalListenPort;		// IDC_EDIT_LOCAL_LISTEN_PORT
+	CButton* pBtnStartLocalListen;	// IDC_BUTTON_START_LISTEN
 
 	CEdit* pEdtSendText;			// IDC_EDIT_SEND_TEXT
 	CButton* pBtnSendMessage;		// IDC_BUTTON_SEND_MESSAGE
@@ -213,10 +239,17 @@ private:
 	CButton* pBtnPreview;				// IDC_BUTTON_PREVIEW
 	CRichEditCtrl* pRedtLog;			// IDC_RICHEDIT2_LOG
 
+	CDlgNewVersion* pDlgNewVersion;		// IDD_DIALOG_NEW_VERSION
+
+
+
 	char	mLastDeviceID[128];
 	
 
 	void	ChangeSourceType();
+
+	int			mMode;
+
 
 	LOCAL_RTC_DEVICE_T	mLocalRTCDevice;
 	OSMutex				mutexLog;
@@ -278,7 +311,10 @@ protected:
 	afx_msg LRESULT OnClickCallButton(WPARAM, LPARAM);
 	afx_msg LRESULT OnUpdateVideoWindow(WPARAM, LPARAM);
 	afx_msg LRESULT OnRefreshDeviceList(WPARAM, LPARAM);
+	afx_msg LRESULT OnSDP(WPARAM, LPARAM);
 	afx_msg LRESULT OnCallEnd(WPARAM, LPARAM);
+	afx_msg LRESULT OnUpdatePeerStatus(WPARAM, LPARAM);
+	afx_msg LRESULT OnNewVersion(WPARAM, LPARAM);
 public:
 	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 	afx_msg void OnDestroy();
@@ -290,4 +326,8 @@ public:
 	afx_msg void OnBnClickedButtonSendMessage();
 	afx_msg void OnBnClickedButtonCallEnd();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg void OnTcnSelchangeTabMode(NMHDR* pNMHDR, LRESULT* pResult);
+	afx_msg void OnBnClickedButtonP2pCall();
+	afx_msg void OnBnClickedButtonStartListen();
+	afx_msg void OnBnClickedButtonWhipPush();
 };

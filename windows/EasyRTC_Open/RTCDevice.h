@@ -41,8 +41,8 @@ typedef struct {
 #define		TRACK_VIDEO_NAME	"webrtc_stream1"
 
 
-#define EASYRTC_MDIA_TYPE_VIDEO	0x01
-#define EASYRTC_MDIA_TYPE_AUDIO	0x02
+#define EASYRTC_MEDIA_TYPE_VIDEO	0x01
+#define EASYRTC_MEDIA_TYPE_AUDIO	0x02
 
 
 // H.265 NAL单元类型枚举
@@ -132,6 +132,8 @@ typedef struct __EASYRTC_DEVICE_T
 
 	time_t	lastCheckTime;
 
+	int		wsMask;
+
 	void* pThis;				// 指向EasyRTCDevice
 
 	int		spsLen;
@@ -146,9 +148,13 @@ typedef struct __EASYRTC_DEVICE_T
 // ===============================================
 // ===============================================
 
+// 开启本地监听
+int RTC_Device_StartLocalService(EASYRTC_DEVICE_T* pDevice, EasyRTC_Data_Callback callback, void* userptr);
 
 int RTC_Device_Start(EASYRTC_DEVICE_T *pDevice, const char* local_id, EasyRTC_Data_Callback callback, void* userptr);
 int RTC_Device_SetChannelInfo(EASYRTC_DEVICE_T* pDevice, EASYRTC_CODEC videoCodecID, EASYRTC_CODEC audioCodecID);
+
+
 
 // 被动呼叫响应(decline: 1为拒绝呼叫   0为接受呼叫)
 int RTC_Device_PassiveCallResponse(EASYRTC_DEVICE_T* pDevice, const char *peer_id, const int decline);
@@ -174,6 +180,8 @@ void WebsocketDataHandler(EASYRTC_DEVICE_T* pDevice, const unsigned char* data, 
 // 连接设备
 int RTC_Caller_Connect(EASYRTC_DEVICE_T* pDevice, const char * peer_id);
 
+// 连接局域网设备
+int RTC_Lan_Connect(EASYRTC_DEVICE_T* pDevice, const char *peerIP, const int peerPort);
 
 // ===============================================
 // ===============================================
@@ -182,6 +190,8 @@ int RTC_Caller_Connect(EASYRTC_DEVICE_T* pDevice, const char * peer_id);
 // ===============================================
 
 EASYRTC_DEVICE_T* RTC_Device_Create(const char* serverAddr, const int serverPort, const int isSecure);
+
+
 
 int RTC_Device_Stop(EASYRTC_DEVICE_T* pDevice);
 int RTC_Device_Release(EASYRTC_DEVICE_T** ppDevice);

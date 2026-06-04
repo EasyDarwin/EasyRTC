@@ -20,9 +20,15 @@ typedef int (*ws_register_callback)(void* userptr);
 typedef int (*ws_idle_callback)(void* userptr);
 typedef int (*ws_data_callback)(void* userptr, char *data, int size);
 
+// websocket client 连接服务器
 int websocketCreate(const char* serverAddr, const int serverPort, const int isSecure, void* userptr, ws_connect_callback connectCallback, ws_register_callback registerCallback, ws_data_callback dataCallback, ws_idle_callback idleCallback, void** ppWssClient);
+
+// websocket 监听本地端口
+int websocketBindLocalService(const int localListenPort, void* userptr, ws_data_callback dataCallback, ws_idle_callback idleCallback, void** ppWssClient);
+
+
 int websocketSetRegisterStatus(void* pWssClient, int registerStatus);
-int websocketSendData(void* pWssClient, int opcode, char* data, int size);
+int websocketSendData(void* pWssClient, int opcode, int mask, char* data, int size);
 void websocketRelease(void** ppWssClient);
 
 int websocketGetVersion(char* version);

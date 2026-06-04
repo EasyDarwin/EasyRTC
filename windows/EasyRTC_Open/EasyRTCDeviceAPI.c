@@ -118,6 +118,102 @@ int	EASYRTC_DEVICE_API	EasyRTC_Device_Create(EASYRTC_HANDLE* handle, const char*
 }
 
 
+int	EASYRTC_DEVICE_API	EasyRTC_Device_Whip_Create(EASYRTC_HANDLE* handle, EasyRTC_Data_Callback callback, void* userptr, EASYRTC_CODEC videoCodecID, EASYRTC_CODEC audioCodecID)
+{
+	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
+
+	EASYRTC_DEVICE_T* pDevice = RTC_Device_Create(NULL, 0, 0);
+	if (NULL == pDevice)	return -1;
+
+	RTC_Device_Start(pDevice, NULL, callback, userptr);
+
+	RTC_Device_SetChannelInfo(pDevice, videoCodecID, audioCodecID);
+
+	const char* uuid = "whip";
+	insertPeerAtTail(&pDevice->peerList, pDevice, uuid, OPERATE_TYPE_WAITING);
+
+	EASYRTC_PEER_T* peer = findPeerByUUID(pDevice->peerList, uuid);
+	if (NULL == peer)
+	{
+		// 未创建成功
+		EasyRTC_Device_Release(&pDevice);
+		return -10;
+	}
+
+	RTC_Device_PassiveCallResponse(pDevice, uuid, 0);
+
+	*handle = pDevice;
+
+	return 0;
+}
+
+// 
+int	EASYRTC_DEVICE_API	EasyRTC_Device_Whip_SetRemoteDescription(EASYRTC_HANDLE handle, const char* sdp)
+{
+	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
+	if (NULL == pDevice)		return -1;
+
+	int ret = -1;
+	LockPeerList(pDevice, __FUNCTION__, __LINE__);			// Lock
+
+	EASYRTC_PEER_T* current = pDevice->peerList;
+	while (current != NULL)
+	{
+		if (current->operateType == OPERATE_TYPE_DELETE)		break;
+
+		if (NULL != current->peerConnection[EASYRTC_PEER_PUBLISHER].peer_)
+		{
+			current->peerConnection[EASYRTC_PEER_PUBLISHER].connected = 0x01;
+			ret = EasyRTC_SetRemoteDescription(current->peerConnection[EASYRTC_PEER_PUBLISHER].peer_, sdp);
+		}
+
+		current = current->next;
+	}
+
+	UnlockPeerList(pDevice, __FUNCTION__, __LINE__);			// Unlock
+
+	return ret;
+}
+
+
+// 创建句柄   用于没有信令服务器的情况
+// serverPort: 本地监听端口
+// callback: 回调函数
+// userptr: 用户指针, 在回调函数中输出
+int	EASYRTC_DEVICE_API	EasyRTC_Device_Lan_CreateService(EASYRTC_HANDLE* handle, const int localListenPort, EasyRTC_Data_Callback callback, void* userptr)
+{
+	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
+
+	EASYRTC_DEVICE_T* pDevice = RTC_Device_Create(NULL, localListenPort, 0);
+	if (NULL == pDevice)	return -1;
+
+	RTC_Device_StartLocalService(pDevice, callback, userptr);
+
+	*handle = pDevice;
+
+	return 0;
+}
+
+// 创建句柄   用于没有信令服务器的情况
+ // serverAddr: 对端地址
+// serverPort: 对端端口
+// callback: 回调函数
+// userptr: 用户指针, 在回调函数中输出
+int	EASYRTC_DEVICE_API	EasyRTC_Device_Lan_CreateConnect(EASYRTC_HANDLE* handle, const char* peerIP, const int peerPort, const char *peerID, EasyRTC_Data_Callback callback, void* userptr)
+{
+	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
+
+	EASYRTC_DEVICE_T* pDevice = RTC_Device_Create(peerIP, peerPort, 0);
+	if (NULL == pDevice)	return -1;
+
+	RTC_Device_Start(pDevice, peerID, callback, userptr);
+
+	*handle = pDevice;
+
+	return 0;
+
+}
+
 int	EASYRTC_DEVICE_API	EasyRTC_Device_SetChannelInfo(EASYRTC_HANDLE handle, EASYRTC_CODEC videoCodecID, EASYRTC_CODEC audioCodecID)
 {
 	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
@@ -247,6 +343,19 @@ int	EASYRTC_DEVICE_API	EasyRTC_Caller_Connect(EASYRTC_HANDLE handle, const char*
 	return ret;
 }
 
+
+// 局域网环境下连接对端
+int	EASYRTC_DEVICE_API	EasyRTC_Lan_Connect(EASYRTC_HANDLE handle, const char* peerIP, const int peerPort)
+{
+	if (gEasyRTCDeviceInitFlag == 0)	return EASYRTCDevice_Uninitialized;
+
+	EASYRTC_DEVICE_T* pDevice = (EASYRTC_DEVICE_T*)handle;
+	if (NULL == pDevice)		return -1;
+
+	int ret = RTC_Lan_Connect(pDevice, peerIP, peerPort);
+
+	return ret;
+}
 
 
 int	EASYRTC_DEVICE_API	EasyRTC_Device_Release(EASYRTC_HANDLE* handle)

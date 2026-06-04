@@ -29,8 +29,8 @@ typedef enum {
     EASYRTC_CODEC_VP8 = 3,                                                            //!< VP8 video codec.
     EASYRTC_CODEC_MULAW = 4,                                                          //!< MULAW audio codec
     EASYRTC_CODEC_ALAW = 5,                                                           //!< ALAW audio codec
-    EASYRTC_CODEC_H265 = 6,                                                           //!< H265 video codec
-    EASYRTC_CODEC_AAC = 7,                                                             //!< AAC audio codec
+    EASYRTC_CODEC_H265 = 7,                                                           //!< H265 video codec
+    EASYRTC_CODEC_AAC = 8,                                                             //!< AAC audio codec
     EASYRTC_CODEC_PCM = 65536
 } EASYRTC_CODEC;
 
@@ -93,6 +93,30 @@ extern "C"
     // userptr: 用户指针, 在回调函数中输出
     int	EASYRTC_DEVICE_API	EasyRTC_Device_Create(EASYRTC_HANDLE* handle, const char* serverAddr, const int serverPort, const int isSecure, const char* local_id, EasyRTC_Data_Callback callback, void* userptr);
 
+
+    // 创建句柄   用于没有信令服务器的情况
+    // localListenPort: 本地监听端口
+    // callback: 回调函数
+    // userptr: 用户指针, 在回调函数中输出
+    int	EASYRTC_DEVICE_API	EasyRTC_Device_Lan_CreateService(EASYRTC_HANDLE* handle, const int localListenPort, EasyRTC_Data_Callback callback, void* userptr);
+
+    // 创建句柄   用于没有信令服务器的情况
+     // serverAddr: 对端地址
+    // serverPort: 对端端口
+    // callback: 回调函数
+    // userptr: 用户指针, 在回调函数中输出
+    int	EASYRTC_DEVICE_API	EasyRTC_Device_Lan_CreateConnect(EASYRTC_HANDLE* handle, const char* peerIP, const int peerPort, const char* peerID, EasyRTC_Data_Callback callback, void* userptr);
+
+
+    // 局域网环境下连接对端
+    int	EASYRTC_DEVICE_API	EasyRTC_Lan_Connect(EASYRTC_HANDLE handle, const char* peerIP, const int peerPort);
+
+
+    // Whip
+    int	EASYRTC_DEVICE_API	EasyRTC_Device_Whip_Create(EASYRTC_HANDLE* handle, EasyRTC_Data_Callback callback, void* userptr, EASYRTC_CODEC videoCodecID, EASYRTC_CODEC audioCodecID);
+    // 
+    int	EASYRTC_DEVICE_API	EasyRTC_Device_Whip_SetRemoteDescription(EASYRTC_HANDLE handle, const char *sdp);
+    //EasyRTC_SetRemoteDescription
     
     // 设置通道信息
     // videoCodecID: 视频编码id
