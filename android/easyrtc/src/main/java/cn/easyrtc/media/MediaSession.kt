@@ -300,6 +300,11 @@ class MediaSession {
         const val CODEC_H264 = 1
         const val CODEC_H265 = 7
 
+        @JvmStatic
+        fun getSdkVersion(): String = nativeGetVersion()
+
+        private external fun nativeGetVersion(): String
+
         init {
             System.loadLibrary("easyrtc_media")
         }

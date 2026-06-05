@@ -77,6 +77,10 @@
             android:title="@string/about_build_label" />
 
         <Preference
+            android:key="pref_sdk_version"
+            android:title="核心库版本" />
+
+        <Preference
             android:title="@string/about_company_name"
             android:summary="@string/about_company_note" />
     </PreferenceCategory>

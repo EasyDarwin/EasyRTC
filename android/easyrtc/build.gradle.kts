@@ -1,6 +1,16 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+}
+
+val mockEnabled = run {
+    val props = Properties()
+    val f = rootProject.file("local.properties")
+    if (f.exists()) FileInputStream(f).use { props.load(it) }
+    props.getProperty("easytc.mock") == "true"
 }
 
 android {
@@ -24,12 +34,14 @@ android {
         create("prod") {
             dimension = "mode"
         }
-        create("mock") {
-            dimension = "mode"
-            externalNativeBuild {
-                cmake {
-                    arguments("-DMOCK_EASYRTC=ON")
-                    targets("easyrtc_media")
+        if (mockEnabled) {
+            create("mock") {
+                dimension = "mode"
+                externalNativeBuild {
+                    cmake {
+                        arguments("-DMOCK_EASYRTC=ON")
+                        targets("easyrtc_media")
+                    }
                 }
             }
         }

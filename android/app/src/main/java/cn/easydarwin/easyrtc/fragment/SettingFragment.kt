@@ -14,6 +14,7 @@ import cn.easydarwin.easyrtc.repository.LogUploadRepository
 import cn.easydarwin.easyrtc.ui.settings.SettingsValidator
 import cn.easydarwin.easyrtc.utils.AppLogStore
 import cn.easydarwin.easyrtc.utils.SPUtil
+import cn.easyrtc.media.MediaSession
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
@@ -87,6 +88,7 @@ class SettingFragment : PreferenceFragmentCompat() {
         }
 
         findPreference<Preference>(KEY_ABOUT_VERSION)?.summary = getAppVersionNameOrUnknown()
+        findPreference<Preference>(KEY_SDK_VERSION)?.summary = try { MediaSession.getSdkVersion() } catch (_: Exception) { "N/A" }
     }
 
     override fun onDestroy() {
@@ -232,5 +234,6 @@ class SettingFragment : PreferenceFragmentCompat() {
         const val KEY_AUDIO_BIT_RATE = "pref_audio_bit_rate"
         const val KEY_UPLOAD_LOGS = "pref_upload_logs"
         const val KEY_ABOUT_VERSION = "pref_about_version"
+        const val KEY_SDK_VERSION = "pref_sdk_version"
     }
 }

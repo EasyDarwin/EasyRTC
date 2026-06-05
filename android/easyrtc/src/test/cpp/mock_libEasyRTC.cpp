@@ -287,6 +287,12 @@ int EasyRTC_GetIceCandidatePairStats(EasyRTC_PeerConnection pPeerConnection,
     return 0;
 }
 
+int EasyRTC_GetVersion(char* version) {
+    MOCK_LOGI("GetVersion: called");
+    strcpy(version, "1.1.0-mock");
+    return 0;
+}
+
 #ifdef __cplusplus
 }
 #endif

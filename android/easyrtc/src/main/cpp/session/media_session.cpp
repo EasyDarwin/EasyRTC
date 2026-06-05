@@ -1320,7 +1320,26 @@ Java_cn_easyrtc_media_MediaSession_nativeGetIceCandidateType(
     EasyRTC_IceCandidatePairStats stats{};
     int ret = EasyRTC_GetIceCandidatePairStats(session->peerConnection, &stats);
     if (ret != 0) return -1;
-    return static_cast<jint>(stats.local_iceCandidateType);
+    LOGI("ICE stats: local=%d remote=%d state=%d nominated=%d sent=%llu recv=%llu discarded=%u",
+         stats.local_iceCandidateType, stats.remote_iceCandidateType,
+         stats.state, stats.nominated,
+         static_cast<unsigned long long>(stats.packetsSent),
+         static_cast<unsigned long long>(stats.packetsReceived),
+         stats.packetsDiscardedOnSend);
+    bool relayed = (stats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED ||
+                    stats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED);
+    return static_cast<jint>(relayed ? 2 : 1);
+}
+
+JNIEXPORT jstring JNICALL
+Java_cn_easyrtc_media_MediaSession_00024Companion_nativeGetVersion(
+        JNIEnv *env, jclass clazz) {
+    char version[128] = {0};
+    int ret = EasyRTC_GetVersion(version);
+    if (ret != 0) {
+        return env->NewStringUTF("unknown");
+    }
+    return env->NewStringUTF(version);
 }
 
 }
