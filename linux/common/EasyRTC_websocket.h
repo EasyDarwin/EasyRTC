@@ -42,7 +42,6 @@ int websocketSetRegisterStatus(void* pWssClient, int registerStatus);
 int websocketSendData(void* pWssClient, int opcode, char* data, int size);
 void websocketRelease(void** ppWssClient);
 
-int websocketGetVersion(char* version);
 
 #ifdef __cplusplus
 }

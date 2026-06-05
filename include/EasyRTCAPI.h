@@ -16,6 +16,41 @@
 #define	CALLBACK
 #endif
 
+
+#include <stdint.h>
+
+#if !defined(_WIN32)
+typedef char CHAR;
+typedef short WCHAR;
+typedef uint8_t UINT8;
+typedef int8_t INT8;
+typedef uint16_t UINT16;
+typedef int16_t INT16;
+typedef uint32_t UINT32;
+typedef int32_t INT32;
+typedef uint64_t UINT64;
+typedef int64_t INT64;
+typedef double DOUBLE;
+typedef long double LDOUBLE;
+typedef float FLOAT;
+typedef int BOOL;
+typedef UINT8 BYTE;
+typedef BYTE *PBYTE;
+typedef CHAR *PCHAR;
+
+#ifndef VOID
+#define VOID void
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+#endif
+
 #ifdef ANDROID_BUILD
 typedef int                 BOOL, *PBOOL;
 typedef signed char         INT8, * PINT8;
@@ -238,6 +273,7 @@ extern "C"
 {
 #endif
 
+	int	EASYRTC_API	EasyRTC_GetVersion(char* version);
 	// 初始化EasyRTC
     int	EASYRTC_API	EasyRTC_Init();
 	// 反初始化EasyRTC
