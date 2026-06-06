@@ -226,14 +226,24 @@ class MediaSession {
 
     @Keep
     private fun onConnectionStateChangeEvent(state: Int) {
-        if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
+        if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_NEW ||
+            state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTING) {
+            connectionState.postValue(LiveUiState.Connecting(currentUser))
+        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CONNECTED) {
             currentUser = ""
-            connectionState.postValue(LiveUiState.Connected(currentUser))
+            val connType = getConnectionTypeDesc()
+            connectionState.postValue(LiveUiState.Connected(currentUser, connType))
         } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_FAILED) {
             connectionState.postValue(LiveUiState.Failed(currentUser, null))
-        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED) {
+        } else if (state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_CLOSED ||
+                   state == EasyRTCPeerConnectionState.EASYRTC_PEER_CONNECTION_STATE_DISCONNECTED) {
             connectionState.postValue(LiveUiState.Disconnected(currentUser))
         }
+    }
+
+    private fun getConnectionTypeDesc(): String {
+        val type = nativeGetIceCandidateType(nativePtr)
+        return if (type <= 2) "P2P直连" else "Relay中转"
     }
 
     @Keep

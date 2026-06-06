@@ -89,6 +89,9 @@ class IpDirectFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListe
                     tvStatus.text = "监听中 ws://$ip:${IpDirectServer.DEFAULT_PORT}"
                     endCallButton.visibility = View.GONE
                 }
+                is LiveUiState.Connecting -> {
+                    tvStatus.text = "连接中..."
+                }
                 is LiveUiState.Connected -> {
                     appendLog("连接成功")
                     endCallButton.visibility = View.VISIBLE

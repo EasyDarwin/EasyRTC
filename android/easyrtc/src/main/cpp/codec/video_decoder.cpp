@@ -91,7 +91,7 @@ static void sleepInterruptibleUs(int64_t targetSleepUs,
     if (targetSleepUs <= 0) {
         return;
     }
-    static constexpr int64_t kMaxSleepUsPerSlice = 20000;
+    static constexpr int64_t kMaxSleepUsPerSlice = 2000;
     const auto sleepStart = std::chrono::steady_clock::now();
 
     while (true) {
@@ -127,16 +127,14 @@ std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface,
 
 
 int64_t fixSleepTime(int64_t sleepTimeUs, int64_t totalTimestampDifferUs, int64_t delayUs) {
-    if (totalTimestampDifferUs < 0) {
-        // LOGW("totalTimestampDifferUs is:%lld, this should not be happen.", static_cast<long long>(totalTimestampDifferUs));
-        totalTimestampDifferUs = 0;
-    }
+    if (totalTimestampDifferUs < delayUs) return sleepTimeUs;
 
-    double dValue = ((double) (delayUs - totalTimestampDifferUs)) / 1000000.0;
-    double radio = std::exp(dValue);
-    double r = sleepTimeUs * radio + 0.5;
-    // LOGI("%lld,%lld,%lld->%lld", static_cast<long long>(sleepTimeUs), static_cast<long long>(totalTimestampDifferUs), static_cast<long long>(delayUs), static_cast<long long>(r));
-    return static_cast<int64_t>(r);
+    int64_t excess = totalTimestampDifferUs - delayUs;
+    // Halve sleep time for every 100ms of excess cache — drains queue aggressively
+    double reductions = (double)excess / 100000.0;
+    double radio = std::pow(0.5, reductions);
+    if (radio < 0.01) radio = 0.01;
+    return static_cast<int64_t>(sleepTimeUs * radio);
 }
 
 int videoDecoderStart(MediaSession *session) {
@@ -208,28 +206,28 @@ int videoDecoderStart(MediaSession *session) {
 
                 const int64_t ptsDurationUs = bufferInfo.presentationTimeUs - firstPtsUs;
                 last_dequeue_time_us = bufferInfo.presentationTimeUs;
-                int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
+                const int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
                 if (pipeline->audio_master_clock_us_from_begining_to_now > 0) {
                     auto audioClockDurationUs = pipeline->audio_master_clock_us_from_begining_to_now;
                     FLOGI("[IV] audio master clock used:%lldms, wall master clock:%lldms, delta:%lldms", audioClockDurationUs/1000, (getMonoUs() - firstSystemUs)/1000, (audioClockDurationUs - (getMonoUs() - firstSystemUs))/1000);
                 }
                 const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
                 FLOGI("[IV] DEC_OUT process:%lldms, master clock:%lldms, delta:%lldms", ptsDurationUs/1000, masterClockDurationUs/1000, delta_us_to_master/1000);
-                int64_t sleepUs = delta_us_to_master;
-                int codec_queue_cache_us = last_enqueue_time_us - last_dequeue_time_us;
+                const int64_t sleepUs = delta_us_to_master;
+                int64_t codec_queue_cache_us = last_enqueue_time_us - last_dequeue_time_us;
                 const int64_t total_cache_us = pipeline->frameQueue.cached_us() + codec_queue_cache_us;
-                auto fixedSleepUs = fixSleepTime(sleepUs, total_cache_us, 0);
+                const auto fixedSleepUs = fixSleepTime(sleepUs, total_cache_us, -200000);
                
-                if (sleepUs > 0) {
+                if (fixedSleepUs > 0) {
                     auto _begin = std::chrono::steady_clock::now();
-                    sleepInterruptibleUs(sleepUs, [&]() {
-                        int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
+                    sleepInterruptibleUs(fixedSleepUs, [&]() {
+                        const int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
                         const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
                         return !pipeline->running.load() || delta_us_to_master < 10000;
                     });
                     auto _dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - _begin).count();
-                    FLOGI("[IV] DEC_OUT before fix sleepUs=%lld, after fix sleepUs=%lld, packet_queue=%lld, codec_queue=%lld, total_cache_us=%lld, actual/request(delta) sleepUs=%lld/%lld(%lld)", 
-                        sleepUs, fixedSleepUs, pipeline->frameQueue.cached_us(), codec_queue_cache_us, total_cache_us, _dur, sleepUs, _dur - sleepUs);
+                    FLOGI("[IV] actual/fixed/normal:%lld/%lld/%lld, actual-fixed:%lld, packet_cache=%lld, codec_cache=%lld, total_cache_us=%lld", 
+                        _dur, fixedSleepUs, sleepUs, _dur - fixedSleepUs, pipeline->frameQueue.cached_us(), codec_queue_cache_us, total_cache_us);
                 }
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
                 pipeline->errorCount.store(0);

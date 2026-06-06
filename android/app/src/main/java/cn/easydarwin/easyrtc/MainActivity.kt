@@ -160,15 +160,15 @@ class MainActivity : AppCompatActivity() {
     fun switchFragment(tag: String, commitNow: Boolean = false) {
         val fm = supportFragmentManager
         if (fm.isStateSaved) return
+        val exist = fm.findFragmentByTag(tag)
+        if (exist != null && exist.isVisible) return
 
         val transaction = fm.beginTransaction()
         try {
-
             currentFragmentTag = tag
 
             fm.fragments.forEach { transaction.remove(it) }
 
-            val exist = fm.findFragmentByTag(tag)
             if (exist != null) {
                 transaction.show(exist)
             } else {

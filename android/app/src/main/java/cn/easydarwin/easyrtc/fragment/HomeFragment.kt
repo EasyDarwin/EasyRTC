@@ -159,13 +159,17 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
                     tvFragmentUUID.text = SPUtil.getInstance().rtcUserUUID
                     endCallButton.visibility = View.GONE
                 }
+                is LiveUiState.Connecting -> {
+                    appendLog("连接中...")
+                    tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [连接中...]"
+                }
                 is LiveUiState.Connected -> {
                     appendLog2("------------------------------")
                     appendLog2("------------------------------")
                     appendLog("连接成功")
-                    appendLog(getIceCandidateTypeDesc())
+                    appendLog("连接模式: ${state.connectionType}")
                     endCallButton.visibility = View.VISIBLE
-                    tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [已连接]"
+                    tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [${state.connectionType}]"
                 }
                 is LiveUiState.Disconnected -> {
                     appendLog("连接断开")
@@ -353,11 +357,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
         Log.d(TAG, "onWSError state =${error.message} ")
     }
     private fun onWSLogs(txt: String) { appendLog(txt) }
-
-    fun getIceCandidateTypeDesc(): String {
-        val type = session.getIceCandidateType() ?: 0
-        return "连接模式(${if (type == 1) "P2P直连" else "Relay中转"})"
-    }
 
     fun onDataChannelCallback(type: Int, binary: Int, data: ByteArray, size: Int) {
         if (type == 1) {
