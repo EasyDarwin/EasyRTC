@@ -1333,7 +1333,7 @@ Java_cn_easyrtc_media_MediaSession_nativeGetIceCandidateType(
          stats.packetsDiscardedOnSend);
     bool relayed = (stats.local_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED ||
                     stats.remote_iceCandidateType == EasyRTC_ICE_CANDIDATE_TYPE_RELAYED);
-    return static_cast<jint>(relayed ? 2 : 1);
+    return static_cast<jint>(relayed ? 3 : 0);
 }
 
 JNIEXPORT jstring JNICALL
