@@ -227,6 +227,7 @@ void audioCaptureStop(MediaSession *session) {
 
     AAudioStream* stream = nullptr;
     {
+        LOGI("[CRITICAL] AudioCaptureStop: reset pipeline stream");
         std::lock_guard<std::mutex> lock(pipeline->mutex);
         stream = pipeline->stream;
         pipeline->stream = nullptr;
@@ -246,6 +247,7 @@ void audioCaptureStop(MediaSession *session) {
         //     }
         // }
         {
+            LOGI("[CRITICAL] AudioCaptureStop: AAudioStream_requestStop");
             AAudioStream_requestStop(stream);
             // AAudioStream_waitForStateChange(pipeline->stream, AAUDIO_STREAM_STATE_STARTED, AAUDIO_STREAM_STATE_STOPPED, nullptr, nullptr);
             // aaudio_result_t result = AAUDIO_OK;
@@ -258,6 +260,7 @@ void audioCaptureStop(MediaSession *session) {
             // }
         }
         {
+            LOGI("[CRITICAL] AudioCaptureStop: AAudioStream_close");
             AAudioStream_close(stream);
             // aaudio_result_t result = AAUDIO_OK;
             // aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
