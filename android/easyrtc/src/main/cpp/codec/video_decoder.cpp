@@ -142,17 +142,18 @@ int64_t fixSleepTime(int64_t sleepTimeUs, int64_t totalTimestampDifferUs, int64_
 int videoDecoderStart(MediaSession *session) {
     assert(session && session->videoDecoder);
     auto pipeline = session->videoDecoder;
-    LOGI("Starting video decoder thread");
+    LOGI("[IV] Starting video decoder thread");
     pipeline->running.store(true);
     pipeline->decodeThread = std::thread([session]() {
         auto pipeline = session->videoDecoder;
-        LOGI("Video decode thread started");
+        LOGI("[IV] Video decode thread started");
         AMediaCodecBufferInfo bufferInfo;
         int enqueued{};
         int64_t firstPtsUs = -1;
         int64_t firstSystemUs = -1;
         bool droppingPackets = false;
-
+        int64_t last_enqueue_time_us = 0;
+        int64_t last_dequeue_time_us = 0;
 
         auto enqueueDecoder = [&](AMediaCodec *decoder, Packet *packet) {
             ssize_t inputBufId = AMediaCodec_dequeueInputBuffer(decoder, pipeline->DEQUEUE_TIMEOUT_US);
@@ -162,7 +163,7 @@ int videoDecoderStart(MediaSession *session) {
             size_t outSize = 0;
             uint8_t* inputBuf = AMediaCodec_getInputBuffer(decoder, inputBufId, &outSize);
             if (!inputBuf || packet->size > outSize) {
-                LOGW("Invalid decoder input buffer: inputBuf=%p frame=%u cap=%zu",
+                LOGW("[IV] Invalid decoder input buffer: inputBuf=%p frame=%u cap=%zu",
                      inputBuf, packet->size, outSize);
                 assert(false);
                 return true;
@@ -177,16 +178,16 @@ int videoDecoderStart(MediaSession *session) {
             if (frame_idx == 0) frame_idx = packet->index;
             else {
                 if (frame_idx != packet->index -1){
-                    LOGW("packet not continouse.%u->%u", frame_idx, packet->index);
+                    LOGW("[IV] packet not continouse.%u->%u", frame_idx, packet->index);
                 }
                 frame_idx = packet->index;
             }
+            last_enqueue_time_us = packet->ptsUs;
             AMediaCodec_queueInputBuffer(decoder, inputBufId, 0, packet->size, packet->ptsUs, flags);
             uint64_t q = gDecQueued.fetch_add(1) + 1;
-            pipeline->enqueuedFrames.store(q);
             enqueued++;
             if (q <= 8 || (q % 120) == 0) {
-                LOGI("[VI] DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
+                LOGI("[IV] DEC_IN q=%llu size=%u pts=%lld flags=0x%x PKT queue cached=%zu",
                      static_cast<unsigned long long>(q),
                      packet->size,
                      static_cast<long long>(packet->ptsUs),
@@ -206,22 +207,29 @@ int videoDecoderStart(MediaSession *session) {
                 }
 
                 const int64_t ptsDurationUs = bufferInfo.presentationTimeUs - firstPtsUs;
+                last_dequeue_time_us = bufferInfo.presentationTimeUs;
                 int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
                 if (pipeline->audio_master_clock_us_from_begining_to_now > 0) {
                     auto audioClockDurationUs = pipeline->audio_master_clock_us_from_begining_to_now;
-                    FLOGI("[VI] audio master clock used:%lldms, wall master clock:%lldms, delta:%lldms", audioClockDurationUs/1000, (getMonoUs() - firstSystemUs)/1000, (audioClockDurationUs - (getMonoUs() - firstSystemUs))/1000);
+                    FLOGI("[IV] audio master clock used:%lldms, wall master clock:%lldms, delta:%lldms", audioClockDurationUs/1000, (getMonoUs() - firstSystemUs)/1000, (audioClockDurationUs - (getMonoUs() - firstSystemUs))/1000);
                 }
                 const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
-                FLOGI("[VI] DEC_OUT process:%lldms, master clock:%lldms, delta:%lldms", ptsDurationUs/1000, masterClockDurationUs/1000, delta_us_to_master/1000);
-                int64_t sleepUs = delta_us_to_master - 3000;
-                auto fixedSleepUs = fixSleepTime(sleepUs, pipeline->frameQueue.cached_us(), 0);
-                FLOGI("[VI] DEC_OUT before fix sleepUs=%lld, after fix sleepUs=%lld, cached_packet_us=%lld", sleepUs, fixedSleepUs, pipeline->frameQueue.cached_us());
+                FLOGI("[IV] DEC_OUT process:%lldms, master clock:%lldms, delta:%lldms", ptsDurationUs/1000, masterClockDurationUs/1000, delta_us_to_master/1000);
+                int64_t sleepUs = delta_us_to_master;
+                int codec_queue_cache_us = last_enqueue_time_us - last_dequeue_time_us;
+                const int64_t total_cache_us = pipeline->frameQueue.cached_us() + codec_queue_cache_us;
+                auto fixedSleepUs = fixSleepTime(sleepUs, total_cache_us, 0);
+               
                 if (sleepUs > 0) {
+                    auto _begin = std::chrono::steady_clock::now();
                     sleepInterruptibleUs(sleepUs, [&]() {
                         int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
                         const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
                         return !pipeline->running.load() || delta_us_to_master < 10000;
                     });
+                    auto _dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - _begin).count();
+                    FLOGI("[IV] DEC_OUT before fix sleepUs=%lld, after fix sleepUs=%lld, packet_queue=%lld, codec_queue=%lld, total_cache_us=%lld, actual/request(delta) sleepUs=%lld/%lld(%lld)", 
+                        sleepUs, fixedSleepUs, pipeline->frameQueue.cached_us(), codec_queue_cache_us, total_cache_us, _dur, sleepUs, _dur - sleepUs);
                 }
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
                 pipeline->errorCount.store(0);
@@ -229,7 +237,7 @@ int videoDecoderStart(MediaSession *session) {
                 pipeline->renderedFrames.store(r);
                 enqueued--;
                 if (r <= 8 || (r % 120) == 0) {
-                    LOGI("DEC_OUT r=%llu size=%d pts=%lld sleepUs=%lld flags=0x%x codec queue cached:%d",
+                    LOGI("[IV] DEC_OUT r=%llu size=%d pts=%lld sleepUs=%lld flags=0x%x codec queue cached:%d",
                          static_cast<unsigned long long>(r),
                          bufferInfo.size,
                          static_cast<long long>(bufferInfo.presentationTimeUs),
@@ -241,7 +249,7 @@ int videoDecoderStart(MediaSession *session) {
                 uint64_t t = gDecTryLater.fetch_add(1) + 1;
                 pipeline->tryLaterCount.store(t);
                 if (t <= 8 || (t % 240) == 0) {
-                    LOGI("DEC_TRY_LATER count=%llu", static_cast<unsigned long long>(t));
+                    // LOGI("DEC_TRY_LATER count=%llu", static_cast<unsigned long long>(t));
                 }
             } else if (outputBufId == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
                 uint64_t f = gDecFormatChanged.fetch_add(1) + 1;
@@ -250,7 +258,7 @@ int videoDecoderStart(MediaSession *session) {
                     int32_t w = 0, h = 0;
                     AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_WIDTH, &w);
                     AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_HEIGHT, &h);
-                    LOGI("DEC_FMT_CHANGED count=%llu %dx%d", static_cast<unsigned long long>(f), w, h);
+                    LOGI("[IV] DEC_FMT_CHANGED count=%llu %dx%d", static_cast<unsigned long long>(f), w, h);
 //                    if (w > 0 && h > 0 && (w != pipeline->width || h != pipeline->height))
                     {
                         pipeline->width = w;
@@ -261,7 +269,7 @@ int videoDecoderStart(MediaSession *session) {
                     }
                     AMediaFormat_delete(outFormat);
                 } else {
-                    LOGI("DEC_FMT_CHANGED count=%llu", static_cast<unsigned long long>(f));
+                    LOGI("[IV] DEC_FMT_CHANGED count=%llu", static_cast<unsigned long long>(f));
                 }
                 return true;
             }
@@ -280,7 +288,7 @@ int videoDecoderStart(MediaSession *session) {
             defer(if (!decoderOK) pipeline->frameQueue.commitPop());
             if (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) {
                 auto hex = uint8_to_hex(packet->data(), std::min(uint32_t(56), packet->size));
-                LOGI("Frame:%s", hex.c_str());
+                LOGI("[IV] Frame:%s", hex.c_str());
 
                 bool isHEVC = (pipeline->currentCodecType == "video/hevc");
 
@@ -288,19 +296,19 @@ int videoDecoderStart(MediaSession *session) {
                     extractH265VpsSpsPpsFromAnnexb(packet->data(), packet->size, pipeline->csd0);
                     pipeline->csd1.clear();
                     auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
-                    LOGI("HEVC csd0(VPS+SPS+PPS)=%s", csd0Hex.c_str());
+                    LOGI("[IV] HEVC csd0(VPS+SPS+PPS)=%s", csd0Hex.c_str());
                 } else {
                     extractSpsPpsFromAnnexb(packet->data(), std::min(packet->size, uint32_t(256)), pipeline->csd0, pipeline->csd1);
                     auto csd0Hex = uint8_to_hex(pipeline->csd0.data(), pipeline->csd0.size());
                     auto csd1Hex = uint8_to_hex(pipeline->csd1.data(), pipeline->csd1.size());
-                    LOGI("AVC csd0=%s, csd1=%s", csd0Hex.c_str(), csd1Hex.c_str());
+                    LOGI("[IV] AVC csd0=%s, csd1=%s", csd0Hex.c_str(), csd1Hex.c_str());
                 }
 
                 if (pipeline->width <= 0 || pipeline->height <= 0) {
                     pipeline->width = 1920;
                     pipeline->height = 1080;
                 }
-                LOGI("Decoder configure size:%dx%d (actual from FORMAT_CHANGED)", pipeline->width, pipeline->height);
+                LOGI("[IV] Decoder configure size:%dx%d (actual from FORMAT_CHANGED)", pipeline->width, pipeline->height);
 
                 if (initDecoder(pipeline)){
                     decoderOK = true;
@@ -311,7 +319,7 @@ int videoDecoderStart(MediaSession *session) {
                     assert(false && "initDecoder failed!");
                 }
             } else {
-                FLOGI("Dropping non-key frame since decoder is not initialized, pts=%lld", static_cast<long long>(packet->ptsUs));
+                FLOGI("[IV] Dropping non-key frame since decoder is not initialized, pts=%lld", static_cast<long long>(packet->ptsUs));
             }
             return false;
         };
@@ -342,7 +350,7 @@ int videoDecoderStart(MediaSession *session) {
             }
             bool sureConsumed = true;
             defer(if (sureConsumed) pipeline->frameQueue.commitPop());
-            FLOGI("[VI] VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
+            FLOGI("[IV] VIDEO PKT OUT pts:%llums, in PKT caches:%llu", packet->ptsUs/1000, pipeline->frameQueue.size());
             if (droppingPackets && (packet->frameFlags & EASYRTC_FRAME_FLAG_KEY_FRAME) != EASYRTC_FRAME_FLAG_KEY_FRAME) {
                 LOGW("Dropping packet pts=%lld", static_cast<long long>(packet->ptsUs));
                 continue;
@@ -375,7 +383,7 @@ int videoDecoderStart(MediaSession *session) {
             AMediaCodec_stop(pipeline->decoder.get());
             pipeline->decoder = nullptr;
         }
-        LOGI("Video decode thread exiting");
+        LOGI("[IV] Video decode thread exiting");
     });
     pthread_t th = pipeline->decodeThread.native_handle();
     sched_param sch_params;

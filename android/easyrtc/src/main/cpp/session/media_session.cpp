@@ -400,6 +400,7 @@ static int mediaTransceiverCallback(void *userPtr,
             }
             // Lazy-create video decoder on first frame using actual remote codec
             if (!session->videoDecoder && !session->videoDecoderInitAttempted && session->decoderSurface) {
+                LOGI("[CRITICAL] Recv: lazy initing IV pipeline codec=%d", codecID);
                 session->videoDecoderInitAttempted = true;
                 session->videoDecoder = std::make_shared<VideoDecoderPipeline>();
                 session->videoDecoder->currentCodecType = (codecID == EasyRTC_CODEC_H265) ? "video/hevc" : "video/avc";
@@ -408,6 +409,7 @@ static int mediaTransceiverCallback(void *userPtr,
                 session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
                 session->videoDecoder->onVideoSizeUserPtr = session;
                 videoDecoderStart(session);
+                LOGI("[CRITICAL] Recv: IV pipeline lazily created codec=%d", codecID);
             }
 
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
@@ -442,9 +444,10 @@ static int mediaTransceiverCallback(void *userPtr,
             }
             // Lazy-create audio playback on first frame using actual remote codec
             if (!session->audioPlayback && !session->audioPlaybackInitAttempted) {
+                LOGI("[CRITICAL] Recv: lazy initing IA playback codec=%d", codecID);
                 session->audioPlaybackInitAttempted = true;
                 session->audioPlayback = audioPlaybackCreate(static_cast<int>(codecID));
-                LOGI("[CRITICAL] Recv: audio playback lazily created codec=%d", codecID);
+                LOGI("[CRITICAL] Recv: IA playback lazily created codec=%d", codecID);
             }
 
             if (session->audioPlayback && frame && frame->frameData && frame->size > 0) {
@@ -1176,6 +1179,7 @@ Java_cn_easyrtc_media_MediaSession_nativeCreatePeerConnection(
     }
     session->peerConnection = pc;
     session->connectState = 1; // NEW
+    session->shuttingDown.store(false);
     LOGI("[CRITICAL] PC created: session=%p pc=%p", session, pc);
     return reinterpret_cast<jlong>(pc);
 }

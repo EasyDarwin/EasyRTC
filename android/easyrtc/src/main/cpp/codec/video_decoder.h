@@ -26,7 +26,6 @@ struct VideoDecoderPipeline {
   // we use the ringbuffer to replace frameQueue.
   PacketRingBuffer frameQueue{MAX_QUEUE_SIZE};
   std::atomic<bool> running{false};
-  std::atomic<uint64_t> enqueuedFrames{0};
   std::atomic<uint64_t> renderedFrames{0};
   std::atomic<uint64_t> tryLaterCount{0};
   std::thread decodeThread;
@@ -43,7 +42,7 @@ struct VideoDecoderPipeline {
   int64_t audio_master_clock_us_from_begining_to_now = 0;
 
   static constexpr int MAX_ERROR_COUNT = 5;
-  static constexpr size_t MAX_QUEUE_SIZE = 300;
+  static constexpr size_t MAX_QUEUE_SIZE = 100;
   static constexpr int64_t DEQUEUE_TIMEOUT_US = 1000;
 
   VideoDecoderPipeline() = default;

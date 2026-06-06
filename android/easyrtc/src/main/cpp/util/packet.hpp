@@ -4,10 +4,11 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include "session/common.h"
 #include "utils/ringbuffer.hpp"
 
 struct Packet {
-  static constexpr size_t FIXED_SIZE = 512 * 1024;
+  static constexpr size_t FIXED_SIZE = 4096;
   alignas(16) uint8_t fixedBuf[FIXED_SIZE] = {};
   std::vector<uint8_t> heapBuf;
   uint32_t size = 0;
@@ -19,11 +20,13 @@ struct Packet {
     size = len;
     if (len <= FIXED_SIZE) {
       if (!heapBuf.empty()) {
+        LOGI("Packet setData with size %u, freeing heap buffer", len);
         heapBuf.clear();
         heapBuf.shrink_to_fit();
       }
       memcpy(fixedBuf, src, len);
     } else {
+      LOGI("Packet setData with size %u, using heap buffer", len);
       heapBuf.assign(src, src + len);
     }
   }

@@ -44,8 +44,8 @@ public:
 
   void commitPop() {
     size_t tail = tail_.load(std::memory_order_relaxed);
-    auto &slot = buffer_[tail];
-    slot.release();
+    // auto &slot = buffer_[tail];
+    // slot.release();
     tail_.store((tail + 1) & mask_, std::memory_order_release);
   }
 
