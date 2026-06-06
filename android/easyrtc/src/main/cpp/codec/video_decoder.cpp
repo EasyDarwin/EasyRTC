@@ -216,7 +216,7 @@ int videoDecoderStart(MediaSession *session) {
                 const int64_t sleepUs = delta_us_to_master;
                 int64_t codec_queue_cache_us = last_enqueue_time_us - last_dequeue_time_us;
                 const int64_t total_cache_us = pipeline->frameQueue.cached_us() + codec_queue_cache_us;
-                const auto fixedSleepUs = fixSleepTime(sleepUs, total_cache_us, -200000);
+                const auto fixedSleepUs = fixSleepTime(sleepUs, total_cache_us, -100000);
                
                 if (fixedSleepUs > 0) {
                     auto _begin = std::chrono::steady_clock::now();
