@@ -15,6 +15,8 @@
 #include <thread>
 #include <vector>
 
+struct MediaSession;
+
 struct VideoDecoderPipeline {
 
   using OnVideoSizeCallback = void (*)(void *userPtr, int width, int height);
@@ -59,7 +61,7 @@ struct VideoDecoderPipeline {
 
 std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow *surface, int codecType,
                                          int width, int height);
-int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline);
+int videoDecoderStart(MediaSession *session);
 void videoDecoderEnqueueFrame(std::shared_ptr<VideoDecoderPipeline> pipeline, const EasyRTC_Frame*);
 void videoDecoderRelease(std::shared_ptr<VideoDecoderPipeline> pipeline);
 

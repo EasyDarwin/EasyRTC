@@ -407,7 +407,7 @@ static int mediaTransceiverCallback(void *userPtr,
                 assert(session->videoDecoder);
                 session->videoDecoder->onVideoSize = onRemoteVideoSizeCallback;
                 session->videoDecoder->onVideoSizeUserPtr = session;
-                videoDecoderStart(session->videoDecoder);
+                videoDecoderStart(session);
             }
 
             if (session->videoDecoder && frame && frame->frameData && frame->size > 0) {
@@ -926,7 +926,7 @@ static void startRenderThread(MediaSession *session) {
         int attach = ASurfaceTexture_attachToGLContext(session->cameraInputSurfaceTexture, session->encoderGlBridge->cameraOesTex);
         LOGI("[Render] thread: attachToGLContext result=%d", attach);
 //        assert(attach == 0 && "Failed to attach SurfaceTexture to GL context in render thread");
-        while (session->renderThreadRunning.load()) {
+        while (session->renderThreadRunning.load() && !session->shuttingDown.load()) {
             float m[16];
                 int64_t ts = 0;
                 if (encoderGlUpdateTexImage(session->cameraInputSurfaceTexture, m, &ts)) {
@@ -1185,6 +1185,7 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
         JNIEnv *env, jobject thiz, jlong sessionPtr) {
     auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
+    session->shuttingDown.store(true);
     session->transceiversAdded.store(false);
 
     // 1. Stop send pipeline (render thread, encoder, audio capture)

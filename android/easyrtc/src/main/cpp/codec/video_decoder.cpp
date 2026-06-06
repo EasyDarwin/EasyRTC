@@ -139,10 +139,13 @@ int64_t fixSleepTime(int64_t sleepTimeUs, int64_t totalTimestampDifferUs, int64_
     return static_cast<int64_t>(r);
 }
 
-int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
+int videoDecoderStart(MediaSession *session) {
+    assert(session && session->videoDecoder);
+    auto pipeline = session->videoDecoder;
     LOGI("Starting video decoder thread");
     pipeline->running.store(true);
-    pipeline->decodeThread = std::thread([pipeline]() {
+    pipeline->decodeThread = std::thread([session]() {
+        auto pipeline = session->videoDecoder;
         LOGI("Video decode thread started");
         AMediaCodecBufferInfo bufferInfo;
         int enqueued{};
@@ -313,7 +316,7 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
             return false;
         };
 
-        while (pipeline->running.load()) {
+        while (pipeline->running.load() && !session->shuttingDown.load()) {
             if (!pipeline->decoder) {
                 if (!setupDecoder()) {
                     continue;
@@ -322,7 +325,7 @@ int videoDecoderStart(std::shared_ptr<VideoDecoderPipeline> pipeline) {
             }
             auto decoder = pipeline->decoder.get();
             assert(pipeline->decoder);
-            while (pipeline->running.load()) {
+            while (pipeline->running.load() && !session->shuttingDown.load()) {
                 if (dequeueDecoder(decoder)) {
                     continue;
                 }else {

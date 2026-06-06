@@ -116,7 +116,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
     auto* pipeline = session->videoEncoder.get();
     LOGI("[VO] Output thread started");
 
-    while (pipeline->running.load()) {
+    while (pipeline->running.load() && !session->shuttingDown.load()) {
         if (!pipeline->encoder) {
             break;
         }
@@ -173,7 +173,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
         const bool isConnected = (session->connectState == 3);
 
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            LOGI("[VO] Output key frame: size=%u, pts=%llu, sps_pps_size=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
+            LOGI("[VO] Output key frame: size=%u, pts=%llu, preallocated buf=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
             if (pipeline->sps_pps_size > 0) {
                 pipeline->sps_pps_buffer.resize(pipeline->sps_pps_size);
                 // let's expand the sps_pps_buffer, and append the current frame data after it, then send the combined buffer to the peer, so that the decoder on the peer side can get the sps/pps before decoding the key frame

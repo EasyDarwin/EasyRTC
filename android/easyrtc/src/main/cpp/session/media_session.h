@@ -79,6 +79,7 @@ struct MediaSession {
 
     std::atomic<bool> previewRunning{false};
     std::atomic<bool> transceiversAdded{false};
+    std::atomic<bool> shuttingDown{false};
     std::atomic<int> cameraError{0};
     int videoCodec = 1;
     int audioCodec = 5;

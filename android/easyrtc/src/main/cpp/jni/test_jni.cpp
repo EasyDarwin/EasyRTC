@@ -2,6 +2,7 @@
 #include "codec/video_decoder.h"
 #include "codec/audio_playback.h"
 #include "codec/audio_decoder.h"
+#include "session/media_session.h"
 #include "util/frame_reader.h"
 #include <jni.h>
 #include <android/native_window_jni.h>
@@ -22,7 +23,7 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
     if (!frameReaderParse(pathStr, header, frames)) {
         return;
     }
-
+    MediaSession session;
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
 
     auto decoder = videoDecoderCreate(window, codec, 720, 1280);
@@ -30,7 +31,8 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
         ANativeWindow_release(window);
         return;
     }
-    videoDecoderStart(decoder);
+    session.videoDecoder = decoder;
+    videoDecoderStart(&session);
 
     auto audioPlayback = audioPlaybackCreate(5);
 
