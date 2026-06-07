@@ -458,7 +458,8 @@ static int mediaTransceiverCallback(void *userPtr,
                 }
                 audioPlaybackEnqueueFrame(session->audioPlayback, frame);
                 if (session->videoDecoder) {
-                    session->videoDecoder->audio_master_clock_us_from_begining_to_now = estimateAudioMasterClockUs(session->audioPlayback);
+                    session->videoDecoder->audio_master_clock_us_from_begining_to_now = session->audioPlayback->master_clock_us();
+                    session->videoDecoder->audio_cached_us_ = session->audioPlayback->cached_us();
                 }
             }
             break;

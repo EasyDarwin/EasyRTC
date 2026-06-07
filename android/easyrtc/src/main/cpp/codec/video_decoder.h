@@ -40,6 +40,7 @@ struct VideoDecoderPipeline {
   std::vector<uint8_t> csd1;
 
   int64_t audio_master_clock_us_from_begining_to_now = 0;
+  int64_t audio_cached_us_ = 0;
 
   static constexpr int MAX_ERROR_COUNT = 5;
   static constexpr size_t MAX_QUEUE_SIZE = 100;

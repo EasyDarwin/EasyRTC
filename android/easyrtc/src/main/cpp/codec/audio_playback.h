@@ -36,12 +36,16 @@ struct AudioPlaybackPipeline {
     int64_t playedFrames = 0;
     std::mutex streamMutex;
     std::mutex mutex_;
+
+    int64_t master_clock_us();
+
+    int64_t cached_us();
+
 };
 
 std::shared_ptr<AudioPlaybackPipeline> audioPlaybackCreate(int audioCodec);
 void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline, const EasyRTC_Frame*);
 void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline);
 // from the beginning of the first received audio frame to now, in microseconds
-int64_t estimateAudioMasterClockUs(std::shared_ptr<AudioPlaybackPipeline> pipeline);
 
 #endif

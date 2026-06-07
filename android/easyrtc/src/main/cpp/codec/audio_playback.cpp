@@ -11,7 +11,7 @@
 #include <mutex>
 #include <thread>
 
-#define OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS 500.0f
+#define OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS 60.0f
 
 static int ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline);
 
@@ -21,7 +21,7 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
                                                       int32_t numFrames) {
   auto *pipeline = static_cast<AudioPlaybackPipeline *>(userData);
   if (!pipeline || pipeline->stopped.load()) {
-    LOGW("[AUDIO] play callback with pipeline stopped or null, stopping "
+    LOGW("[IA] play callback with pipeline stopped or null, stopping "
          "playback");
     return AAUDIO_CALLBACK_RESULT_STOP;
   }
@@ -34,9 +34,9 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
   auto millis = avail * 1000.0f /
                 static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
                                    AudioPlaybackPipeline::CHANNEL_COUNT);
-  FLOGI("[AUDIO] play callback with numFrames:%d, available samples %d, "
-        "buffered %f ms",
-        numFrames, avail, millis);
+  FLOGI(
+      "[IA] play callback with numFrames:%d, available samples %d, cache %f ms",
+      numFrames, avail, millis);
   bool exitFromLackOfPcmState = false;
   if (pipeline->lack_of_pcm_ && millis > OUT_LACK_OF_PCM_MODE_WATER_LEVEL_MS &&
       avail > numSamples) {
@@ -46,7 +46,7 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
 
   if (pipeline->lack_of_pcm_) {
     memset(output, 0, requestedBytes);
-    // LOGI("[AUDIO] in lack_of_pcm state, ignore %d request, with available:%d "
+    // LOGI("[IA] in lack_of_pcm state, ignore %d request, with available:%d "
     //      "in buffer",
     //      requestedBytes, avail);
     return AAUDIO_CALLBACK_RESULT_CONTINUE;
@@ -70,7 +70,7 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
         float ratio = static_cast<float>(fadeOutFrames - i) / fadeOutFrames;
         fadeOutStart[i] = static_cast<int16_t>(fadeOutStart[i] * ratio);
       }
-      LOGI("[AUDIO] Enter lack_of_pcm state, read %d/%d "
+      LOGI("[IA] Enter lack_of_pcm state, read %d/%d "
            "samples, requested %d samples, fadeOut applied for last %d frames",
            read, avail, numSamples, fadeOutFrames);
       memset(output + readBytesOffset, 0, requestedBytes - readBytesOffset);
@@ -83,7 +83,7 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
       assert(fadeInBytes % 2 == 0);
       auto _pcm = static_cast<int16_t *>(audioData);
       auto fadeInStart = _pcm;
-      LOGW("[AUDIO] Exit lack_of_pcm state. read %d/%d, numSamples:%d, "
+      LOGW("[IA] Exit lack_of_pcm state. read %d/%d, numSamples:%d, "
            "FadeIn with %d frames",
            read, avail, numSamples, fadeInFrames);
       for (int32_t i = 0; i < fadeInFrames; i++) {
@@ -100,7 +100,7 @@ static void playbackErrorCallback(AAudioStream *stream, void *userData,
                                   aaudio_result_t error) {
   //  AAudio playback error: -899 when setSpeakerphoneOn
   if (error == AAUDIO_ERROR_DISCONNECTED) {
-    LOGW("[AUDIO] AAudio playback stream disconnected");
+    LOGW("[IA] AAudio playback stream disconnected");
     auto *pipeline = static_cast<AudioPlaybackPipeline *>(userData);
     if (!pipeline) {
       return;
@@ -136,8 +136,7 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
     }
   }
 
-  LOGI("[AUDIO] AudioPlaybackOpen: %dHz %dch",
-       AudioPlaybackPipeline::SAMPLE_RATE,
+  LOGI("[IA] AudioPlaybackOpen: %dHz %dch", AudioPlaybackPipeline::SAMPLE_RATE,
        AudioPlaybackPipeline::CHANNEL_COUNT);
 
   AAudioStreamBuilder *builder = nullptr;
@@ -193,7 +192,7 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   }
 
   pipeline->playing.store(true);
-  LOGI("[AUDIO] AudioPlaybackOpen: SUCCESS stream=%p", stream);
+  LOGI("[IA] AudioPlaybackOpen: SUCCESS stream=%p", stream);
   return 0;
 }
 
@@ -204,7 +203,7 @@ std::shared_ptr<AudioPlaybackPipeline> audioPlaybackCreate(int audioCodec) {
       sonicCreateStream(AudioPlaybackPipeline::SAMPLE_RATE,
                         AudioPlaybackPipeline::CHANNEL_COUNT),
       sonicDestroyStream);
-  LOGI("[AUDIO] AudioPlaybackCreate: sonic=%p", pipeline->sonicStream.get());
+  LOGI("[IA] AudioPlaybackCreate: sonic=%p", pipeline->sonicStream.get());
   return pipeline;
 }
 
@@ -241,7 +240,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
   const auto ptsUs = AUDIO_SAMPLES_TO_US(pipeline->playedFrames, AudioPlaybackPipeline::SAMPLE_RATE);
   pipeline->playedFrames += pcm.size() / AudioPlaybackPipeline::CHANNEL_COUNT;
   if (!pipeline->playing.load()) {
-    LOGI("[AUDIO] AudioPlaybackEnqueueFrame: not playing, trying to start stream");
+    LOGI("[IA] AudioPlaybackEnqueueFrame: not playing, trying to start stream");
     ensureStreamCreated(pipeline);
   }
 
@@ -250,7 +249,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
     // test sleep to simulate slow decoding and see if sonic can speed up the playback
     static int64_t _idx = 0;
     if (_idx++ % 500 == 0) {
-      LOGI("[AUDIO] Simulating slow decoding...");
+      LOGI("[IA] Simulating slow decoding...");
       std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
   }
@@ -262,23 +261,23 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
                 static_cast<float>(AudioPlaybackPipeline::SAMPLE_RATE *
                                    AudioPlaybackPipeline::CHANNEL_COUNT);
   auto const speed = calcSpeed(millis);
-  FLOGI("[AUDIO] change speed from %.2f to %.2f, buffered %f ms",
+  FLOGI("[IA] change speed from %.2f to %.2f, buffered %f ms",
         sonicGetSpeed(pipeline->sonicStream.get()), speed, millis);
   sonicSetSpeed(pipeline->sonicStream.get(), speed);
   int samples = static_cast<int>(pcm.size());
   int written =
       sonicWriteShortToStream(pipeline->sonicStream.get(), pcm.data(), samples);
   int buffered = sonicSamplesAvailable(pipeline->sonicStream.get());
-  FLOGI("[AUDIO] SonicEnqueue: wrote samples=%d buffered samples=%d "
-           "speed=%.2f, sampleUs:%lld",
-           samples, buffered, pipeline->currentSpeed, ptsUs);
+  FLOGI("[IA] SonicEnqueue: wrote samples=%d buffered samples=%d "
+        "speed=%.2f, sampleUs:%lld",
+        samples, buffered, pipeline->currentSpeed, ptsUs);
 }
 
 void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
   if (!pipeline)
     return;
 
-  LOGI("[AUDIO] AudioPlaybackClose: stream=%p", pipeline->stream);
+  LOGI("[IA] AudioPlaybackClose: stream=%p", pipeline->stream);
 
   pipeline->stopped.store(true);
   pipeline->playing.store(false);
@@ -293,13 +292,18 @@ void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
     AAudioStream_requestStop(stream);
     AAudioStream_close(stream);
   }
-  LOGI("[AUDIO] AudioPlaybackClose: DONE");
+  LOGI("[IA] AudioPlaybackClose: DONE");
 }
 
-int64_t estimateAudioMasterClockUs(std::shared_ptr<AudioPlaybackPipeline> pipeline)
-{
-  if (!pipeline) {
-    return -1;
-  }
-  return AUDIO_SAMPLES_TO_US(pipeline->playedFrames - sonicSamplesAvailable(pipeline->sonicStream.get()), AudioPlaybackPipeline::SAMPLE_RATE);
+int64_t AudioPlaybackPipeline::master_clock_us() {
+  assert(sonicStream);
+  return AUDIO_SAMPLES_TO_US(playedFrames -
+                                 sonicSamplesAvailable(sonicStream.get()),
+                             AudioPlaybackPipeline::SAMPLE_RATE);
+}
+
+int64_t AudioPlaybackPipeline::cached_us() {
+  assert(sonicStream);
+  return sonicSamplesAvailable(sonicStream.get()) * 1000000LL /
+         (SAMPLE_RATE * CHANNEL_COUNT);
 }
