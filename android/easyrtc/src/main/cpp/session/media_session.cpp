@@ -456,7 +456,7 @@ static int mediaTransceiverCallback(void *userPtr,
                 if (session->statsReporter) {
                     session->statsReporter->accumulateAudioBytes(frame->size);
                 }
-                audioPlaybackEnqueueFrame(session->audioPlayback, frame);
+                audioPlaybackEnqueueFrame(session, frame);
                 if (session->videoDecoder) {
                     session->videoDecoder->audio_master_clock_us_from_begining_to_now = session->audioPlayback->master_clock_us();
                     session->videoDecoder->audio_cached_us_ = session->audioPlayback->cached_us();
@@ -1232,7 +1232,7 @@ Java_cn_easyrtc_media_MediaSession_nativeReleasePeerConnection(
     // 2. Stop recv pipeline (audio playback, video decoder)
     LOGI("[CRITICAL] StopRecv: releasing audio playback and video decoder");
     if (session->audioPlayback) {
-        audioPlaybackRelease(session->audioPlayback);
+        audioPlaybackRelease(session);
         session->audioPlayback = nullptr;
     }
     if (session->videoDecoder) {

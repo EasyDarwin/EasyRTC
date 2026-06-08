@@ -19,12 +19,13 @@ static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
                                                       void *userData,
                                                       void *audioData,
                                                       int32_t numFrames) {
-  auto *pipeline = static_cast<AudioPlaybackPipeline *>(userData);
-  if (!pipeline || pipeline->stopped.load()) {
-    LOGW("[IA] play callback with pipeline stopped or null, stopping "
-         "playback");
+  auto *session = static_cast<MediaSession *>(userData);
+  assert(session);
+  if (session->shuttingDown || !session->audioPlayback || session->audioPlayback->stopped.load()) {
+    LOGW("[IA] play callback with pipeline stopped or null, stopping playback");
     return AAUDIO_CALLBACK_RESULT_STOP;
   }
+  auto *pipeline = session->audioPlayback.get();
   const int32_t numSamples = numFrames * pipeline->CHANNEL_COUNT;
   int32_t requestedBytes = numSamples * sizeof(int16_t);
   auto *output = static_cast<uint8_t *>(audioData);
@@ -101,20 +102,20 @@ static void playbackErrorCallback(AAudioStream *stream, void *userData,
   //  AAudio playback error: -899 when setSpeakerphoneOn
   if (error == AAUDIO_ERROR_DISCONNECTED) {
     LOGW("[IA] AAudio playback stream disconnected");
-    auto *pipeline = static_cast<AudioPlaybackPipeline *>(userData);
-    if (!pipeline) {
-      return;
-    }
+    auto *session = static_cast<MediaSession *>(userData);
+    assert(session);
+    auto pipeline = session->audioPlayback;
+    if (pipeline)
+      pipeline->playing.store(false);
 
-    pipeline->playing.store(false);
-
-    std::thread myThread([pipeline]() {
-      std::lock_guard<std::mutex> lock(pipeline->streamMutex);
-      if (pipeline->stream) {
-        AAudioStream_requestStop(pipeline->stream);
-        AAudioStream_close(pipeline->stream);
+    std::thread myThread([pipeline, stream]() {
+      LOGI("AAudioStream_requestStop the stream in error callback");
+      AAudioStream_requestStop(stream);
+      LOGI("AAudioStream_close the stream in error callback");
+      AAudioStream_close(stream);
+      LOGI("AAudioStream_close done in error callback");
+      if (pipeline)
         pipeline->stream = nullptr;
-      }
     });
     myThread.detach(); // Don't wait for the thread to finish.
     return;
@@ -123,12 +124,12 @@ static void playbackErrorCallback(AAudioStream *stream, void *userData,
   assert(false);
 }
 
-static int
-ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
-  if (!pipeline || pipeline->stopped.load()) {
+static int ensureStreamCreated(MediaSession *session) {
+  assert(session);
+  if (session->shuttingDown || !session->audioPlayback ||
+      session->audioPlayback->stopped.load())
     return -1;
-  }
-
+  auto pipeline = session->audioPlayback;
   {
     std::lock_guard<std::mutex> lock(pipeline->streamMutex);
     if (pipeline->stream) {
@@ -157,10 +158,8 @@ ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
                                          AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
   AAudioStreamBuilder_setUsage(builder, AAUDIO_USAGE_VOICE_COMMUNICATION);
   AAudioStreamBuilder_setContentType(builder, AAUDIO_CONTENT_TYPE_SPEECH);
-  AAudioStreamBuilder_setDataCallback(builder, playbackCallback,
-                                      pipeline.get());
-  AAudioStreamBuilder_setErrorCallback(builder, playbackErrorCallback,
-                                       pipeline.get());
+  AAudioStreamBuilder_setDataCallback(builder, playbackCallback, session);
+  AAudioStreamBuilder_setErrorCallback(builder, playbackErrorCallback, session);
 
   AAudioStream *stream = nullptr;
   result = AAudioStreamBuilder_openStream(builder, &stream);
@@ -227,8 +226,10 @@ double calcSpeed(double delta_ms) {
   }
 }
 
-void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
-                               const EasyRTC_Frame*frame) {
+void audioPlaybackEnqueueFrame(MediaSession *session,
+                               const EasyRTC_Frame *frame) {
+  assert(session);
+  auto pipeline = session->audioPlayback;
   const uint8_t *data = frame->frameData;
   int32_t size = frame->size;
   if (!pipeline || pipeline->stopped.load() || size <= 0)
@@ -241,7 +242,7 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
   pipeline->playedFrames += pcm.size() / AudioPlaybackPipeline::CHANNEL_COUNT;
   if (!pipeline->playing.load()) {
     LOGI("[IA] AudioPlaybackEnqueueFrame: not playing, trying to start stream");
-    ensureStreamCreated(pipeline);
+    ensureStreamCreated(session);
   }
 
 #if 0
@@ -273,7 +274,9 @@ void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline,
         samples, buffered, pipeline->currentSpeed, ptsUs);
 }
 
-void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline) {
+void audioPlaybackRelease(MediaSession *session) {
+  assert(session);
+  auto pipeline = session->audioPlayback;
   if (!pipeline)
     return;
 

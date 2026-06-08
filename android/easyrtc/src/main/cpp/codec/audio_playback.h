@@ -11,6 +11,8 @@
 #include "codec/audio_decoder.h"
 #include "sonic.h"
 
+struct MediaSession;
+
 struct AudioPlaybackPipeline {
     AAudioStream* stream = nullptr;
     std::atomic<bool> playing{false};
@@ -18,9 +20,6 @@ struct AudioPlaybackPipeline {
 
     static constexpr int32_t SAMPLE_RATE = 8000;
     static constexpr int32_t CHANNEL_COUNT = 1;
-    static constexpr float SPEED_UP_THRESHOLD_MS = 2000.0f;
-    static constexpr float CACHE_BUFFER_MS = 60.0f;
-    static constexpr float MAX_SPEED = 2.0f;
 
     AudioPlaybackPipeline() = default;
     ~AudioPlaybackPipeline() = default;
@@ -30,7 +29,6 @@ struct AudioPlaybackPipeline {
     AudioDecoderPipeline* audioDecoder{nullptr};
     std::shared_ptr<sonicStreamStruct> sonicStream{nullptr};
 
-    // std::vector<uint8_t> remaining_pcm_;
     bool lack_of_pcm_ = false;
     float currentSpeed = 1.0f;
     int64_t playedFrames = 0;
@@ -38,14 +36,11 @@ struct AudioPlaybackPipeline {
     std::mutex mutex_;
 
     int64_t master_clock_us();
-
     int64_t cached_us();
-
 };
 
 std::shared_ptr<AudioPlaybackPipeline> audioPlaybackCreate(int audioCodec);
-void audioPlaybackEnqueueFrame(std::shared_ptr<AudioPlaybackPipeline> pipeline, const EasyRTC_Frame*);
-void audioPlaybackRelease(std::shared_ptr<AudioPlaybackPipeline> pipeline);
-// from the beginning of the first received audio frame to now, in microseconds
+void audioPlaybackEnqueueFrame(MediaSession *session, const EasyRTC_Frame*);
+void audioPlaybackRelease(MediaSession *session);
 
 #endif

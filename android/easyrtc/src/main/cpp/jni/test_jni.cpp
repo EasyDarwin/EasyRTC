@@ -35,6 +35,7 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
     videoDecoderStart(&session);
 
     auto audioPlayback = audioPlaybackCreate(5);
+    session.audioPlayback = audioPlayback;
 
     #if 1
     auto pcm_f = fopen("/sdcard/Android/data/cn.easydarwin.easyrtc/files/easyrtc_av_pcm2.pcm", "wb");
@@ -66,13 +67,13 @@ Java_cn_easydarwin_easyrtc_DecoderPlaybackTest_nativeReplayFrames(
             frame.frameData = f.data.data();
             frame.size = static_cast<int32_t>(f.data.size());
             frame.presentationTs = f.ptsUs * 10; // convert back to 100ns ticks
-            audioPlaybackEnqueueFrame(audioPlayback, &frame);
+            audioPlaybackEnqueueFrame(&session, &frame);
         }
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    audioPlaybackRelease(audioPlayback);
+    audioPlaybackRelease(&session);
     videoDecoderRelease(decoder);
     if (pcm_f) fclose(pcm_f);
 }
