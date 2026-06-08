@@ -77,8 +77,10 @@ class WebSocketService : Service() {
                 override fun onTypeAndData(type: Int, data: ByteArray) {
                     val uuid = manager.byteArrayToUuid(data.copyOfRange(8, 24))
                     if (HPREQGETWEBRTCOFFERINFO == type) {
+                        AppLogStore.appendRaw("WS recv incoming: $uuid")
                         _events.postValue(Event.IncomingCall(uuid, data))
                     } else if (HPNTIWEBRTCOFFERINFO2 == type) {
+                        AppLogStore.appendRaw("WS recv calling out: $uuid")
                         _events.postValue(Event.IncomingCall(uuid, data, true))
                     }
                 }

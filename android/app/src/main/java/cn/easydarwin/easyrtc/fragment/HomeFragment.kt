@@ -65,6 +65,7 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
     private var userList: List<EasyRTCUser> = emptyList()
 
     private var activeSessionUser: String? = null
+    private var isHandlingIncomingCall = false
 
     private var bandwidthTV: TextView? = null
 
@@ -118,12 +119,17 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
 
         (activity as? MainActivity)?.incomingCallLiveData?.observe(viewLifecycleOwner) { event ->
             if (event.handled) return@observe
+            if (isHandlingIncomingCall) {
+                appendLog("来电: ${event.uuid}, 已在连接中，忽略！")
+                return@observe
+            }
             event.handled = true
             activeSessionUser = event.uuid
             tvFragmentUUID.text = "来电: ${event.uuid}"
             session.releasePeerConnection()
-            appendLog("来电: ${event.uuid}")
-            view.post {
+            appendLog("来电: ${event.uuid}, 连接中")
+            isHandlingIncomingCall = view.post {
+                isHandlingIncomingCall = false
                 val ws = webSocketService
                 if (BuildConfig.DEBUG) check(ws != null) { "webSocketService is null when handling incoming call" }
                 if (ws == null) return@post
@@ -164,8 +170,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
                     tvFragmentUUID.text = "${SPUtil.getInstance().rtcUserUUID} [连接中...]"
                 }
                 is LiveUiState.Connected -> {
-                    appendLog2("------------------------------")
-                    appendLog2("------------------------------")
                     appendLog("连接成功")
                     appendLog("连接模式: ${state.connectionType}")
                     endCallButton.visibility = View.VISIBLE
@@ -347,7 +351,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
             if (json.getInt("status") == 0) {
                 requireActivity().runOnUiThread {
                     appendLog(json.getString("msg"))
-                    AppLogStore.appendTimestamped("长按日志 复制当前日志！！！")
                 }
             } else appendLog("登录失败！")
         }
@@ -366,7 +369,6 @@ class HomeFragment : BaseRtcMediaFragment(), TextureView.SurfaceTextureListener 
         }
     }
 
-    private fun appendLog2(message: String) { AppLogStore.appendRaw("$message \n"); CallLog.append(message) }
     private fun appendLog(message: String) { AppLogStore.appendTimestamped(message); CallLog.append(message) }
 
     private fun updateOnlineUsers(users: List<EasyRTCUser>) { userList = users }
