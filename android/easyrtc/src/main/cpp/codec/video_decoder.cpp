@@ -192,16 +192,40 @@ int videoDecoderStart(MediaSession *session) {
                 int64_t codec_queue_cache_us = last_enqueue_time_us - last_dequeue_time_us;
                 const int64_t total_cache_us = pipeline->frameQueue.cached_us() + codec_queue_cache_us;
                 const auto fixedSleepUs = fixSleepTime(sleepUs, total_cache_us, pipeline->audio_cached_us_);
-                if (fixedSleepUs > 0) {
-                    auto _begin = std::chrono::steady_clock::now();
-                    sleepInterruptibleUs(fixedSleepUs, [&]() {
+                if (fixedSleepUs > 0 && false) {
+                  auto _begin = std::chrono::steady_clock::now();
+                  sleepInterruptibleUs(
+                      fixedSleepUs, [&]() {
                         const int64_t masterClockDurationUs = getMonoUs() - firstSystemUs;
                         const auto delta_us_to_master = (ptsDurationUs - masterClockDurationUs);
                         return !pipeline->running.load() || delta_us_to_master < 10000;
-                    });
-                    auto _dur = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - _begin).count();
-                    FLOGI("[IV] actual/fixed/normal:%lld/%lld/%lld, actual-fixed:%lld, packet_cache=%lld, codec_cache=%lld, total_cache_us=%lld", 
-                        _dur, fixedSleepUs, sleepUs, _dur - fixedSleepUs, pipeline->frameQueue.cached_us(), codec_queue_cache_us, total_cache_us);
+                      });
+                  auto _dur =
+                      std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - _begin)
+                          .count();
+                  FLOGI("[IV] actual/fixed/normal:%lld/%lld/%lld, "
+                        "actual-fixed:%lld, packet_cache=%lld, "
+                        "codec_cache=%lld, total_cache_us=%lld",
+                        _dur, fixedSleepUs, sleepUs, _dur - fixedSleepUs,
+                        pipeline->frameQueue.cached_us(), codec_queue_cache_us,
+                        total_cache_us);
+                }
+                if (fixedSleepUs > 0) {
+                  auto _begin = std::chrono::steady_clock::now();
+                  std::this_thread::sleep_until(
+                      std::chrono::steady_clock::now() +
+                      std::chrono::microseconds(fixedSleepUs));
+                  auto _dur =
+                      std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - _begin)
+                          .count();
+                  FLOGI("[IV] actual/fixed/normal:%lld/%lld/%lld, "
+                        "actual-fixed:%lld, packet_cache=%lld, "
+                        "codec_cache=%lld, total_cache_us=%lld",
+                        _dur, fixedSleepUs, sleepUs, _dur - fixedSleepUs,
+                        pipeline->frameQueue.cached_us(), codec_queue_cache_us,
+                        total_cache_us);
                 }
                 AMediaCodec_releaseOutputBuffer(decoder, outputBufId, true);
                 pipeline->errorCount.store(0);
