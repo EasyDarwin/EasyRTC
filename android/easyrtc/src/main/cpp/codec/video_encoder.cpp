@@ -10,6 +10,8 @@
 #include <camera/NdkCameraManager.h>
 #include <camera/NdkCameraMetadataTags.h>
 #include <media/NdkMediaCodec.h>
+#include <chrono>
+#include "utils/defer.hpp"
 
 std::string findCameraId(int facing) {
     ACameraManager* mgr = ACameraManager_create();
@@ -114,7 +116,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
     assert(session && "Invalid session");
     assert(session->videoEncoder);
     auto* pipeline = session->videoEncoder.get();
-    LOGI("[VO] Output thread started");
+    LOGI("[OV] Output thread started");
 
     while (pipeline->running.load() && !session->shuttingDown.load()) {
         if (!pipeline->encoder) {
@@ -127,9 +129,9 @@ void MediaPipeline::startEncoder(MediaSession *session)
             media_status_t requestStatus = AMediaCodec_setParameters(pipeline->encoder, params);
             AMediaFormat_delete(params);
             if (requestStatus != AMEDIA_OK) {
-                LOGW("[VO] request-sync failed: status=%d", requestStatus);
+                LOGW("[OV] request-sync failed: status=%d", requestStatus);
             } else {
-                LOGI("[VO] request-sync applied on output thread");
+                LOGI("[OV] request-sync applied on output thread");
             }
         }
 
@@ -173,7 +175,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
         const bool isConnected = (session->connectState == 3);
 
         if (frame.flags == EASYRTC_FRAME_FLAG_KEY_FRAME) {
-            LOGI("[VO] Output key frame: size=%u, pts=%llu, preallocated buf=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
+            LOGI("[OV] Output key frame: size=%u, pts=%llu, preallocated buf=%zu", frame.size, static_cast<unsigned long long>(frame.presentationTs), pipeline->sps_pps_buffer.size());
             if (pipeline->sps_pps_size > 0) {
                 pipeline->sps_pps_buffer.resize(pipeline->sps_pps_size);
                 // let's expand the sps_pps_buffer, and append the current frame data after it, then send the combined buffer to the peer, so that the decoder on the peer side can get the sps/pps before decoding the key frame
@@ -197,17 +199,27 @@ void MediaPipeline::startEncoder(MediaSession *session)
         }
 
         // LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
-        int sendResult = EasyRTC_SendFrame(pipeline->transceiver, &frame);
-        if (sendResult != 0) {
-            LOGE("[VO] EasyRTC_SendFrame failed: %d, size=%u, flags=%u", sendResult, frame.size, frame.flags);
-        }else {
-            session->videoFramesSent.fetch_add(1, std::memory_order_relaxed);
-            FLOGI("[VO] EasyRTC_SendFrame success: size=%u, flags=%u, pts=%llu", frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
+        int result = 0;
+        {
+            auto begin_ = std::chrono::steady_clock::now();
+            defer({
+                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - begin_).count();
+                    if (duration > 10) {
+                        LOGW("[OV] EasyRTC_SendFrame took %lld ms", static_cast<long long>(duration));
+                    }
+                });
+            result = EasyRTC_SendFrame(pipeline->transceiver, &frame);
+            if (result != 0) {
+                LOGE("[OV] EasyRTC_SendFrame failed: %d, size=%u, flags=%u", result, frame.size, frame.flags);
+            }else {
+                session->videoFramesSent.fetch_add(1, std::memory_order_relaxed);
+                FLOGI("[OV] EasyRTC_SendFrame success: size=%u, flags=%u, pts=%llu", frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
+            }
         }
-
         AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
     }
 
-    LOGI("[VO] Output thread exiting");
+    LOGI("[OV] Output thread exiting");
     }, session);
 }

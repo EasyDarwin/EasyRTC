@@ -1,6 +1,7 @@
 #include "codec/audio_playback.h"
 #include "session/media_session.h"
 #include "session/common.h"
+#include "utils/defer.hpp"
 #include "sonic.h"
 #include <aaudio/AAudio.h>
 #include <algorithm>
@@ -18,8 +19,16 @@ static int ensureStreamCreated(std::shared_ptr<AudioPlaybackPipeline> pipeline);
 static aaudio_data_callback_result_t playbackCallback(AAudioStream *stream,
                                                       void *userData,
                                                       void *audioData,
-                                                      int32_t numFrames) {
+                                                       int32_t numFrames) {
   auto *session = static_cast<MediaSession *>(userData);
+  auto begin_ = std::chrono::steady_clock::now();
+  defer({
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now() - begin_).count();
+      if (duration > 10) {
+          LOGW("[IA] callback took %lld ms", static_cast<long long>(duration));
+      }
+  });
   assert(session);
   if (session->shuttingDown || !session->audioPlayback || session->audioPlayback->stopped.load()) {
     LOGW("[IA] play callback with pipeline stopped or null, stopping playback");
@@ -293,6 +302,15 @@ void audioPlaybackRelease(MediaSession *session) {
   }
   if (stream) {
     AAudioStream_requestStop(stream);
+    aaudio_result_t result = AAUDIO_OK;
+    aaudio_stream_state_t currentState = AAudioStream_getState(stream);
+    aaudio_stream_state_t inputState = currentState;
+    while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
+        LOGI("[IA] AudioPlaybackStop: waiting for stream to stop...");
+        result = AAudioStream_waitForStateChange(stream, inputState, &currentState, 100000);
+        inputState = currentState;
+        LOGI("[IA] AudioPlaybackStop: waiting for stream to stop: currentState=%d, we need stopped(%d)", currentState, AAUDIO_STREAM_STATE_STOPPED);
+    }
     AAudioStream_close(stream);
   }
   LOGI("[IA] AudioPlaybackClose: DONE");

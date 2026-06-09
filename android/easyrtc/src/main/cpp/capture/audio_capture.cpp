@@ -8,6 +8,7 @@
 #include "session/common.h"
 #include "session/media_session.h"
 #include "g711.h"
+#include "utils/defer.hpp"
 
 static constexpr int32_t SAMPLE_RATE = 8000;
 static constexpr int32_t CHANNEL_COUNT = 1;
@@ -98,8 +99,17 @@ static aaudio_data_callback_result_t dataCallback(
         void* audioData,
         int32_t numFrames) {
     auto session = static_cast<MediaSession*>(userData);
+    auto begin_ = std::chrono::steady_clock::now();
+    defer({
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - begin_).count();
+        if (duration > 10) {
+            LOGW("[OA] callback took %lld ms", static_cast<long long>(duration));
+        }
+    });
     auto* pipeline = session->audioCapture.get();
-    if (!pipeline || !pipeline->running.load()) {
+    if (session->shuttingDown || !pipeline || !pipeline->running.load()) {
+        LOGW("[AUDIO] Capture callback with pipeline stopped or null, stopping capture");
         return AAUDIO_CALLBACK_RESULT_STOP;
     }
 
@@ -122,20 +132,33 @@ static aaudio_data_callback_result_t dataCallback(
         clock_gettime(CLOCK_MONOTONIC, &ts);
         pts100ns = static_cast<UINT64>((ts.tv_sec * 1000000000LL + ts.tv_nsec) / 100);
     }
-    FLOGI("[AO] PCM callback frames=%d, size=%d, pts100ns=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts100ns));
+    FLOGI("[OA] PCM callback frames=%d, size=%d, pts100ns=%llu", numFrames, dataSize, static_cast<unsigned long long>(pts100ns));
 
 #if 1
-    // first let's convert PCM into PCMA
-    for (int i = 0; i < numFrames * CHANNEL_COUNT; ++i) {
-        int16_t sample = reinterpret_cast<int16_t*>(pcmData)[i];
-        uint8_t encodedSample;
-        if (sample >= 0) {
-            encodedSample = (sample >> 8) + 128;
-        } else {
-            encodedSample = 256 - ((-sample) >> 8);
+    {
+        auto begin_ = std::chrono::steady_clock::now();
+        defer({
+                  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - begin_).count();
+                  if (duration > 10) {
+                      LOGW("[OA] linear2alaw took %lld ms", static_cast<long long>(duration));
+                  }
+        });
+
+        // first let's convert PCM into PCMA
+        for (int i = 0; i < numFrames * CHANNEL_COUNT; ++i) {
+            int16_t sample = reinterpret_cast<int16_t*>(pcmData)[i];
+            uint8_t encodedSample;
+            if (sample >= 0) {
+                encodedSample = (sample >> 8) + 128;
+            } else {
+                encodedSample = 256 - ((-sample) >> 8);
+            }
+            pipeline->audioBuffer[i] = linear2alaw(sample);
         }
-        pipeline->audioBuffer[i] = linear2alaw(sample);
     }
+
+
 
     EasyRTC_Frame frame{};
     frame.version = 0;
@@ -146,12 +169,24 @@ static aaudio_data_callback_result_t dataCallback(
     frame.frameData = pipeline->audioBuffer;
     frame.trackId = session->audioTrackId;
 
-    int result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
+    int result = 0;
+    {
+        auto begin_ = std::chrono::steady_clock::now();
+        defer({
+                  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - begin_).count();
+                  if (duration > 10) {
+                      LOGW("[OA] EasyRTC_SendFrame took %lld ms", static_cast<long long>(duration));
+                  }
+              });
+        result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
+    }
+
     if (result != 0) {
         LOGE("EasyRTC_SendFrame (audio) failed: %d", result);
     }else {
         session->audioFramesSent.fetch_add(1, std::memory_order_relaxed);
-        FLOGI("[AO] EasyRTC_SendFrame (audio) success: size=%u, pts=%llu", frame.size, static_cast<unsigned long long>(frame.presentationTs));
+        FLOGI("[OA] EasyRTC_SendFrame (audio) success: size=%u, pts=%llu", frame.size, static_cast<unsigned long long>(frame.presentationTs));
     }
 #endif
 
@@ -222,57 +257,33 @@ void audioCaptureStop(MediaSession *session) {
     auto pipeline = session->audioCapture;
     if (!pipeline) return;
 
-    LOGI("[CRITICAL] AudioCaptureStop: stream=%p", pipeline->stream);
+    LOGI("[OA] AudioCaptureStop: stream=%p", pipeline->stream);
     pipeline->running.store(false);
 
     AAudioStream* stream = nullptr;
     {
-        LOGI("[CRITICAL] AudioCaptureStop: reset pipeline stream");
+        LOGI("[OA] AudioCaptureStop: reset pipeline stream");
         std::lock_guard<std::mutex> lock(pipeline->mutex);
         stream = pipeline->stream;
         pipeline->stream = nullptr;
     }
 
     if (stream) {
-        // {
-        //     AAudioStream_requestFlush(pipeline->stream);
-        //     // AAudioStream_waitForStateChange(pipeline->stream, AAUDIO_STREAM_STATE_STARTED, AAUDIO_STREAM_STATE_STOPPED, nullptr, nullptr);
-        //     aaudio_result_t result = AAUDIO_OK;
-        //     aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
-        //     aaudio_stream_state_t inputState = currentState;
-        //     while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_FLUSHED) {
-        //         result = AAudioStream_waitForStateChange(
-        //                                     pipeline->stream, inputState, &currentState, 100000);
-        //         inputState = currentState;
-        //     }
-        // }
-        {
-            LOGI("[CRITICAL] AudioCaptureStop: AAudioStream_requestStop");
-            AAudioStream_requestStop(stream);
-            // AAudioStream_waitForStateChange(pipeline->stream, AAUDIO_STREAM_STATE_STARTED, AAUDIO_STREAM_STATE_STOPPED, nullptr, nullptr);
-            // aaudio_result_t result = AAUDIO_OK;
-            // aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
-            // aaudio_stream_state_t inputState = currentState;
-            // while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
-            //     result = AAudioStream_waitForStateChange(
-            //                                 pipeline->stream, inputState, &currentState, 100000);
-            //     inputState = currentState;
-            // }
+        LOGI("[OA] AudioCaptureStop: AAudioStream_requestStop");
+        AAudioStream_requestStop(stream);
+        aaudio_result_t result = AAUDIO_OK;
+        aaudio_stream_state_t currentState = AAudioStream_getState(stream);
+        aaudio_stream_state_t inputState = currentState;
+        while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
+            LOGI("[OA] AudioCaptureStop: waiting for stream to stop...");
+            result = AAudioStream_waitForStateChange(stream, inputState, &currentState, 100000);
+            inputState = currentState;
+            LOGI("[OA] AudioCaptureStop: waiting for stream to stop: currentState=%d, we need stopped(%d)", currentState, AAUDIO_STREAM_STATE_STOPPED);
         }
-        {
-            LOGI("[CRITICAL] AudioCaptureStop: AAudioStream_close");
-            AAudioStream_close(stream);
-            // aaudio_result_t result = AAUDIO_OK;
-            // aaudio_stream_state_t currentState = AAudioStream_getState(pipeline->stream);
-            // aaudio_stream_state_t inputState = currentState;
-            // while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_CLOSED) {
-            //     result = AAudioStream_waitForStateChange(
-            //                                 pipeline->stream, inputState, &currentState, 100000);
-            //     inputState = currentState;
-            // }
-        }
+        LOGI("[OA] AudioCaptureStop: AAudioStream_close");
+        AAudioStream_close(stream);
     }
     session->audioCapture = nullptr;
 
-    LOGI("[CRITICAL] AudioCaptureStop: DONE");
+    LOGI("[OA] AudioCaptureStop: DONE");
 }
