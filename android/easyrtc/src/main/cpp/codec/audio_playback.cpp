@@ -305,12 +305,14 @@ void audioPlaybackRelease(MediaSession *session) {
     aaudio_result_t result = AAUDIO_OK;
     aaudio_stream_state_t currentState = AAudioStream_getState(stream);
     aaudio_stream_state_t inputState = currentState;
+    LOGI("[IA] AudioPlaybackStop: currentState=%d, we need stopped(%d)", currentState, AAUDIO_STREAM_STATE_STOPPED);
     while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
         LOGI("[IA] AudioPlaybackStop: waiting for stream to stop...");
         result = AAudioStream_waitForStateChange(stream, inputState, &currentState, 100000);
         inputState = currentState;
         LOGI("[IA] AudioPlaybackStop: waiting for stream to stop: currentState=%d, we need stopped(%d)", currentState, AAUDIO_STREAM_STATE_STOPPED);
     }
+    LOGI("[IA] AudioPlaybackClose: AAudioStream_close");
     AAudioStream_close(stream);
   }
   LOGI("[IA] AudioPlaybackClose: DONE");

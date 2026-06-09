@@ -274,6 +274,7 @@ void audioCaptureStop(MediaSession *session) {
         aaudio_result_t result = AAUDIO_OK;
         aaudio_stream_state_t currentState = AAudioStream_getState(stream);
         aaudio_stream_state_t inputState = currentState;
+        LOGI("[OA] AudioCaptureStop: currentState=%d, we need stopped(%d)", currentState, AAUDIO_STREAM_STATE_STOPPED);
         while (result == AAUDIO_OK && currentState != AAUDIO_STREAM_STATE_STOPPED) {
             LOGI("[OA] AudioCaptureStop: waiting for stream to stop...");
             result = AAudioStream_waitForStateChange(stream, inputState, &currentState, 100000);
