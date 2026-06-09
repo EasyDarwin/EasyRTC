@@ -111,6 +111,31 @@ bool MediaPipeline::initEncoder(MediaSession *session)
 void MediaPipeline::startEncoder(MediaSession *session)
 {
     running.store(true);
+    assert(!senderRunning.load());
+    senderRunning.store(true);
+    senderThread = std::thread([this, session]() {
+      LOGI("[OV] VideoEncoder sender thread started");
+      defer(LOGI("[OV] VideoEncoder sender thread exiting"));
+      while (senderRunning.load() && !session->shuttingDown.load()) {
+        auto *slot = sendBuf.acquirePop();
+        if (!slot) {
+          std::this_thread::sleep_for(std::chrono::microseconds(500));
+          continue;
+        }
+
+        EasyRTC_Frame frame{};
+        frame.version = 0;
+        frame.size = slot->size; // PCMA is half the size of PCM
+        frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(slot->frameFlags);
+        frame.presentationTs = slot->ptsUs;
+        frame.decodingTs = slot->dtsUs;
+        frame.frameData = const_cast<PBYTE>(slot->data());
+        frame.trackId = session->videoTrackId;
+
+        EasyRTC_SendFrame(session->videoTransceiver, &frame);
+        sendBuf.commitPop();
+      }
+    });
     outputThread = std::thread([](void *sessionPtr) {
         auto *session = reinterpret_cast<MediaSession *>(sessionPtr);
     assert(session && "Invalid session");
@@ -161,7 +186,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
         }
 
         EasyRTC_Frame frame{};
-        frame.version = 0;
+        // frame.version = 0;
         frame.size = static_cast<UINT32>(dataSize);
         frame.flags = (info.flags & 1)
                 ? EASYRTC_FRAME_FLAG_KEY_FRAME
@@ -170,7 +195,7 @@ void MediaPipeline::startEncoder(MediaSession *session)
         frame.presentationTs = static_cast<UINT64>(info.presentationTimeUs) * 10ULL;
         frame.decodingTs = frame.presentationTs;
         frame.frameData = data;
-        frame.trackId = session->videoTrackId;
+        // frame.trackId = session->videoTrackId;
 
         const bool isConnected = (session->connectState == 3);
 
@@ -198,28 +223,26 @@ void MediaPipeline::startEncoder(MediaSession *session)
             continue;
         }
 
-        // LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu", pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
-        int result = 0;
-        {
-            auto begin_ = std::chrono::steady_clock::now();
-            defer({
-                    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now() - begin_).count();
-                    if (duration > 10) {
-                        LOGW("[OV] EasyRTC_SendFrame took %lld ms", static_cast<long long>(duration));
-                    }
-                });
-            result = EasyRTC_SendFrame(pipeline->transceiver, &frame);
-            if (result != 0) {
-                LOGE("[OV] EasyRTC_SendFrame failed: %d, size=%u, flags=%u", result, frame.size, frame.flags);
-            }else {
-                session->videoFramesSent.fetch_add(1, std::memory_order_relaxed);
-                FLOGI("[OV] EasyRTC_SendFrame success: size=%u, flags=%u, pts=%llu", frame.size, frame.flags, static_cast<unsigned long long>(frame.presentationTs));
-            }
+        // LOGD("Sending frame: transceiver=%p size=%u flags=%u pts=%llu",
+        // pipeline->transceiver, frame.size, frame.flags, static_cast<unsigned
+        // long long>(frame.presentationTs));
+        if (!session->shuttingDown) {
+          auto *slot = pipeline->sendBuf.acquirePush();
+          if (slot) {
+            slot->setData(frame.frameData, frame.size);
+            slot->frameFlags = frame.flags;
+            slot->ptsUs = frame.presentationTs;
+            slot->dtsUs = frame.decodingTs;
+            pipeline->sendBuf.commitPush();
+            session->videoFramesSent.fetch_add(1, std::memory_order_relaxed);
+          }
         }
         AMediaCodec_releaseOutputBuffer(pipeline->encoder, bufIdx, false);
     }
 
     LOGI("[OV] Output thread exiting");
+    pipeline->senderRunning.store(false);
+    if (pipeline->senderThread.joinable())
+      pipeline->senderThread.join();
     }, session);
 }

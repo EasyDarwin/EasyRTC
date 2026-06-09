@@ -932,6 +932,7 @@ static void startRenderThread(MediaSession *session) {
 //        assert(attach == 0 && "Failed to attach SurfaceTexture to GL context in render thread");
         while (session->renderThreadRunning.load() && !session->shuttingDown.load()) {
             float m[16];
+            auto now = std::chrono::steady_clock::now();
                 int64_t ts = 0;
                 if (encoderGlUpdateTexImage(session->cameraInputSurfaceTexture, m, &ts)) {
                     // Keep SurfaceTexture drained, but only feed encoder when connected.
@@ -942,13 +943,14 @@ static void startRenderThread(MediaSession *session) {
                             assert(false && "Encoder render failed");
                         }
                     } else {
-                        FLOGI("[Render] thread: not connected, skipping frame");
+                        LOGI("[Render] thread: not connected, skipping frame");
                     }
                 }else {
                     // LOGE("[Render] thread updateTexImage failed");
                     // assert(false && "Encoder updateTexImage failed");
                 }
-            usleep(frameIntervalUs);
+            // usleep(frameIntervalUs);
+            std::this_thread::sleep_until(now + std::chrono::microseconds(frameIntervalUs));
         }
         assert (session->cameraInputSurfaceTexture);
         LOGI("[Render] thread: detaching SurfaceTexture");

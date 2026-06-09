@@ -13,7 +13,7 @@
 #include <functional>
 #include "session/media_session.h"
 #include "util/video.hpp"
-
+#include "util/sleep.hpp"
 namespace {
 std::atomic<uint64_t> gDecQueued{0};
 std::atomic<uint64_t> gDecRendered{0};
@@ -85,31 +85,6 @@ int64_t getMonoUs() {
         steady_clock::now().time_since_epoch()
     ).count() - _start_us);
 }
-
-static void sleepInterruptibleUs(int64_t targetSleepUs,
-                                 const std::function<bool()> &shouldBreak) {
-    if (targetSleepUs <= 0) {
-        return;
-    }
-    static constexpr int64_t kMaxSleepUsPerSlice = 2000;
-    const auto sleepStart = std::chrono::steady_clock::now();
-
-    while (true) {
-        if (shouldBreak && shouldBreak()) {
-            break;
-        }
-        const auto now = std::chrono::steady_clock::now();
-        const auto elapsedUs = std::chrono::duration_cast<std::chrono::microseconds>(
-                now - sleepStart).count();
-        if (elapsedUs >= targetSleepUs) {
-            break;
-        }
-        const int64_t remainingUs = targetSleepUs - elapsedUs;
-        const int64_t sliceUs = std::min(remainingUs, kMaxSleepUsPerSlice);
-        std::this_thread::sleep_for(std::chrono::microseconds(sliceUs));
-    }
-}
-
 
 std::shared_ptr<VideoDecoderPipeline> videoDecoderCreate(ANativeWindow* surface, int codecType, int width, int height) {
     auto pipeline = std::make_shared<VideoDecoderPipeline>();
@@ -341,7 +316,7 @@ int videoDecoderStart(MediaSession *session) {
             auto packet = pipeline->frameQueue.acquirePop();
             if (!packet) {
                 sleepInterruptibleUs(1000, [&]() {
-                    return !pipeline->running.load();
+                    return !pipeline->running.load() || session->shuttingDown.load();
                 });
                 continue;
             }

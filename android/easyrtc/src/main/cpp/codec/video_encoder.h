@@ -9,6 +9,7 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include "util/packet.hpp"
 struct MediaSession;
 struct MediaPipeline {
     AMediaCodec* encoder = nullptr;
@@ -27,6 +28,10 @@ struct MediaPipeline {
     int sps_pps_size{0};
     std::recursive_mutex mutex;
     std::string mime;
+
+    easyrtc::SpscRingBuffer<Packet8K> sendBuf{64};
+    std::atomic<bool> senderRunning{false};
+    std::thread senderThread;
 
     MediaPipeline() = default;
     MediaPipeline(const MediaPipeline&) = delete;

@@ -13,6 +13,12 @@
 static constexpr int32_t SAMPLE_RATE = 8000;
 static constexpr int32_t CHANNEL_COUNT = 1;
 
+static constexpr int32_t FRAMES_PER_CALLBACK = SAMPLE_RATE / 100 * 2; // 20ms
+static constexpr int32_t SAMPLES_PER_CALLBACK =
+    FRAMES_PER_CALLBACK * CHANNEL_COUNT;
+static constexpr int32_t BYTES_PER_CALLBACK =
+    SAMPLES_PER_CALLBACK * sizeof(int16_t);
+
 static aaudio_data_callback_result_t dataCallback(
     AAudioStream* stream,
     void* userData,
@@ -49,7 +55,7 @@ static int openAndStartCaptureStream(MediaSession* session,
     AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
     AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
     AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-    AAudioStreamBuilder_setFramesPerDataCallback(builder, SAMPLE_RATE / 100 * 2);  // 20ms
+    AAudioStreamBuilder_setFramesPerDataCallback(builder,FRAMES_PER_CALLBACK); // 20ms
     AAudioStreamBuilder_setInputPreset(builder, AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION);
     AAudioStreamBuilder_setDataCallback(builder, dataCallback, session);
     AAudioStreamBuilder_setErrorCallback(builder, errorCallback, session);
@@ -89,7 +95,7 @@ static int openAndStartCaptureStream(MediaSession* session,
         }
         pipeline->stream = stream;
     }
-    LOGI("[CRITICAL] AudioCaptureStart: SUCCESS stream=%p", stream);
+    LOGI("[OA] AudioCaptureStart: SUCCESS stream=%p", stream);
     return 0;
 }
 
@@ -116,9 +122,14 @@ static aaudio_data_callback_result_t dataCallback(
     if (!pipeline->audioTransceiver || session->connectState != 3) {
         return AAUDIO_CALLBACK_RESULT_CONTINUE;
     }
+    if (numFrames != FRAMES_PER_CALLBACK) {
+      LOGW("[OA] callback with unexpected numFrames: %d", numFrames);
+      assert(false && "Unexpected numFrames in audio callback");
+      return AAUDIO_CALLBACK_RESULT_CONTINUE;
+    }
 
-    int32_t dataSize = numFrames * CHANNEL_COUNT * sizeof(int16_t);
-    auto* pcmData = static_cast<PBYTE>(audioData);
+    int32_t dataSize = BYTES_PER_CALLBACK;
+    auto *pcmData = static_cast<int16_t *>(audioData);
 
     int64_t frameIndex = 0;
     int64_t timeNanos = 0;
@@ -146,47 +157,29 @@ static aaudio_data_callback_result_t dataCallback(
         });
 
         // first let's convert PCM into PCMA
-        for (int i = 0; i < numFrames * CHANNEL_COUNT; ++i) {
-            int16_t sample = reinterpret_cast<int16_t*>(pcmData)[i];
-            uint8_t encodedSample;
-            if (sample >= 0) {
-                encodedSample = (sample >> 8) + 128;
-            } else {
-                encodedSample = 256 - ((-sample) >> 8);
-            }
-            pipeline->audioBuffer[i] = linear2alaw(sample);
+        for (int i = 0; i < SAMPLES_PER_CALLBACK; ++i) {
+          int16_t sample = pcmData[i];
+          uint8_t encodedSample;
+          if (sample >= 0) {
+            encodedSample = (sample >> 8) + 128;
+          } else {
+            encodedSample = 256 - ((-sample) >> 8);
+          }
+          pipeline->audioBuffer[i] = linear2alaw(sample);
         }
     }
-
-
-
-    EasyRTC_Frame frame{};
-    frame.version = 0;
-    frame.size = static_cast<UINT32>(dataSize >> 1); // PCMA is half the size of PCM
-    frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(EASYRTC_FRAME_FLAG_KEY_FRAME);
-    frame.presentationTs = pts100ns;
-    frame.decodingTs = pts100ns;
-    frame.frameData = pipeline->audioBuffer;
-    frame.trackId = session->audioTrackId;
-
-    int result = 0;
-    {
-        auto begin_ = std::chrono::steady_clock::now();
-        defer({
-                  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::steady_clock::now() - begin_).count();
-                  if (duration > 10) {
-                      LOGW("[OA] EasyRTC_SendFrame took %lld ms", static_cast<long long>(duration));
-                  }
-              });
-        result = EasyRTC_SendFrame(pipeline->audioTransceiver, &frame);
-    }
-
-    if (result != 0) {
-        LOGE("EasyRTC_SendFrame (audio) failed: %d", result);
-    }else {
+    if (!session->shuttingDown) {
+      auto *slot = pipeline->sendBuf.acquirePush();
+      if (slot) {
+        slot->setData(pipeline->audioBuffer, dataSize >> 1);
+        slot->frameFlags =
+            static_cast<EasyRTC_FRAME_FLAGS>(EASYRTC_FRAME_FLAG_KEY_FRAME);
+        slot->ptsUs = pts100ns;
+        slot->dtsUs = pts100ns;
+        // memcpy(slot->data, frame.frameData, frame.size);
+        pipeline->sendBuf.commitPush();
         session->audioFramesSent.fetch_add(1, std::memory_order_relaxed);
-        FLOGI("[OA] EasyRTC_SendFrame (audio) success: size=%u, pts=%llu", frame.size, static_cast<unsigned long long>(frame.presentationTs));
+      }
     }
 #endif
 
@@ -249,6 +242,29 @@ int audioCaptureStart(MediaSession* session) {
         pipeline->running.store(false);
         return -1;
     }
+    assert(!pipeline->senderRunning.load());
+    pipeline->senderRunning.store(true);
+    pipeline->senderThread = std::thread([session, pipeline]() {
+      LOGI("[OA] AudioCapture sender thread started");
+      defer(LOGI("[OA] AudioCapture sender thread exiting"));
+      while (pipeline->senderRunning.load() && !session->shuttingDown.load()) {
+        auto *slot = pipeline->sendBuf.acquirePop();
+        if (!slot) {
+          std::this_thread::sleep_for(std::chrono::microseconds(500));
+          continue;
+        }
+        EasyRTC_Frame frame{};
+        frame.version = 0;
+        frame.size = slot->size; // PCMA is half the size of PCM
+        frame.flags = static_cast<EasyRTC_FRAME_FLAGS>(slot->frameFlags);
+        frame.presentationTs = slot->ptsUs;
+        frame.decodingTs = slot->dtsUs;
+        frame.frameData = const_cast<PBYTE>(slot->data());
+        frame.trackId = session->audioTrackId;
+        EasyRTC_SendFrame(session->audioTransceiver, &frame);
+        pipeline->sendBuf.commitPop();
+      }
+    });
     return 0;
 }
 
@@ -284,6 +300,9 @@ void audioCaptureStop(MediaSession *session) {
         LOGI("[OA] AudioCaptureStop: AAudioStream_close");
         AAudioStream_close(stream);
     }
+    pipeline->senderRunning.store(false);
+    if (pipeline->senderThread.joinable())
+      pipeline->senderThread.join();
     session->audioCapture = nullptr;
 
     LOGI("[OA] AudioCaptureStop: DONE");

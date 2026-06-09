@@ -6,6 +6,8 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <thread>
+#include "util/packet.hpp"
 
 struct MediaSession;
 struct AudioCapturePipeline {
@@ -16,6 +18,10 @@ struct AudioCapturePipeline {
     std::atomic<bool> running{false};
     std::mutex mutex;
     bool connectionReady = false;
+
+    easyrtc::SpscRingBuffer<Packet256> sendBuf{8};
+    std::atomic<bool> senderRunning{false};
+    std::thread senderThread;
 
     AudioCapturePipeline() = default;
     ~AudioCapturePipeline() = default;

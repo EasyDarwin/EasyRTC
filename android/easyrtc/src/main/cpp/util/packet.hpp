@@ -6,13 +6,16 @@
 #include <vector>
 #include "session/common.h"
 #include "utils/ringbuffer.hpp"
+#include "util/logger.h"
 
-struct Packet {
-  static constexpr size_t FIXED_SIZE = 4096;
+template <size_t Size>
+struct PacketT {
+  static constexpr size_t FIXED_SIZE = Size;
   alignas(16) uint8_t fixedBuf[FIXED_SIZE] = {};
   std::vector<uint8_t> heapBuf;
   uint32_t size = 0;
   int64_t ptsUs = 0;
+  int64_t dtsUs = 0;
   uint32_t frameFlags = 0;
   uint32_t  index = 0;
 
@@ -42,6 +45,10 @@ struct Packet {
     }
   }
 };
+using Packet256 = PacketT<256>;
+using Packet = PacketT<4096>;
+using Packet8K = PacketT<8192>;
+using Packet16K = PacketT<16384>;
 
 class PacketRingBuffer : public easyrtc::SpscRingBuffer<Packet> {
 public:

@@ -4,6 +4,7 @@
 #include <cassert>
 #include <chrono>
 #include <jni.h>
+#include <thread>
 
 TransceiverStatsReporter::TransceiverStatsReporter(MediaSession *session)
     : session_(session) {
@@ -72,8 +73,7 @@ uint32_t TransceiverStatsReporter::totalKbpsX100() const {
 
 void TransceiverStatsReporter::reportLoop() {
   auto lastReportTime = std::chrono::steady_clock::now();
-  while (running_.load()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+  while (running_.load() && session_ && !session_->shuttingDown.load()) {
     if (!running_.load()) {
       break;
     }
@@ -86,6 +86,7 @@ void TransceiverStatsReporter::reportLoop() {
       reportKbpsStats();
       reportFrameStats();
     }
+    std::this_thread::sleep_until(now + std::chrono::milliseconds(100));
   }
 }
 
