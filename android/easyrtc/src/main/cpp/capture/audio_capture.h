@@ -24,7 +24,10 @@ struct AudioCapturePipeline {
     std::thread senderThread;
 
     AudioCapturePipeline() = default;
-    ~AudioCapturePipeline() = default;
+    ~AudioCapturePipeline() {
+        senderRunning.store(false);
+        if (senderThread.joinable()) senderThread.join();
+    }
     AudioCapturePipeline(const AudioCapturePipeline&) = delete;
     AudioCapturePipeline& operator=(const AudioCapturePipeline&) = delete;
 };

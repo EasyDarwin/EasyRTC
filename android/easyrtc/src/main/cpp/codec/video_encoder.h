@@ -38,6 +38,12 @@ struct MediaPipeline {
     MediaPipeline& operator=(const MediaPipeline&) = delete;
     MediaPipeline(MediaPipeline&&) = delete;
     MediaPipeline& operator=(MediaPipeline&&) = delete;
+    ~MediaPipeline() {
+        running.store(false);
+        senderRunning.store(false);
+        if (outputThread.joinable()) outputThread.join();
+        if (senderThread.joinable()) senderThread.join();
+    }
 
 
     bool initEncoder(struct MediaSession *session = nullptr);
