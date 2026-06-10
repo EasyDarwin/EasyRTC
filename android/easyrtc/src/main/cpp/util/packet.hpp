@@ -21,15 +21,9 @@ struct PacketT {
 
   void setData(const uint8_t *src, uint32_t len) {
     size = len;
-    if (len <= FIXED_SIZE) {
-      if (!heapBuf.empty()) {
-        LOGI("Packet setData with size %u, freeing heap buffer", len);
-        heapBuf.clear();
-        heapBuf.shrink_to_fit();
-      }
+    if (len <= FIXED_SIZE && heapBuf.empty()) {
       memcpy(fixedBuf, src, len);
     } else {
-      LOGI("Packet setData with size %u, using heap buffer", len);
       heapBuf.assign(src, src + len);
     }
   }
@@ -39,10 +33,7 @@ struct PacketT {
   }
 
   void release() {
-    if (!heapBuf.empty()) {
-      heapBuf.clear();
-      heapBuf.shrink_to_fit();
-    }
+    heapBuf.clear();
   }
 };
 using Packet256 = PacketT<256>;

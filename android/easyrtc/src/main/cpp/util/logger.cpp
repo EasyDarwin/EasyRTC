@@ -81,7 +81,7 @@ std::shared_ptr<spdlog::logger> create_logger() {
                 kRotateBytes,
                 kRotateFiles,
                 true);
-            fileSink->set_pattern("%H:%M:%S.%e %L %P/%t %v");
+            fileSink->set_pattern("%m-%d %H:%M:%S.%e %L %P/%t %v");
             sinks.push_back(fileSink);
         }else {
             auto msg = "Failed to create log directory: " + ec.message();
