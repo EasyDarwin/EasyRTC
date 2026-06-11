@@ -1,14 +1,15 @@
 #include "capture/audio_capture.h"
-#include <aaudio/AAudio.h>
-#include <cstring>
-#include <time.h>
-#include <assert.h>
-#include <thread>
-#include <chrono>
+#include "g711.h"
 #include "session/common.h"
 #include "session/media_session.h"
-#include "g711.h"
 #include "utils/defer.hpp"
+#include <aaudio/AAudio.h>
+#include <assert.h>
+#include <chrono>
+#include <condition_variable>
+#include <cstring>
+#include <thread>
+#include <time.h>
 
 static constexpr int32_t SAMPLE_RATE = 8000;
 static constexpr int32_t CHANNEL_COUNT = 1;
@@ -268,6 +269,42 @@ int audioCaptureStart(MediaSession* session) {
     return 0;
 }
 
+void closeStreamWithTimeout(AAudioStream* stream) {
+    // check if the ANDROID SDK version is 30 or higher
+    auto api_level = android_get_device_api_level();
+    if (api_level >= 33) {
+        LOGI("[OA] AudioCaptureStop: AAudioStream_close without timeout as API level is %d", api_level);
+        AAudioStream_close(stream);
+        LOGI("[OA] AudioCaptureStop: AAudioStream_close DONE. as API level is %d", api_level);
+        return;
+    }
+    auto mtx = std::make_shared<std::mutex>();
+    auto cv = std::make_shared<std::condition_variable>();
+    auto done = std::make_shared<bool>(false);
+    std::thread([stream, mtx, cv, done]() {
+        LOGI("[OA] AudioCaptureStop: AAudioStream_close...");
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        AAudioStream_close(stream);
+        LOGI("[OA] AudioCaptureStop: AAudioStream_close, done...");
+        {
+            std::lock_guard<std::mutex> lock(*mtx);
+            *done = true;
+        }
+        cv->notify_one();
+    }).detach();
+    {
+        LOGI("[OA] AudioCaptureStop: waiting for stream to close with timeout...as API level is %d", api_level);
+        std::unique_lock<std::mutex> lock(*mtx);
+        auto r = cv->wait_for(lock, std::chrono::milliseconds(50),
+                    [&done] { return *done; });
+        if (!r) {
+            LOGW("[OA] AudioCaptureStop: stream close timed out");
+        } else {
+            LOGI("[OA] AudioCaptureStop: stream close completed");
+        }
+    }
+}
+
 void audioCaptureStop(MediaSession *session) {
     assert(session);
     auto pipeline = session->audioCapture;
@@ -297,8 +334,7 @@ void audioCaptureStop(MediaSession *session) {
             inputState = currentState;
             LOGI("[OA] AudioCaptureStop: waiting for stream to stop: currentState=%d, we need stopped(%d)", currentState, AAUDIO_STREAM_STATE_STOPPED);
         }
-        LOGI("[OA] AudioCaptureStop: AAudioStream_close");
-        AAudioStream_close(stream);
+        closeStreamWithTimeout(stream);
     }
     pipeline->senderRunning.store(false);
     if (pipeline->senderThread.joinable())
